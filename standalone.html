@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QuantSandbox - CRM Platform</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- React & ReactDOM CDN -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  
+  <!-- Babel Standalone for JSX -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+        'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    
+    code, pre, textarea.font-mono {
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useCallback, useEffect, useMemo, useRef, memo } = React;
+
+    /* ====================== Helpers / Styles ====================== */
+
+    const cx = (...parts) => parts.filter(Boolean).join(" ");
+
+    const ui = {
+      page: "bg-[#0f0f0f] text-[#d9d9d9]",
+      panel: "bg-[#141414] border border-[#303030]",
+      panelMuted: "bg-[#1f1f1f] border border-[#303030]",
+      radius: "rounded-lg",
+      shadow: "shadow-[0_6px_24px_rgba(0,0,0,0.45)]",
+      textMuted: "text-[#8c8c8c]",
+      textSubtle: "text-[#a6a6a6]",
+      divider: "border-[#303030]",
+      input: "h-9 w-full rounded-md border border-[#303030] bg-[#0f0f0f] px-3 text-sm text-[#d9d9d9] placeholder:text-[#595959] focus:outline-none focus:ring-2 focus:ring-emerald-500/50",
+      select: "h-8 rounded-md border border-[#303030] bg-[#0f0f0f] px-2 text-[12px] text-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-emerald-500/50",
+      btn: "inline-flex items-center justify-center rounded-md border border-[#303030] bg-transparent px-3 py-1.5 text-[12px] text-[#d9d9d9] hover:bg-[#1f1f1f] active:translate-y-[0.5px]",
+      btnPrimary: "inline-flex items-center justify-center rounded-md bg-emerald-500 px-3 py-1.5 text-[12px] font-medium text-[#0f0f0f] hover:bg-emerald-400 active:translate-y-[0.5px]",
+    };
+
+    /* ====================== Mock Data / Constants ====================== */
+
+    const SECTIONS = ["Strategies", "Backtesting", "Users"];
+    const DISABLED_SECTIONS = new Set(["Backtesting", "Users"]);
+
+    const PAIR_OPTIONS = ["BTC/USDT", "ETH/USDT"];
+    const INDICATORS = ["bollinger_bands", "macd", "RSI", "EMA5", "EMA10", "EMA15"];
+    const TIME_RANGES = ["5m", "10m", "15m", "30m", "1h"];
+
+    const INITIAL_STRATEGIES = [
+      {
+        id: 1,
+        name: "EMA Bounce",
+        owner: "bogdan",
+        versions: [
+          { id: 11, version: "1", status: "Draft", createdAt: "2025-01-01", description: "Trend-follow strategy (initial version)", code: "# EMA Bounce v1\\n# TODO: add strategy code here" },
+          { id: 12, version: "2", status: "Active", createdAt: "2025-02-10", description: "Improved risk management and filters", code: "# EMA Bounce v2\\n# TODO: add updated strategy code here" },
+        ],
+      },
+      {
+        id: 2,
+        name: "RSI Mean Reversion",
+        owner: "bogdan",
+        versions: [
+          { id: 21, version: "3", status: "Draft", createdAt: "2025-03-05", description: "Initial RSI-based reversion logic", code: "# RSI Mean Reversion v3\\n# TODO: add strategy code here" },
+        ],
+      },
+    ];
+
+    const MOCK_OPTIMIZATION_RUNS = [
+      {
+        id: "run-1",
+        date: "2026-01-23 23:00:00",
+        pairs: "BTC/USDT",
+        timeRange: "15m",
+        timeFrame: "20200123-20230123",
+        indicators: INDICATORS.join(", "),
+      },
+    ];
+
+    /* ====================== Icons / Small UI ====================== */
+
+    const Logo = memo(({ size = "h-6 w-6" }) => (
+      <svg viewBox="0 0 64 64" className={size} aria-hidden="true" fill="none">
+        <defs>
+          <linearGradient id="qsGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#22c55e" />
+            <stop offset="100%" stopColor="#16a34a" />
+          </linearGradient>
+        </defs>
+        <rect x="8" y="8" width="48" height="48" rx="12" stroke="url(#qsGrad)" strokeWidth="3" />
+        <path d="M16 40 L26 30 L34 36 L48 22" stroke="url(#qsGrad)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="48" cy="22" r="3.5" fill="url(#qsGrad)" />
+      </svg>
+    ));
+
+    const MoreIcon = memo(({ className = "h-4 w-4" }) => (
+      <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+        <circle cx="12" cy="5" r="1.6" fill="currentColor" />
+        <circle cx="12" cy="12" r="1.6" fill="currentColor" />
+        <circle cx="12" cy="19" r="1.6" fill="currentColor" />
+      </svg>
+    ));
+
+    const EyeIcon = memo(({ className = "h-3.5 w-3.5" }) => (
+      <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+        <path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="12" cy="12" r="2.5" fill="currentColor" opacity="0.9" />
+      </svg>
+    ));
+
+    const menuIconPaths = {
+      Strategies: (
+        <>
+          <path d="M4 19V5" />
+          <path d="M4 19h16" />
+          <path d="M7 15l4-4 3 3 5-7" />
+          <circle cx="7" cy="15" r="1.4" />
+          <circle cx="11" cy="11" r="1.4" />
+          <circle cx="14" cy="14" r="1.4" />
+          <circle cx="19" cy="7" r="1.4" />
+        </>
+      ),
+      Backtesting: (
+        <>
+          <path d="M12 6v6l4 2" />
+          <path d="M21 12a9 9 0 1 1-3-6.7" />
+          <path d="M21 5v4h-4" />
+        </>
+      ),
+      Users: (
+        <>
+          <path d="M20 21a7 7 0 0 0-14 0" />
+          <path d="M12 13a4 4 0 1 0-4-4 4 4 0 0 0 4 4z" />
+        </>
+      ),
+    };
+
+    const MenuIcon = memo(({ name, active }) => {
+      const stroke = active ? "#34d399" : "#a6a6a6";
+      const common = { fill: "none", stroke, strokeWidth: 2.2, strokeLinecap: "round", strokeLinejoin: "round" };
+      return (
+        <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+          <g {...common}>{menuIconPaths[name] ?? menuIconPaths.Users}</g>
+        </svg>
+      );
+    });
+
+    /* ====================== Badges ====================== */
+
+    const badgeVariants = {
+      status: {
+        Draft: "bg-amber-500/10 text-amber-200 border-amber-500/40",
+        Active: "bg-emerald-500/10 text-emerald-200 border-emerald-500/40",
+        Disabled: "bg-white/5 text-[#8c8c8c] border-[#303030]",
+      },
+    };
+
+    const Badge = memo(({ status, type = "status" }) => {
+      const cls = badgeVariants[type]?.[status] || "bg-white/5 text-[#8c8c8c] border-[#303030]";
+      return <span className={cx("inline-flex items-center rounded-md px-2 py-0.5 text-[11px] leading-4 border", cls)}>{status}</span>;
+    });
+
+    /* ====================== Small Hooks ====================== */
+
+    function useOutsideClose(open, onClose) {
+      const rootRef = useRef(null);
+      useEffect(() => {
+        if (!open) return;
+        const onDocMouseDown = (e) => {
+          const el = rootRef.current;
+          if (!el) return;
+          if (e.target instanceof Node && !el.contains(e.target)) onClose?.();
+        };
+        const onKeyDown = (e) => {
+          if (e.key === "Escape") onClose?.();
+        };
+        document.addEventListener("mousedown", onDocMouseDown);
+        document.addEventListener("keydown", onKeyDown);
+        return () => {
+          document.removeEventListener("mousedown", onDocMouseDown);
+          document.removeEventListener("keydown", onKeyDown);
+        };
+      }, [open, onClose]);
+      return rootRef;
+    }
+
+    /* ====================== Login Screen ====================== */
+
+    const LoginScreen = memo(({ onLogin, onForgotPassword }) => (
+      <div className={cx("min-h-screen", ui.page, "flex items-center justify-center px-4")}>
+        <div className="w-full max-w-md">
+          <div className="mb-6 text-center">
+            <div className={cx("mx-auto mb-3 h-10 w-10", ui.radius, ui.panel, "flex items-center justify-center")}>
+              <Logo size="h-7 w-7" />
+            </div>
+            <h1 className="text-xl font-semibold text-[#f5f5f5]">QuantSandbox</h1>
+          </div>
+          <div className={cx(ui.radius, ui.panel, "px-6 py-6", ui.shadow)}>
+            <div className="space-y-4">
+              <div>
+                <label className={cx("block mb-1 text-xs", ui.textMuted)}>Login</label>
+                <input className={ui.input} placeholder="email or username" />
+              </div>
+              <div>
+                <label className={cx("block mb-1 text-xs", ui.textMuted)}>Password</label>
+                <input type="password" className={ui.input} placeholder="••••••••" />
+                <div className="mt-2 flex justify-end">
+                  <button type="button" onClick={onForgotPassword} className="text-[11px] text-emerald-300 hover:text-emerald-200 underline underline-offset-4">
+                    Forgot password?
+                  </button>
+                </div>
+              </div>
+              <button onClick={onLogin} className={cx("mt-2 w-full h-9", ui.btnPrimary)}>Sign In</button>
+            </div>
+          </div>
+          <div className={cx("mt-4 text-center text-[10px]", ui.textMuted)}>v0.1 standalone • Откройте в браузере</div>
+        </div>
+      </div>
+    ));
+
+    /* ====================== Header ====================== */
+
+    const Header = memo(({ onLogout, sections, activeSection, onSectionChange, strategiesCount, disabledSections }) => (
+      <header className={cx("h-14", ui.panelMuted, "border-0 border-b", ui.divider)}>
+        <div className="h-full px-5 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4 min-w-0">
+            <div className="flex items-center gap-2">
+              <div className={cx("h-9 w-9", ui.radius, ui.panel, "flex items-center justify-center")}>
+                <Logo />
+              </div>
+              <div className="leading-tight">
+                <div className="text-sm font-semibold text-[#f5f5f5]">QuantSandbox</div>
+              </div>
+            </div>
+            <nav className="hidden md:flex items-center gap-2">
+              {sections.map((item) => {
+                const isDisabled = disabledSections.has(item);
+                const active = !isDisabled && activeSection === item;
+                return (
+                  <button key={item} type="button" onClick={() => !isDisabled && onSectionChange(item)} disabled={isDisabled}
+                    className={cx("inline-flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] border transition",
+                      active ? "bg-emerald-500/10 text-emerald-200 border-emerald-500/40"
+                        : isDisabled ? "bg-transparent text-[#595959] border-transparent cursor-not-allowed opacity-70"
+                        : "bg-transparent text-[#d9d9d9] border-transparent hover:bg-[#1f1f1f]")}
+                    title={isDisabled ? `${item} (disabled)` : item}>
+                    <MenuIcon name={item} active={active} />
+                    <span className="whitespace-nowrap">{item}</span>
+                    {item === "Strategies" && <span className="ml-1 rounded-md border border-[#303030] bg-[#0f0f0f] px-2 py-0.5 text-[11px] text-[#a6a6a6]">{strategiesCount}</span>}
+                    {isDisabled && <span className="ml-1 rounded-md border border-[#303030] bg-[#0f0f0f] px-2 py-0.5 text-[10px] text-[#8c8c8c]">soon</span>}
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="hidden sm:inline-flex items-center gap-2 rounded-md border border-[#303030] bg-[#0f0f0f] px-2 py-1 text-[12px] text-[#d9d9d9]">
+              <span className={ui.textMuted}>User:</span> <span className="font-medium">bogdan</span>
+            </span>
+            <button className={cx(ui.btn, "px-3 py-1.5")} onClick={onLogout}>Logout</button>
+          </div>
+        </div>
+      </header>
+    ));
+
+    /* ====================== Strategy Row (simplified) ====================== */
+
+    const StrategyRow = memo(({ strategy, isExpanded, onToggle, onSelectVersion }) => (
+      <>
+        <tr className="bg-[#141414] hover:bg-[#1f1f1f] transition-colors">
+          <td className="px-4 py-2 border-b border-[#303030]">
+            <button className="inline-flex items-center gap-2 text-emerald-300 hover:text-emerald-200" onClick={() => onToggle(strategy.id)}>
+              <span className="flex h-4 w-4 items-center justify-center rounded border border-[#303030] bg-[#0f0f0f] text-[11px] text-[#a6a6a6]">
+                {isExpanded ? "-" : "+"}
+              </span>
+              <span className="font-medium">{strategy.name}</span>
+              <span className="text-[11px] text-[#8c8c8c]">({strategy.versions.length} versions)</span>
+            </button>
+          </td>
+          <td colSpan={5} className="border-b border-[#303030]" />
+        </tr>
+        {isExpanded && strategy.versions.map((version) => (
+          <tr key={version.id} className="bg-[#141414] hover:bg-[#1f1f1f] transition-colors">
+            <td className="px-6 py-2 border-b border-[#303030]">
+              <div className="flex items-center gap-2">
+                <span className="rounded-md border border-[#303030] bg-[#0f0f0f] px-2 py-0.5 text-[11px] text-[#a6a6a6]">v{version.version}</span>
+                <button type="button" className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#303030] bg-[#0f0f0f] text-[#a6a6a6] hover:bg-[#1f1f1f]"
+                  onClick={() => onSelectVersion(strategy.id, version.id)} title="View">
+                  <EyeIcon />
+                </button>
+              </div>
+            </td>
+            <td className="px-2 py-2 border-b border-[#303030] text-[12px] text-[#a6a6a6]">{version.description}</td>
+            <td className="px-2 py-2 border-b border-[#303030]"><Badge status={version.status} /></td>
+            <td className="px-2 py-2 border-b border-[#303030] text-[12px] text-[#d9d9d9]">{strategy.owner}</td>
+            <td className="px-2 py-2 border-b border-[#303030] text-[12px] text-[#a6a6a6]">{version.createdAt}</td>
+            <td className="px-2 py-2 border-b border-[#303030]">
+              <button className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#303030] bg-[#0f0f0f] text-[#a6a6a6]"><MoreIcon /></button>
+            </td>
+          </tr>
+        ))}
+      </>
+    ));
+
+    /* ====================== Main App (simplified) ====================== */
+
+    function App() {
+      const [loggedIn, setLoggedIn] = useState(false);
+      const [activeSection, setActiveSection] = useState("Strategies");
+      const [strategies] = useState(INITIAL_STRATEGIES);
+      const [expandedStrategies, setExpandedStrategies] = useState(new Set());
+      const [selected, setSelected] = useState(null);
+
+      const toggleExpanded = useCallback((id) => {
+        setExpandedStrategies((prev) => {
+          const next = new Set(prev);
+          next.has(id) ? next.delete(id) : next.add(id);
+          return next;
+        });
+      }, []);
+
+      const handleSectionChange = useCallback((section) => {
+        if (section !== "Strategies") return;
+        setActiveSection("Strategies");
+        setSelected(null);
+      }, []);
+
+      const handleSelectVersion = useCallback((strategyId, versionId) => {
+        setSelected({ strategyId, versionId });
+      }, []);
+
+      const selectedStrategy = useMemo(() => {
+        if (!selected) return null;
+        const s = strategies.find((x) => x.id === selected.strategyId);
+        const v = s?.versions.find((x) => x.id === selected.versionId);
+        if (!s || !v) return null;
+        return { s, v };
+      }, [selected, strategies]);
+
+      if (!loggedIn) {
+        return <LoginScreen onLogin={() => setLoggedIn(true)} onForgotPassword={() => alert("Forgot password (mock)")} />;
+      }
+
+      return (
+        <div className={cx("min-h-screen", ui.page, "flex flex-col")}>
+          <Header onLogout={() => setLoggedIn(false)} sections={SECTIONS} activeSection={activeSection}
+            onSectionChange={handleSectionChange} strategiesCount={strategies.length} disabledSections={DISABLED_SECTIONS} />
+          <main className="flex-1 overflow-auto p-6">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h1 className="text-[16px] font-semibold text-[#f5f5f5]">{activeSection}</h1>
+                <p className={cx("mt-1 text-[12px]", ui.textMuted)}>Manage and configure your strategies.</p>
+              </div>
+              {!selectedStrategy && <button className={ui.btnPrimary} onClick={() => alert("Add strategy (mock)")}>+ Add strategy</button>}
+            </div>
+
+            {!selectedStrategy && (
+              <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
+                <div className={cx("flex items-center gap-3 px-4 py-3", ui.panelMuted, "border-0 border-b", ui.divider)}>
+                  <div className={cx("text-[12px]", ui.textSubtle)}>{strategies.length} strategies</div>
+                </div>
+                <table className="w-full border-collapse text-[12px]">
+                  <thead className="bg-[#1f1f1f] text-left text-[12px] text-[#8c8c8c]">
+                    <tr>
+                      <th className="px-4 py-3 border-b border-[#303030] font-medium">Strategy name</th>
+                      <th className="px-2 py-3 border-b border-[#303030] font-medium">Description</th>
+                      <th className="px-2 py-3 border-b border-[#303030] font-medium">Status</th>
+                      <th className="px-2 py-3 border-b border-[#303030] font-medium">Owner</th>
+                      <th className="px-2 py-3 border-b border-[#303030] font-medium">Created at</th>
+                      <th className="px-2 py-3 border-b border-[#303030] font-medium">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {strategies.map((strategy) => (
+                      <StrategyRow key={strategy.id} strategy={strategy} isExpanded={expandedStrategies.has(strategy.id)}
+                        onToggle={toggleExpanded} onSelectVersion={handleSelectVersion} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {selectedStrategy && (
+              <div className={cx(ui.radius, ui.panel, "p-5 space-y-5")}>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-[14px] font-semibold text-[#f5f5f5]">{selectedStrategy.s.name}</h2>
+                      <Badge status={selectedStrategy.v.status} />
+                    </div>
+                    <p className={cx("mt-1 text-[12px]", ui.textMuted)}>Owner: <span className="text-[#d9d9d9]">{selectedStrategy.s.owner}</span></p>
+                    <p className={cx("mt-1 text-[12px]", ui.textMuted)}>Description: <span className="text-[#d9d9d9]">{selectedStrategy.v.description}</span></p>
+                  </div>
+                  <button className={ui.btn} onClick={() => setSelected(null)}>← Back</button>
+                </div>
+                <div className={cx(ui.radius, ui.panelMuted, "p-4")}>
+                  <div className="text-[12px] font-medium text-[#d9d9d9] mb-2">Strategy Code</div>
+                  <pre className="text-[11px] text-[#a6a6a6] font-mono whitespace-pre-wrap">{selectedStrategy.v.code}</pre>
+                </div>
+              </div>
+            )}
+          </main>
+        </div>
+      );
+    }
+
+    /* ====================== Render ====================== */
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
