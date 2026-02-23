@@ -2618,6 +2618,53 @@ const BuilderStepper = memo(function BuilderStepper({
   const [isRunningOptimization, setIsRunningOptimization] = useState(false);
   const [optimizationProgress, setOptimizationProgress] = useState(0);
   
+  // Normalization formulas: Intermediate + Final (tables shown after dropdown selection)
+  const [intermediateScoreFormula, setIntermediateScoreFormula] = useState("Formula 1");
+  const [finalScoreFormula, setFinalScoreFormula] = useState("Formula 1");
+  const FORMULA_OPTIONS = ["Formula 1", "Formula 2"];
+  const setWeightCapped = useCallback((setter, value, othersSum) => {
+    const n = Math.max(0, Math.min(100, Number(value)));
+    setter(Math.min(n, 100 - othersSum));
+  }, []);
+  const DEFAULT_FORMULA_CODE = "1 / (1 + exp( -k * ( (MFE - median(MFE)) / median(|MFE - median(MFE)|) ) ))";
+  const FORMULA_VARIABLES = ["median", "MFE", "MAE", "AIR", "exp", "k"];
+  // Intermediate metrics table (after user selects Intermediate Score Formula)
+  const [intMfeFormula, setIntMfeFormula] = useState("Formula 1");
+  const [intMaeFormula, setIntMaeFormula] = useState("Formula 1");
+  const [intAirFormula, setIntAirFormula] = useState("Formula 1");
+  const [intHitRateFormula, setIntHitRateFormula] = useState("Formula 1");
+  const [intMfeFormulaCode, setIntMfeFormulaCode] = useState(DEFAULT_FORMULA_CODE);
+  const [intMaeFormulaCode, setIntMaeFormulaCode] = useState(DEFAULT_FORMULA_CODE);
+  const [intAirFormulaCode, setIntAirFormulaCode] = useState(DEFAULT_FORMULA_CODE);
+  const [intHitRateFormulaCode, setIntHitRateFormulaCode] = useState(DEFAULT_FORMULA_CODE);
+  const [intMfeWeight, setIntMfeWeight] = useState(0);
+  const [intMaeWeight, setIntMaeWeight] = useState(0);
+  const [intAirWeight, setIntAirWeight] = useState(0);
+  const [intHitRateWeight, setIntHitRateWeight] = useState(0);
+  const intWeightsSum = intMfeWeight + intMaeWeight + intAirWeight + intHitRateWeight;
+  // Final metrics table (after user selects Final Score Formula): 5 rows, Stability row has 4 sub-weights
+  const [finStabilityFormula, setFinStabilityFormula] = useState("Formula 1");
+  const [finMfeFormula, setFinMfeFormula] = useState("Formula 1");
+  const [finMaeFormula, setFinMaeFormula] = useState("Formula 1");
+  const [finAirFormula, setFinAirFormula] = useState("Formula 1");
+  const [finHitRateFormula, setFinHitRateFormula] = useState("Formula 1");
+  const [finFinalFormulaCode, setFinFinalFormulaCode] = useState(DEFAULT_FORMULA_CODE);
+  const [finStabilityFormulaCode, setFinStabilityFormulaCode] = useState(DEFAULT_FORMULA_CODE);
+  const [finMfeFormulaCode, setFinMfeFormulaCode] = useState(DEFAULT_FORMULA_CODE);
+  const [finMaeFormulaCode, setFinMaeFormulaCode] = useState(DEFAULT_FORMULA_CODE);
+  const [finAirFormulaCode, setFinAirFormulaCode] = useState(DEFAULT_FORMULA_CODE);
+  const [finHitRateFormulaCode, setFinHitRateFormulaCode] = useState(DEFAULT_FORMULA_CODE);
+  const [finStabMfeWeight, setFinStabMfeWeight] = useState(0);
+  const [finStabMaeWeight, setFinStabMaeWeight] = useState(0);
+  const [finStabAirWeight, setFinStabAirWeight] = useState(0);
+  const [finStabHitRateWeight, setFinStabHitRateWeight] = useState(0);
+  const [finMfeWeight, setFinMfeWeight] = useState(0);
+  const [finMaeWeight, setFinMaeWeight] = useState(0);
+  const [finAirWeight, setFinAirWeight] = useState(0);
+  const [finHitRateWeight, setFinHitRateWeight] = useState(0);
+  const finStabWeightsSum = finStabMfeWeight + finStabMaeWeight + finStabAirWeight + finStabHitRateWeight;
+  const finWeightsSum = finStabWeightsSum + finMfeWeight + finMaeWeight + finAirWeight + finHitRateWeight;
+  
   // Formula state (unified)
   const [signalFormula, setSignalFormula] = useState(`# Define your trading signals
 # Example:
@@ -2647,6 +2694,31 @@ IF RSI > 70 OR Close < EMA THEN SELL
       else next.add(num);
       return next;
     });
+  }, []);
+  // Collapsed subsections inside Normalization formulas (intermediate / final)
+  const [collapsedNormSections, setCollapsedNormSections] = useState(() => new Set());
+  const toggleNormSection = useCallback((key) => {
+    setCollapsedNormSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
+  const renderFormulaWithVariables = useCallback((code) => {
+    if (!code) return null;
+    const re = new RegExp(`\\b(${FORMULA_VARIABLES.map((v) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`, "g");
+    const parts = code.split(re);
+    return parts.map((part, i) =>
+      FORMULA_VARIABLES.includes(part) ? (
+        <span key={i} className="underline decoration-[#8c8c8c] underline-offset-1">
+          {part}
+        </span>
+      ) : (
+        part
+      )
+    );
   }, []);
 
   const handleAddIndicatorFromLibrary = useCallback((indicatorKey) => {
@@ -2979,36 +3051,259 @@ IF RSI > 70 OR Close < EMA THEN SELL
               </button>
               {!collapsedSections.has(3) && (
               <div className="p-3 space-y-3">
-                <PairsDropdown value={pairs} onChange={onPairsChange} />
-                
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                  <PairsDropdown value={pairs} onChange={onPairsChange} />
                   <div>
                     <label className={cx("block mb-1 text-xs", ui.textMuted)}>Time Range</label>
-                    <select value={timeRange} onChange={(e) => onTimeRangeChange(e.target.value)} className={cx(ui.input, "h-9 text-[12px]")}>
+                    <select value={timeRange} onChange={(e) => onTimeRangeChange(e.target.value)} className={cx(ui.input, "h-9 text-[12px] w-full")}>
                       {TIME_RANGES.map((v) => (
                         <option key={v} value={v}>{v}</option>
                       ))}
                     </select>
                   </div>
-                  
                   <div>
                     <label className={cx("block mb-1 text-xs", ui.textMuted)}>Start Date</label>
                     <input 
                       type="date"
                       value={timeFrameStart}
                       onChange={(e) => onTimeFrameStartChange(e.target.value)}
-                      className={cx(ui.input, "h-9 text-[12px]")}
+                      className={cx(ui.input, "h-9 text-[12px] w-full")}
                     />
                   </div>
-                  
                   <div>
                     <label className={cx("block mb-1 text-xs", ui.textMuted)}>End Date</label>
                     <input 
                       type="date"
                       value={timeFrameEnd}
                       onChange={(e) => onTimeFrameEndChange(e.target.value)}
-                      className={cx(ui.input, "h-9 text-[12px]")}
+                      className={cx(ui.input, "h-9 text-[12px] w-full")}
                     />
+                  </div>
+                </div>
+
+                {/* Normalization formulas — reworked: collapsible subsections, tfoot Total with color, Stability 2×2 */}
+                <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
+                  <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">Normalization formulas</div>
+                  <div className="space-y-3">
+                    {/* 1. Intermediate Score Formula — collapsible */}
+                    <div className={cx("rounded-lg border border-[#303030] overflow-hidden", "bg-[#141414]")}>
+                      <button
+                        type="button"
+                        onClick={() => toggleNormSection("int")}
+                        className="w-full px-3 py-2 flex items-center justify-between gap-2 text-left hover:bg-[#1a1a1a] transition-colors"
+                      >
+                        <span className="text-[12px] font-medium text-[#d9d9d9]">Intermediate Score Formula</span>
+                        <span className={cx("text-[11px]", intWeightsSum === 100 ? "text-emerald-500" : intWeightsSum > 100 ? "text-amber-500" : ui.textMuted)}>Total: {intWeightsSum}%</span>
+                        <span className="text-[#8c8c8c] text-[10px]">{collapsedNormSections.has("int") ? "▶" : "▼"}</span>
+                      </button>
+                      {!collapsedNormSections.has("int") && (
+                        <div className="p-3 pt-0 space-y-2 border-t border-[#303030]">
+                          <select value={intermediateScoreFormula} onChange={(e) => setIntermediateScoreFormula(e.target.value)} className={cx(ui.input, "h-9 text-[12px] w-full max-w-[200px]")}>
+                            {FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
+                          </select>
+                          <div className="text-[11px] font-medium text-[#d9d9d9]">Intermediate metrics formulas and weights</div>
+                          <div className="overflow-x-auto border border-[#303030] rounded-lg">
+                            <table className="w-full text-[11px] border-collapse">
+                              <thead>
+                                <tr className="bg-[#1a1a1a] text-[#8c8c8c]">
+                                  <th className="px-3 py-2 text-left font-medium border-b border-[#303030] w-24">Metrics</th>
+                                  <th className="px-3 py-2 text-left font-medium border-b border-[#303030] w-32">Formula</th>
+                                  <th className="px-3 py-2 text-left font-medium border-b border-[#303030] min-w-[200px]">Formula Code</th>
+                                  <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Weight</th>
+                                </tr>
+                              </thead>
+                              <tbody className="text-[#d9d9d9]">
+                                {[
+                                  { metric: "MFE", formula: intMfeFormula, setFormula: setIntMfeFormula, formulaCode: intMfeFormulaCode, setFormulaCode: setIntMfeFormulaCode, weight: intMfeWeight, setWeight: setIntMfeWeight, others: intMaeWeight + intAirWeight + intHitRateWeight },
+                                  { metric: "MAE", formula: intMaeFormula, setFormula: setIntMaeFormula, formulaCode: intMaeFormulaCode, setFormulaCode: setIntMaeFormulaCode, weight: intMaeWeight, setWeight: setIntMaeWeight, others: intMfeWeight + intAirWeight + intHitRateWeight },
+                                  { metric: "AIR", formula: intAirFormula, setFormula: setIntAirFormula, formulaCode: intAirFormulaCode, setFormulaCode: setIntAirFormulaCode, weight: intAirWeight, setWeight: setIntAirWeight, others: intMfeWeight + intMaeWeight + intAirWeight },
+                                  { metric: "Hit rate", formula: intHitRateFormula, setFormula: setIntHitRateFormula, formulaCode: intHitRateFormulaCode, setFormulaCode: setIntHitRateFormulaCode, weight: intHitRateWeight, setWeight: setIntHitRateWeight, others: intMfeWeight + intMaeWeight + intAirWeight },
+                                ].map((row) => (
+                                  <tr key={row.metric} className="border-b border-[#303030]">
+                                    <td className="px-3 py-2 text-[#a6a6a6] align-top">{row.metric}</td>
+                                    <td className="px-3 py-2 w-32 align-top">
+                                      <select value={row.formula} onChange={(e) => row.setFormula(e.target.value)} className={cx(ui.input, "h-8 text-[11px] w-full min-w-0")}>
+                                        {FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
+                                      </select>
+                                    </td>
+                                    <td className="px-3 py-2 align-top min-w-[200px]">
+                                      <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-8 overflow-hidden">
+                                        <div
+                                          data-formula-mirror
+                                          className="absolute inset-0 px-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden"
+                                          style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+                                          aria-hidden
+                                        >
+                                          <span className="inline-block min-w-full">
+                                            {row.formulaCode
+                                              ? renderFormulaWithVariables(row.formulaCode)
+                                              : <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>}
+                                          </span>
+                                        </div>
+                                        <input
+                                          type="text"
+                                          value={row.formulaCode}
+                                          onChange={(e) => row.setFormulaCode(e.target.value)}
+                                          onScroll={(e) => {
+                                            const mirror = e.target.parentElement?.querySelector("[data-formula-mirror]");
+                                            if (mirror) mirror.scrollLeft = e.target.scrollLeft;
+                                          }}
+                                          className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 px-3 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset"
+                                        />
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-2 align-top">
+                                      <div className="flex items-center gap-2">
+                                        <input type="range" min={0} max={100} step={1} value={row.weight} onChange={(e) => setWeightCapped(row.setWeight, e.target.value, row.others)} className="flex-1 max-w-[120px] h-2 accent-emerald-500" />
+                                        <span className="text-[#8c8c8c] w-7">{row.weight}%</span>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              <tfoot>
+                                <tr className="bg-[#1a1a1a]">
+                                  <td colSpan={3} className="px-3 py-2 text-right text-[11px] font-medium text-[#8c8c8c]">Total</td>
+                                  <td className={cx("px-3 py-2 text-[11px] font-medium", intWeightsSum === 100 ? "text-emerald-500" : intWeightsSum > 100 ? "text-amber-500" : "text-[#8c8c8c]")}>{intWeightsSum}%</td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 2. Final Score Formula — collapsible; Stability row 2×2 grid */}
+                    <div className={cx("rounded-lg border border-[#303030] overflow-hidden", "bg-[#141414]")}>
+                      <button
+                        type="button"
+                        onClick={() => toggleNormSection("fin")}
+                        className="w-full px-3 py-2 flex items-center justify-between gap-2 text-left hover:bg-[#1a1a1a] transition-colors"
+                      >
+                        <span className="text-[12px] font-medium text-[#d9d9d9]">Final Score Formula</span>
+                        <span className={cx("text-[11px]", finWeightsSum === 100 ? "text-emerald-500" : finWeightsSum > 100 ? "text-amber-500" : ui.textMuted)}>Total: {finWeightsSum}%</span>
+                        <span className="text-[#8c8c8c] text-[10px]">{collapsedNormSections.has("fin") ? "▶" : "▼"}</span>
+                      </button>
+                      {!collapsedNormSections.has("fin") && (
+                        <div className="p-3 pt-0 space-y-2 border-t border-[#303030]">
+                          <div className="flex flex-wrap items-center gap-3 gap-y-2">
+                            <select value={finalScoreFormula} onChange={(e) => setFinalScoreFormula(e.target.value)} className={cx(ui.input, "h-9 text-[12px] w-full max-w-[200px]")}>
+                              {FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
+                            </select>
+                            <div className="min-w-[200px] flex-1 max-w-[400px]">
+                              <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-9 overflow-hidden">
+                                <div
+                                  data-formula-mirror
+                                  className="absolute inset-0 px-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden"
+                                  style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+                                  aria-hidden
+                                >
+                                  <span className="inline-block min-w-full">
+                                    {finFinalFormulaCode
+                                      ? renderFormulaWithVariables(finFinalFormulaCode)
+                                      : <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>}
+                                  </span>
+                                </div>
+                                <input
+                                  type="text"
+                                  value={finFinalFormulaCode}
+                                  onChange={(e) => setFinFinalFormulaCode(e.target.value)}
+                                  onScroll={(e) => {
+                                    const mirror = e.target.parentElement?.querySelector("[data-formula-mirror]");
+                                    if (mirror) mirror.scrollLeft = e.target.scrollLeft;
+                                  }}
+                                  placeholder="Formula code (shared)"
+                                  className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 px-3 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-[11px] font-medium text-[#d9d9d9]">Final metrics formulas and weights</div>
+                          <div className="overflow-x-auto border border-[#303030] rounded-lg">
+                            <table className="w-full text-[11px] border-collapse">
+                              <thead>
+                                <tr className="bg-[#1a1a1a] text-[#8c8c8c]">
+                                  <th className="px-3 py-2 text-left font-medium border-b border-[#303030] w-24">Metrics</th>
+                                  <th className="px-3 py-2 text-left font-medium border-b border-[#303030] w-32">Formula</th>
+                                  <th className="px-3 py-2 text-left font-medium border-b border-[#303030] min-w-[200px]">Formula Code</th>
+                                  <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Weight</th>
+                                </tr>
+                              </thead>
+                              <tbody className="text-[#d9d9d9]">
+                                {/* Stability row: 4 sub-weights in 2×2 grid */}
+                                <tr className="border-b border-[#303030]">
+                                  <td className="px-3 py-2 text-[#a6a6a6] align-top">Stability</td>
+                                  <td className="px-3 py-2 w-32 align-top">
+                                    <select value={finStabilityFormula} onChange={(e) => setFinStabilityFormula(e.target.value)} className={cx(ui.input, "h-8 text-[11px] w-full min-w-0")}>
+                                      {FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
+                                    </select>
+                                  </td>
+                                  <td className="px-3 py-2 align-top min-w-[200px]">
+                                    <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-8 overflow-hidden">
+                                      <div data-formula-mirror className="absolute inset-0 px-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
+                                        <span className="inline-block min-w-full">{finStabilityFormulaCode ? renderFormulaWithVariables(finStabilityFormulaCode) : <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>}</span>
+                                      </div>
+                                      <input type="text" value={finStabilityFormulaCode} onChange={(e) => setFinStabilityFormulaCode(e.target.value)} onScroll={(e) => { const m = e.target.parentElement?.querySelector("[data-formula-mirror]"); if (m) m.scrollLeft = e.target.scrollLeft; }} className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 px-3 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset" />
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-2 align-top">
+                                    <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                                      {[
+                                        { label: "Stab. MFE", val: finStabMfeWeight, set: setFinStabMfeWeight, others: finStabMaeWeight + finStabAirWeight + finStabHitRateWeight + finMfeWeight + finMaeWeight + finAirWeight + finHitRateWeight },
+                                        { label: "Stab. MAE", val: finStabMaeWeight, set: setFinStabMaeWeight, others: finStabMfeWeight + finStabAirWeight + finStabHitRateWeight + finMfeWeight + finMaeWeight + finAirWeight + finHitRateWeight },
+                                        { label: "Stab. AIR", val: finStabAirWeight, set: setFinStabAirWeight, others: finStabMfeWeight + finStabMaeWeight + finStabHitRateWeight + finMfeWeight + finMaeWeight + finAirWeight + finHitRateWeight },
+                                        { label: "Stab. Hit", val: finStabHitRateWeight, set: setFinStabHitRateWeight, others: finStabMfeWeight + finStabMaeWeight + finStabAirWeight + finMfeWeight + finMaeWeight + finAirWeight + finHitRateWeight },
+                                      ].map((s) => (
+                                        <div key={s.label} className="flex items-center gap-1.5">
+                                          <span className="text-[10px] text-[#8c8c8c] shrink-0 w-14">{s.label}</span>
+                                          <input type="range" min={0} max={100} step={1} value={s.val} onChange={(e) => setWeightCapped(s.set, e.target.value, s.others)} className="flex-1 min-w-0 h-2 accent-emerald-500" />
+                                          <span className="text-[#8c8c8c] text-[10px] w-5">{s.val}%</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </td>
+                                </tr>
+                                {[
+                                  { metric: "MFE", formula: finMfeFormula, setFormula: setFinMfeFormula, formulaCode: finMfeFormulaCode, setFormulaCode: setFinMfeFormulaCode, weight: finMfeWeight, setWeight: setFinMfeWeight, others: finStabWeightsSum + finMaeWeight + finAirWeight + finHitRateWeight },
+                                  { metric: "MAE", formula: finMaeFormula, setFormula: setFinMaeFormula, formulaCode: finMaeFormulaCode, setFormulaCode: setFinMaeFormulaCode, weight: finMaeWeight, setWeight: setFinMaeWeight, others: finStabWeightsSum + finMfeWeight + finAirWeight + finHitRateWeight },
+                                  { metric: "AIR", formula: finAirFormula, setFormula: setFinAirFormula, formulaCode: finAirFormulaCode, setFormulaCode: setFinAirFormulaCode, weight: finAirWeight, setWeight: setFinAirWeight, others: finStabWeightsSum + finMfeWeight + finMaeWeight + finHitRateWeight },
+                                  { metric: "Hit rate", formula: finHitRateFormula, setFormula: setFinHitRateFormula, formulaCode: finHitRateFormulaCode, setFormulaCode: setFinHitRateFormulaCode, weight: finHitRateWeight, setWeight: setFinHitRateWeight, others: finStabWeightsSum + finMfeWeight + finMaeWeight + finAirWeight },
+                                ].map((row) => (
+                                  <tr key={row.metric} className="border-b border-[#303030]">
+                                    <td className="px-3 py-2 text-[#a6a6a6] align-top">{row.metric}</td>
+                                    <td className="px-3 py-2 w-32 align-top">
+                                      <select value={row.formula} onChange={(e) => row.setFormula(e.target.value)} className={cx(ui.input, "h-8 text-[11px] w-full min-w-0")}>
+                                        {FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
+                                      </select>
+                                    </td>
+                                    <td className="px-3 py-2 align-top min-w-[200px]">
+                                      <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-8 overflow-hidden">
+                                        <div data-formula-mirror className="absolute inset-0 px-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
+                                          <span className="inline-block min-w-full">{row.formulaCode ? renderFormulaWithVariables(row.formulaCode) : <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>}</span>
+                                        </div>
+                                        <input type="text" value={row.formulaCode} onChange={(e) => row.setFormulaCode(e.target.value)} onScroll={(e) => { const m = e.target.parentElement?.querySelector("[data-formula-mirror]"); if (m) m.scrollLeft = e.target.scrollLeft; }} className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 px-3 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset" />
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-2 align-top">
+                                      <div className="flex items-center gap-2">
+                                        <input type="range" min={0} max={100} step={1} value={row.weight} onChange={(e) => setWeightCapped(row.setWeight, e.target.value, row.others)} className="flex-1 max-w-[120px] h-2 accent-emerald-500" />
+                                        <span className="text-[#8c8c8c] w-7">{row.weight}%</span>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              <tfoot>
+                                <tr className="bg-[#1a1a1a]">
+                                  <td colSpan={3} className="px-3 py-2 text-right text-[11px] font-medium text-[#8c8c8c]">Total</td>
+                                  <td className={cx("px-3 py-2 text-[11px] font-medium", finWeightsSum === 100 ? "text-emerald-500" : finWeightsSum > 100 ? "text-amber-500" : "text-[#8c8c8c]")}>{finWeightsSum}%</td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -3310,7 +3605,90 @@ const LoginScreen = memo(({ onLogin, onForgotPassword }) => (
   </div>
 ));
 
-const Header = memo(({ onLogout, sections, activeSection, onSectionChange, strategiesCount, disabledSections }) => (
+const QueueIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+  </svg>
+);
+
+const DragHandleIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-[#8c8c8c]" fill="currentColor" aria-hidden="true" title="Drag to reorder">
+    <circle cx="9" cy="6" r="1.5" />
+    <circle cx="9" cy="12" r="1.5" />
+    <circle cx="9" cy="18" r="1.5" />
+    <circle cx="15" cy="6" r="1.5" />
+    <circle cx="15" cy="12" r="1.5" />
+    <circle cx="15" cy="18" r="1.5" />
+  </svg>
+);
+
+const TrashIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+    <line x1="10" y1="11" x2="10" y2="17" />
+    <line x1="14" y1="11" x2="14" y2="17" />
+  </svg>
+);
+
+const Header = memo(function Header({
+  onLogout,
+  sections,
+  activeSection,
+  onSectionChange,
+  strategiesCount,
+  disabledSections,
+  queueOpen,
+  onQueueToggle,
+  onQueueClose,
+  queueItems = [],
+  onQueueReorder,
+  onQueueRemove,
+}) {
+  const queueRef = useOutsideClose(queueOpen, onQueueClose);
+  const [draggedIndex, setDraggedIndex] = useState(null);
+  const [panelEnter, setPanelEnter] = useState(false);
+  useEffect(() => {
+    if (queueOpen) {
+      setPanelEnter(false);
+      const t = setTimeout(() => setPanelEnter(true), 20);
+      return () => clearTimeout(t);
+    }
+  }, [queueOpen]);
+
+  const handleDragStart = useCallback((e, index) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", String(index));
+    e.dataTransfer.setDragImage(e.currentTarget, 0, 0);
+  }, []);
+
+  const handleDragOver = useCallback((e, index) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  }, []);
+
+  const handleDrop = useCallback(
+    (e, dropIndex) => {
+      e.preventDefault();
+      const dragIndex = Number(e.dataTransfer.getData("text/plain"));
+      if (Number.isNaN(dragIndex) || dragIndex === dropIndex) {
+        setDraggedIndex(null);
+        return;
+      }
+      const next = [...queueItems];
+      const [removed] = next.splice(dragIndex, 1);
+      next.splice(dropIndex, 0, removed);
+      onQueueReorder?.(next);
+      setDraggedIndex(null);
+    },
+    [queueItems, onQueueReorder]
+  );
+
+  const handleDragEnd = useCallback(() => {
+    setDraggedIndex(null);
+  }, []);
+
+  return (
   <header className={cx("h-14", ui.panelMuted, "border-0 border-b", ui.divider)}>
     <div className="h-full px-5 flex items-center justify-between gap-4">
       <div className="flex items-center gap-4 min-w-0">
@@ -3364,10 +3742,105 @@ const Header = memo(({ onLogout, sections, activeSection, onSectionChange, strat
         </nav>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div ref={queueRef} className="relative flex items-center gap-3">
         <span className="hidden sm:inline-flex items-center gap-2 rounded-md border border-[#303030] bg-[#0f0f0f] px-2 py-1 text-[12px] text-[#d9d9d9]">
           <span className={ui.textMuted}>User:</span> <span className="font-medium">bogdan</span>
         </span>
+        <button
+          type="button"
+          onClick={onQueueToggle}
+          className={cx(ui.btn, "px-3 py-1.5", queueOpen && "bg-[#1f1f1f]")}
+          title="Queue"
+          aria-expanded={queueOpen}
+          aria-label="Open queue"
+        >
+          <QueueIcon />
+        </button>
+        {queueOpen && (
+          <>
+            <div
+              className="fixed inset-0 z-20 bg-black/50 transition-opacity duration-300"
+              onClick={onQueueClose}
+              onKeyDown={(e) => e.key === "Escape" && onQueueClose()}
+              aria-hidden
+            />
+            <div
+              className={cx(
+                "fixed right-0 top-0 bottom-0 z-30 w-[320px] flex flex-col overflow-hidden border-0 border-l border-[#303030] bg-[#141414] shadow-[-8px_0_24px_rgba(0,0,0,0.4)] transition-transform duration-300 ease-out",
+                panelEnter ? "translate-x-0" : "translate-x-full"
+              )}
+            >
+              <div className="shrink-0 p-3 border-b border-[#303030] text-[12px] font-medium text-[#d9d9d9]">Queue</div>
+              <div className="flex-1 overflow-auto min-h-0">
+                <table className="w-full text-[11px] border-collapse">
+                  <thead>
+                    <tr className="bg-[#1a1a1a] text-[#8c8c8c] sticky top-0">
+                      <th className="px-2 py-2 text-left font-medium border-b border-[#303030] w-9" aria-label="Drag" />
+                      <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Strategy · Version</th>
+                      <th className="px-3 py-2 text-left font-medium border-b border-[#303030] w-20">Estimation time</th>
+                      <th className="px-3 py-2 text-left font-medium border-b border-[#303030] w-24">Status</th>
+                      <th className="px-2 py-2 text-right font-medium border-b border-[#303030] w-9" aria-label="Remove" />
+                    </tr>
+                  </thead>
+                  <tbody className="text-[#d9d9d9]">
+                    {queueItems.map((item, index) => (
+                      <tr
+                        key={item.id}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, index)}
+                        onDragOver={(e) => handleDragOver(e, index)}
+                        onDrop={(e) => handleDrop(e, index)}
+                        onDragEnd={handleDragEnd}
+                        className={cx(
+                          "border-b border-[#303030] hover:bg-[#1a1a1a] transition-colors cursor-grab active:cursor-grabbing",
+                          draggedIndex === index && "opacity-50 bg-[#1a1a1a]"
+                        )}
+                      >
+                        <td className="px-2 py-2 align-middle w-9 text-[#8c8c8c]">
+                          <DragHandleIcon />
+                        </td>
+                        <td className="px-3 py-2">
+                          <a href="#" className="text-emerald-400 hover:text-emerald-300 hover:underline" onClick={(e) => e.preventDefault()}>
+                            {item.strategyName} {item.version}
+                          </a>
+                        </td>
+                        <td className="px-3 py-2 text-[#a6a6a6]">
+                          {item.estimationTime ?? "—"}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span
+                            className={cx(
+                              "inline-block rounded px-2 py-0.5 text-[10px] font-medium",
+                              item.status === "In progress"
+                                ? "bg-amber-500/20 text-amber-400 border border-amber-500/40"
+                                : "bg-[#303030] text-[#a6a6a6] border border-[#404040]"
+                            )}
+                          >
+                            {item.status}
+                          </span>
+                        </td>
+                        <td className="px-2 py-2 align-middle w-9 text-right">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onQueueRemove?.(item.id);
+                            }}
+                            className="p-1 rounded text-[#8c8c8c] hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                            title="Remove from queue"
+                            aria-label="Remove from queue"
+                          >
+                            <TrashIcon />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
         <button className={cx(ui.btn, "px-3 py-1.5")} onClick={onLogout}>
           Logout
         </button>
@@ -3403,7 +3876,8 @@ const Header = memo(({ onLogout, sections, activeSection, onSectionChange, strat
       </div>
     </div>
   </header>
-));
+  );
+});
 
 /* ====================== Modals ====================== */
 
@@ -4116,6 +4590,20 @@ export default function App() {
   const [filterStatus, setFilterStatus] = useState("All");
   const [filterOwner, setFilterOwner] = useState("All");
 
+  // Queue panel (header): list of jobs with drag-and-drop reorder
+  const [showQueuePanel, setShowQueuePanel] = useState(false);
+  const [queueItems, setQueueItems] = useState(() => [
+    { id: "q1", strategyName: "Hyperopt Ema bounce", version: "v1", status: "In progress", estimationTime: "5m" },
+    { id: "q2", strategyName: "Hyperopt Ema bounce", version: "v2", status: "Waiting", estimationTime: "10m" },
+    { id: "q3", strategyName: "RSI Mean Reversion", version: "v1", status: "Waiting", estimationTime: "13m" },
+  ]);
+  const handleQueueReorder = useCallback((newOrder) => {
+    setQueueItems(newOrder);
+  }, []);
+  const handleQueueRemove = useCallback((id) => {
+    setQueueItems((prev) => prev.filter((item) => item.id !== id));
+  }, []);
+
   // Mock role
   const currentUserRole = "Admin";
 
@@ -4356,6 +4844,12 @@ export default function App() {
         onSectionChange={handleSectionChange}
         strategiesCount={strategies.length}
         disabledSections={DISABLED_SECTIONS}
+        queueOpen={showQueuePanel}
+        onQueueToggle={() => setShowQueuePanel((v) => !v)}
+        onQueueClose={() => setShowQueuePanel(false)}
+        queueItems={queueItems}
+        onQueueReorder={handleQueueReorder}
+        onQueueRemove={handleQueueRemove}
       />
 
       <main className="flex-1 overflow-auto p-6">
