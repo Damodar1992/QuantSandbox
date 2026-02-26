@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import Editor from "@monaco-editor/react";
 
 // Import constants from separate files
@@ -190,27 +190,558 @@ const MOCK_OPTIMIZATION_RUNS = [
   }
 ];
 
+/* ====================== HeatMap Engine (Reference: normalized coords, top-K centering, zoom by ranges) ====================== */
+
+const HEATMAP_MAX_SIZE = 15;
+const HEATMAP_MAX_CELLS = 225;
+
+function clamp(v, a = 0, b = 1) {
+  return Math.max(a, Math.min(b, v));
+}
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+function quantile(sortedArr, q) {
+  if (!sortedArr.length) return 0;
+  const pos = (sortedArr.length - 1) * q;
+  const base = Math.floor(pos);
+  const rest = pos - base;
+  if (sortedArr[base + 1] === undefined) return sortedArr[base];
+  return sortedArr[base] + rest * (sortedArr[base + 1] - sortedArr[base]);
+}
+function computeRanges(items, keys) {
+  const out = {};
+  for (const k of keys) {
+    let min = Infinity;
+    let max = -Infinity;
+    for (const it of items) {
+      const v = it.params?.[k];
+      if (v != null && v < min) min = v;
+      if (v != null && v > max) max = v;
+    }
+    out[k] = { min: min === Infinity ? null : min, max: max === -Infinity ? null : max };
+  }
+  return out;
+}
+function normalizeParam(v, min, max) {
+  if (min === null || max === null || max === min) return 0.5;
+  return clamp((v - min) / (max - min));
+}
+
+function getParamValuesFromDef(param) {
+  if (!param || param.min == null || param.max == null) return [param?.default ?? 0];
+  const step = param.step ?? 1;
+  const out = [];
+  for (let v = param.min; v <= param.max; v += step) out.push(v);
+  return out.length ? out : [param.default ?? param.min];
+}
+
+function getParamDefForCompositeKey(indicators, compositeKey) {
+  const idx = compositeKey.indexOf("_");
+  if (idx <= 0 || idx === compositeKey.length - 1) return null;
+  const indId = compositeKey.slice(0, idx);
+  const key = compositeKey.slice(idx + 1);
+  const ind = indicators.find((i) => String(i.id) === String(indId));
+  if (!ind) return null;
+  const userParam = Array.isArray(ind.params) ? ind.params.find((p) => p.key === key) : null;
+  const baseDef = ind.type && BASE_INDICATORS[ind.type];
+  const baseParam = baseDef?.params?.find((p) => p.key === key);
+  const param = { ...baseParam, ...userParam, key, compositeKey };
+  if (param.min == null || param.max == null) {
+    param.min = param.min ?? param.default ?? 0;
+    param.max = param.max ?? param.min ?? 10;
+    if (param.min === param.max) param.max = param.min + (param.step ?? 1);
+  }
+  return param;
+}
+
+const MOCK_HEATMAP_SIZE = 900;
+const MOCK_GRID_SIDE = Math.round(Math.sqrt(MOCK_HEATMAP_SIZE));
+
+function generateMockResults(config, runId) {
+  const xAxis = config.xAxis && config.xAxis.length ? config.xAxis : ["x"];
+  const yAxis = config.yAxis && config.yAxis.length ? config.yAxis : ["y"];
+  const xKey = xAxis[0];
+  const yKey = yAxis[0];
+  const fixed = config.fixedParams || {};
+
+  const side = MOCK_GRID_SIDE;
+  const results = [];
+  const centerI = (side - 1) / 2;
+  const centerJ = (side - 1) / 2;
+  const radius = Math.max(0.1, Math.min(centerI, centerJ) * 1.2);
+
+  for (let i = 0; i < side; i++) {
+    for (let j = 0; j < side; j++) {
+      const params = { ...fixed };
+      params[xKey] = 1 + i;
+      params[yKey] = 1 + j;
+      const dist = Math.sqrt((i - centerI) ** 2 + (j - centerJ) ** 2);
+      const t = radius > 0 ? Math.max(0, 1 - dist / radius) : 1;
+      const score = Math.max(0.001, Math.min(1, t * t * 0.95 + 0.05 + (Math.random() * 0.06 - 0.03)));
+      results.push({ id: `res-${runId}-${i * side + j}`, params, score });
+    }
+  }
+  return results;
+}
+
+function buildHeatMap(items, config, zoomRanges = null) {
+  if (!items || items.length === 0) return null;
+  const xParams = config.xAxis && config.xAxis.length ? config.xAxis : ["x"];
+  const yParams = config.yAxis && config.yAxis.length ? config.yAxis : ["y"];
+  const fixedParams = config.fixedParams || {};
+  const scoreDirection = config.scoreDirection || "max";
+  const axisKeys = new Set([...xParams, ...yParams]);
+
+  let filtered = items;
+  if (Object.keys(fixedParams).length) {
+    filtered = filtered.filter((it) => {
+      for (const [k, v] of Object.entries(fixedParams)) {
+        if (axisKeys.has(k)) continue;
+        if (it.params?.[k] !== v) return false;
+      }
+      return true;
+    });
+  }
+  if (zoomRanges) {
+    const allKeys = [...xParams, ...yParams];
+    filtered = filtered.filter((it) => {
+      for (const k of allKeys) {
+        const r = zoomRanges[k];
+        if (!r || r.min == null || r.max == null) continue;
+        const v = it.params?.[k];
+        if (v == null || v < r.min || v > r.max) return false;
+      }
+      return true;
+    });
+  }
+  const N = filtered.length;
+  if (N === 0) return null;
+
+  const desiredMin = 9;
+  const desiredMax = Math.min(HEATMAP_MAX_SIZE, 13);
+  const base = Math.round(clamp(Math.sqrt(Math.max(N, 1)) / 6, 0, 1) * (desiredMax - desiredMin) + desiredMin);
+  const X = clamp(base, desiredMin, desiredMax);
+  const Y = clamp(base, desiredMin, desiredMax);
+
+  const allKeys = [...new Set([...xParams, ...yParams])];
+  const ranges = computeRanges(filtered, allKeys);
+
+  const xRangeValid = xParams.some((k) => {
+    const r = ranges[k];
+    return r && r.min != null && r.max != null && r.max !== r.min;
+  });
+  const yRangeValid = yParams.some((k) => {
+    const r = ranges[k];
+    return r && r.min != null && r.max != null && r.max !== r.min;
+  });
+  const useIndexCoords = !xRangeValid || !yRangeValid || filtered.length >= 100;
+
+  const withCoords = filtered.map((it, index) => {
+    let xCoord;
+    let yCoord;
+    if (useIndexCoords) {
+      const n = filtered.length;
+      const cols = Math.max(1, Math.ceil(Math.sqrt(n)));
+      const rows = Math.max(1, Math.ceil(n / cols));
+      const col = index % cols;
+      const row = Math.floor(index / cols);
+      xCoord = cols > 1 ? col / (cols - 1) : 0.5;
+      yCoord = rows > 1 ? row / (rows - 1) : 0.5;
+      xCoord = clamp(xCoord);
+      yCoord = clamp(yCoord);
+    } else {
+      const xVals = xParams.map((k) => normalizeParam(it.params?.[k], ranges[k]?.min, ranges[k]?.max));
+      const yVals = yParams.map((k) => normalizeParam(it.params?.[k], ranges[k]?.min, ranges[k]?.max));
+      xCoord = xVals.reduce((a, b) => a + b, 0) / Math.max(1, xVals.length);
+      yCoord = yVals.reduce((a, b) => a + b, 0) / Math.max(1, yVals.length);
+    }
+    return { ...it, xCoord, yCoord };
+  });
+
+  const skipCentering = useIndexCoords;
+  let centerX = 0.5;
+  let centerY = 0.5;
+  if (!skipCentering) {
+    const sorted = [...withCoords].sort((a, b) =>
+      scoreDirection === "min" ? a.score - b.score : b.score - a.score
+    );
+    const k = Math.max(10, Math.min(sorted.length, Math.floor(sorted.length * 0.06)));
+    const top = sorted.slice(0, k);
+    const topX = top.map((t) => t.xCoord).sort((a, b) => a - b);
+    const topY = top.map((t) => t.yCoord).sort((a, b) => a - b);
+    centerX = quantile(topX, 0.5);
+    centerY = quantile(topY, 0.5);
+  }
+
+  const centered = withCoords.map((it) => {
+    const x = skipCentering ? it.xCoord : clamp(it.xCoord - centerX + 0.5);
+    const y = skipCentering ? it.yCoord : clamp(it.yCoord - centerY + 0.5);
+    return { ...it, xCentered: x, yCentered: y };
+  });
+
+  const cells = Array.from({ length: Y }, () => Array.from({ length: X }, () => []));
+  for (const it of centered) {
+    const xi = Math.min(X - 1, Math.max(0, Math.floor(it.xCentered * X)));
+    const yi = Math.min(Y - 1, Math.max(0, Math.floor(it.yCentered * Y)));
+    cells[yi][xi].push(it);
+  }
+
+  const allScores = centered.map((d) => d.score);
+  const sMin = allScores.length ? Math.min(...allScores) : 0;
+  const sMax = allScores.length ? Math.max(...allScores) : 1;
+
+  const matrix = cells.map((row, yi) =>
+    row.map((bucket, xi) => {
+      if (!bucket.length) {
+        return {
+          xi,
+          yi,
+          count: 0,
+          avgScore: null,
+          minScore: null,
+          maxScore: null,
+          paramRanges: { x: computeRanges([], xParams), y: computeRanges([], yParams) },
+          results: [],
+          zoomRanges: null,
+        };
+      }
+      let sum = 0;
+      let min = Infinity;
+      let max = -Infinity;
+      for (const b of bucket) {
+        sum += b.score;
+        if (b.score < min) min = b.score;
+        if (b.score > max) max = b.score;
+      }
+      const avg = sum / bucket.length;
+      const xRanges = computeRanges(bucket, xParams);
+      const yRanges = computeRanges(bucket, yParams);
+      const zoomRangesForCell = { ...computeRanges(bucket, [...xParams, ...yParams]) };
+      for (const key of Object.keys(zoomRangesForCell)) {
+        if (zoomRangesForCell[key].min === null) delete zoomRangesForCell[key];
+      }
+      return {
+        xi,
+        yi,
+        count: bucket.length,
+        avgScore: avg,
+        minScore: min,
+        maxScore: max,
+        paramRanges: { x: xRanges, y: yRanges },
+        results: bucket,
+        zoomRanges: Object.keys(zoomRangesForCell).length ? zoomRangesForCell : null,
+      };
+    })
+  );
+
+  return {
+    N,
+    W: X,
+    H: Y,
+    scoreMin: sMin,
+    scoreMax: sMax,
+    centerX,
+    centerY,
+    cells: matrix,
+    xKeys: xParams,
+    yKeys: yParams,
+  };
+}
+
+function formatScore(v) {
+  if (v == null || Number.isNaN(v)) return "—";
+  const n = Number(v);
+  if (n >= 1) return "1";
+  return n.toFixed(3);
+}
+
+const HEATMAP_LEGEND_STOPS = 9;
+const HEATMAP_CELL_PX = 28;
+const HEATMAP_GAP_PX = 4;
+const EMPTY_CELL_BG = "rgba(255,255,255,0.04)";
+
+function heatmapScoreToColor(t01) {
+  const t = clamp(t01);
+  const hue = lerp(8, 130, t);
+  const sat = lerp(78, 65, t);
+  const light = lerp(32, 45, t);
+  return `hsl(${hue}, ${sat}%, ${light}%)`;
+}
+
+const HeatMapView = memo(function HeatMapView({
+  heatMapData,
+  config,
+  onCellClick,
+  onZoomOut,
+  onResetZoom,
+  canZoomOut,
+  canReset,
+  zoomLevel = 0,
+  zoomLevelLabel = "Full heatmap",
+  isLoading = false,
+  error = null,
+  onRetry = null,
+}) {
+  const gridRef = useRef(null);
+  const [hoveredCell, setHoveredCell] = useState(null);
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0, flipX: false, flipY: false });
+
+  if (error) {
+    return (
+      <div className={cx(ui.radius, ui.panelMuted, "p-4")}>
+        <h3 className="text-[13px] font-semibold text-[#d9d9d9] mb-2">HeatMap</h3>
+        <div className="py-6 text-center text-[12px] text-[#a6a6a6]">{error}</div>
+        {onRetry && (
+          <div className="flex justify-center mt-2">
+            <button type="button" onClick={onRetry} className={cx(ui.btn, "text-[11px] px-3 py-1.5")}>Retry</button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className={cx(ui.radius, ui.panelMuted, "p-4")}>
+        <h3 className="text-[13px] font-semibold text-[#d9d9d9] mb-3">HeatMap</h3>
+        <div className="text-[11px] text-[#8c8c8c] mb-2">Building heatmap…</div>
+        <div className="aspect-square w-full max-w-full grid gap-1 rounded-lg overflow-hidden bg-[#1a1a1a]" style={{ gridTemplateColumns: "repeat(5, 1fr)", gridTemplateRows: "repeat(5, 1fr)" }}>
+          {Array.from({ length: 25 }, (_, i) => <div key={i} className="rounded-lg bg-[#252525] animate-pulse" />)}
+        </div>
+      </div>
+    );
+  }
+
+  if (!heatMapData || !heatMapData.cells) return null;
+  const { cells, W, H } = heatMapData;
+
+  const hasAnyData = useMemo(() => cells.some((row) => row.some((c) => c.count > 0)), [cells]);
+
+  const scoreRange = useMemo(() => {
+    let minS = 1;
+    let maxS = 0;
+    for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+      const cell = cells[r][c];
+      if (cell.count > 0) {
+        minS = Math.min(minS, cell.avgScore);
+        maxS = Math.max(maxS, cell.avgScore);
+      }
+    }
+    return { min: minS > maxS ? 0 : minS, max: maxS };
+  }, [cells, W, H]);
+
+  const scoreToT01 = useCallback(
+    (score) => {
+      if (score == null) return 0;
+      const { min: a, max: b } = scoreRange;
+      if (b === a) return 0.5;
+      return clamp((score - a) / (b - a));
+    },
+    [scoreRange]
+  );
+
+  const handleMouseMove = useCallback((e, ri, ci) => {
+    setHoveredCell([ri, ci]);
+    const rect = gridRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const flipX = x > rect.width / 2;
+    const flipY = y > rect.height / 2;
+    setTooltipPos({ x: e.clientX, y: e.clientY, flipX, flipY, rect });
+  }, []);
+
+  const renderTooltip = (cell) => {
+    const xRanges = cell.paramRanges?.x ? Object.entries(cell.paramRanges.x).map(([k, r]) => `${k}: ${r.min}..${r.max}`).join("; ") : "—";
+    const yRanges = cell.paramRanges?.y ? Object.entries(cell.paramRanges.y).map(([k, r]) => `${k}: ${r.min}..${r.max}`).join("; ") : "—";
+    const fixedStr = config.fixedParams && Object.keys(config.fixedParams).length > 0
+      ? Object.entries(config.fixedParams).map(([k, v]) => `${k}=${v}`).join(", ")
+      : "—";
+    const cellTitle = cell.xi != null && cell.yi != null ? `Cell (${cell.xi + 1}, ${cell.yi + 1})` : "Cell";
+    return (
+      <div className="text-left text-[11px] text-[#d9d9d9] space-y-2 pointer-events-none rounded-lg border border-[#303030] bg-[#1a1a1a] shadow-lg p-3 max-w-[280px]">
+        <div className="font-medium text-[#f0f0f0]">{cellTitle}</div>
+        <div className="space-y-0.5">
+          <div>avgScore: <span className="text-emerald-400 font-mono">{formatScore(cell.avgScore)}</span></div>
+          <div>min..max: <span className="font-mono">{formatScore(cell.minScore)}..{formatScore(cell.maxScore)}</span></div>
+          <div>count: <span className="text-emerald-400">{cell.count}</span></div>
+          <div>fixed params: <span className="text-[#a6a6a6]">{fixedStr}</span></div>
+        </div>
+        <div className="border-t border-[#303030] my-1.5" />
+        <div className="space-y-0.5 text-[#a6a6a6]">
+          <div>X ranges: {xRanges}</div>
+          <div>Y ranges: {yRanges}</div>
+        </div>
+        <div className="text-[10px] text-[#8c8c8c] pt-0.5">Click cell to zoom (rebuilds matrix for this subset).</div>
+      </div>
+    );
+  };
+
+  const isZoomable = (cell) =>
+    cell.count > 0 &&
+    cell.zoomRanges &&
+    Object.keys(cell.zoomRanges).length > 0;
+
+  return (
+    <div className={cx(ui.radius, ui.panelMuted, "p-4")}>
+      <div className="mb-3">
+        <h3 className="text-[13px] font-semibold text-[#d9d9d9]">HeatMap</h3>
+        <div className="flex flex-wrap items-center justify-between gap-2 mt-1.5 text-[11px]">
+          <div className={cx("flex flex-wrap items-center gap-x-3 gap-y-0.5", ui.textMuted)}>
+            <span>X params: {Array.isArray(config.xAxis) ? config.xAxis.join(", ") : config.xAxis}</span>
+            <span>Y params: {Array.isArray(config.yAxis) ? config.yAxis.join(", ") : config.yAxis}</span>
+            <span>Other / fixed: {Object.keys(config.fixedParams || {}).length ? Object.entries(config.fixedParams).map(([k, v]) => `${k}=${v}`).join(", ") : "—"}</span>
+          </div>
+          <span className="font-mono text-[#a6a6a6]">AvgScore range: {formatScore(scoreRange.min)}..{formatScore(scoreRange.max)}</span>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <div className="text-[11px] text-[#8c8c8c]">
+          {zoomLevel === 0 ? "Level 0: Full heatmap" : `Level ${zoomLevel}: ${zoomLevelLabel}`}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onZoomOut}
+            disabled={!canZoomOut}
+            className={cx("rounded-lg border border-[#303030] px-3 py-1.5 text-[11px] transition-colors", canZoomOut ? "bg-transparent text-[#d9d9d9] hover:bg-[#252525]" : "opacity-50 cursor-not-allowed text-[#8c8c8c]")}
+          >
+            Zoom Out
+          </button>
+          <button
+            type="button"
+            onClick={onResetZoom}
+            disabled={!canReset}
+            className={cx("rounded-lg border border-[#303030] px-3 py-1.5 text-[11px] transition-colors", canReset ? "bg-transparent text-[#d9d9d9] hover:bg-[#252525]" : "opacity-50 cursor-not-allowed text-[#8c8c8c]")}
+          >
+            Reset
+          </button>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto overflow-y-auto min-w-0 max-w-full">
+        <div
+          ref={gridRef}
+          className="relative inline-block"
+          style={{
+            width: W * HEATMAP_CELL_PX + (W - 1) * HEATMAP_GAP_PX,
+            height: H * HEATMAP_CELL_PX + (H - 1) * HEATMAP_GAP_PX,
+          }}
+        >
+          <div
+            className="absolute inset-0 grid"
+            style={{
+              gap: HEATMAP_GAP_PX,
+              gridTemplateColumns: `repeat(${W}, ${HEATMAP_CELL_PX}px)`,
+              gridTemplateRows: `repeat(${H}, ${HEATMAP_CELL_PX}px)`,
+            }}
+          >
+            {cells.flatMap((row, rowIndex) =>
+              row.map((cell, colIndex) => {
+                const empty = cell.count === 0;
+                const zoomable = !empty && isZoomable(cell);
+                return (
+                  <button
+                    key={`${rowIndex}-${colIndex}`}
+                    type="button"
+                    className={cx(
+                      "flex flex-col items-center justify-center rounded-lg border font-mono text-[10px] transition-[filter,border-color] w-full h-full min-w-0 min-h-0 @container",
+                      empty ? "cursor-default border-white/[0.09]" : "cursor-pointer border-white/10 hover:brightness-110 hover:border-white/20"
+                    )}
+                    style={{
+                      backgroundColor: empty ? EMPTY_CELL_BG : heatmapScoreToColor(scoreToT01(cell.avgScore)),
+                      borderWidth: "1px",
+                    }}
+                    aria-label={`Cell ${rowIndex},${colIndex} avgScore=${formatScore(cell.avgScore)} count=${cell.count}`}
+                    onMouseEnter={(e) => !empty && handleMouseMove(e, rowIndex, colIndex)}
+                    onMouseLeave={() => setHoveredCell(null)}
+                    onClick={() => zoomable && onCellClick(cell)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && zoomable) onCellClick(cell); }}
+                  >
+                    {!empty && (
+                      <>
+                        <span className="leading-tight text-white/90">{formatScore(cell.avgScore)}</span>
+                        <span className="text-[9px] text-white/80 mt-0.5 hidden @[28px]:block">n={cell.count}</span>
+                      </>
+                    )}
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          {hoveredCell != null && (() => {
+            const [ri, ci] = hoveredCell;
+            const cell = cells[ri]?.[ci];
+            if (!cell || cell.count === 0) return null;
+            const { x, y, flipX, flipY } = tooltipPos;
+            const offset = 12;
+            return (
+              <div
+                className="fixed z-30 pointer-events-none"
+                style={{
+                  left: flipX ? undefined : x + offset,
+                  right: flipX ? window.innerWidth - x + offset : undefined,
+                  top: flipY ? undefined : y + offset,
+                  bottom: flipY ? window.innerHeight - y + offset : undefined,
+                  transform: [flipX && "translateX(-100%)", flipY && "translateY(-100%)"].filter(Boolean).join(" ") || undefined,
+                }}
+              >
+                {renderTooltip(cell, ri, ci)}
+              </div>
+            );
+          })()}
+
+          {!hasAnyData && (
+            <div className="absolute inset-0 flex items-center justify-center bg-[#141414]/80 rounded-lg pointer-events-none">
+              <span className="text-[12px] text-[#8c8c8c]">No results for selected filters</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <p className="mt-2 text-[10px] text-[#8c8c8c]">Equal-count bins; best cluster centered. Click cell to drill down.</p>
+
+      <div className="mt-3 flex justify-center items-center gap-2">
+        <span className="font-mono text-[10px] text-[#8c8c8c]">{formatScore(scoreRange.min)}</span>
+        <div
+          className="flex-1 max-w-[200px] h-3 rounded overflow-hidden border border-white/[0.08]"
+          style={{
+            background: `linear-gradient(to right, ${Array.from({ length: HEATMAP_LEGEND_STOPS }, (_, i) => `${heatmapScoreToColor(i / (HEATMAP_LEGEND_STOPS - 1))} ${(i / (HEATMAP_LEGEND_STOPS - 1)) * 100}%`).join(", ")})`,
+          }}
+        />
+        <span className="font-mono text-[10px] text-[#8c8c8c]">{formatScore(scoreRange.max)}</span>
+      </div>
+    </div>
+  );
+});
+
 /* ====================== Icons / Small UI ====================== */
 
-const Logo = memo(({ size = "h-6 w-6" }) => (
-  <svg viewBox="0 0 64 64" className={size} aria-hidden="true" fill="none">
-    <defs>
-      <linearGradient id="qsGrad" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stopColor="#22c55e" />
-        <stop offset="100%" stopColor="#16a34a" />
-      </linearGradient>
-    </defs>
-    <rect x="8" y="8" width="48" height="48" rx="12" stroke="url(#qsGrad)" strokeWidth="3" />
-    <path
-      d="M16 40 L26 30 L34 36 L48 22"
-      stroke="url(#qsGrad)"
-      strokeWidth="3"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <circle cx="48" cy="22" r="3.5" fill="url(#qsGrad)" />
-  </svg>
-));
+const Logo = memo(({ className = "h-9 w-auto max-w-[180px]" }) => {
+  const id = useId().replace(/:/g, "");
+  const gradId = `qGradient-${id}`;
+  return (
+    <svg viewBox="0 0 1200 400" className={className} fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <defs>
+        <linearGradient id={gradId} x1="85" y1="72" x2="355" y2="325" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#3AE9C9" />
+          <stop offset="100%" stopColor="#24B89A" />
+        </linearGradient>
+      </defs>
+      <g transform="translate(53 39)">
+        <path d="M 156.5 314.4 A 155 155 0 1 1 279.6 269.6" fill="transparent" stroke={`url(#${gradId})`} strokeWidth="37" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M 279.6 269.6 L 351.6 318.6" fill="transparent" stroke={`url(#${gradId})`} strokeWidth="37" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M 62 215 L 88 167 L 119 228 L 153 107 L 185 172 L 235 68" fill="transparent" stroke="#FFFFFF" strokeWidth="9.8" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M 235 68 L 234.5 92.2 L 216.5 83.5 Z" fill="#FFFFFF" />
+      </g>
+      <text x="475" y="137.5" fontFamily="Arial Black, Helvetica, sans-serif" fontSize="142" fontWeight="700" fill="#FFFFFF" letterSpacing="-3.2px" textAnchor="start">Quant</text>
+      <text x="475" y="269.5" fontFamily="Arial Black, Helvetica, sans-serif" fontSize="142" fontWeight="700" fill="#FFFFFF" letterSpacing="-2.6px" textAnchor="start">Sandbox</text>
+    </svg>
+  );
+});
 
 const MoreIcon = memo(({ className = "h-4 w-4" }) => (
   <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
@@ -267,6 +798,12 @@ const menuIconPaths = {
       <circle cx="7" cy="15" r="1.4" />
       <circle cx="11" cy="11" r="1.4" />
       <circle cx="14" cy="14" r="1.4" />
+    </>
+  ),
+  Settings: (
+    <>
+      <circle cx="12" cy="12" r="2.5" />
+      <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
     </>
   ),
 };
@@ -575,7 +1112,7 @@ const IndicatorLibrary = memo(({ query, onQueryChange, groupFilter, onGroupChang
   );
 });
 
-const IndicatorItem = memo(({ indicator, index, total, onEdit, onDelete, onMove, onToggle }) => {
+const IndicatorItem = memo(({ indicator, index, total, onEdit, onDelete }) => {
   const baseInfo = BASE_INDICATORS[indicator.type];
   const paramsText = indicator.params.map(p => `${p.label}: ${p.default} [${p.min}-${p.max}, step ${p.step}]`).join(", ");
   
@@ -643,31 +1180,6 @@ const IndicatorItem = memo(({ indicator, index, total, onEdit, onDelete, onMove,
         
         {/* Actions */}
         <div className="flex items-center gap-1">
-          <div className="flex items-center gap-1 mr-2">
-            <input 
-              type="checkbox" 
-              checked={indicator.enabled} 
-              onChange={(e) => onToggle(indicator.id, e.target.checked)}
-              className="h-4 w-4 rounded border-[#303030]" 
-              title="Enable/Disable"
-            />
-            <span className={cx("text-[10px]", ui.textMuted)}>Enabled</span>
-          </div>
-          
-          <button onClick={() => onMove(indicator.id, "up")} disabled={index === 0}
-            className={cx(ui.btn, "h-7 w-7 p-0", index === 0 && "opacity-30 cursor-not-allowed")} title="Move up">
-            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5">
-              <path d="M18 15l-6-6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-          
-          <button onClick={() => onMove(indicator.id, "down")} disabled={index === total - 1}
-            className={cx(ui.btn, "h-7 w-7 p-0", index === total - 1 && "opacity-30 cursor-not-allowed")} title="Move down">
-            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5">
-              <path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-          
           <button onClick={onEdit} className={cx(ui.btn, "h-7 px-2 text-[11px]")} title="Edit">
             <svg viewBox="0 0 24 24" className="h-3.5 w-3.5">
               <path d="M16.9 3.7a2.1 2.1 0 0 1 3 3L8.4 18.2 4 19.4l1.2-4.4L16.9 3.7z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
@@ -1905,9 +2417,10 @@ const FormulaEditor = memo(({ value, onChange, indicators }) => {
             />
           </div>
           
-          <div className={cx("px-3 py-2 text-[10px]", ui.textMuted, "border-0 border-t", ui.divider)}>
-            💡 <strong>Python Code for Freqtrade:</strong> This code uses <code className="text-emerald-300">dataframe.loc[]</code> to set signals • 
-            Compatible with TA-Lib indicators • Edit manually or switch to Table mode to modify rules
+          <div className={cx("px-3 py-2 border-0 border-t", ui.divider, "flex justify-end")}>
+            <button type="button" className={cx(ui.btnPrimary, "h-8 px-3 text-[11px]")}>
+              Validate
+            </button>
           </div>
         </>
       ) : (
@@ -2220,11 +2733,24 @@ function getParamLabel(ind, param) {
   return param.label;
 }
 
+const HEATMAP_FILTER_KEYS = [
+  "cycle_count_valid",
+  "median_duration_cycle",
+  "median_MFE",
+  "median_MAE",
+  "median_AIR",
+  "Hit_Rate",
+  "Final Score",
+  "Intermediate Score",
+  "Stability Score",
+];
+
 const HeatMapConfigurator = memo(({ indicators, onGenerate }) => {
   const [selectedIndicatorIds, setSelectedIndicatorIds] = useState([]);
   const [xAxisKeys, setXAxisKeys] = useState([]);
   const [yAxisKeys, setYAxisKeys] = useState([]);
   const [fixedParams, setFixedParams] = useState({});
+  const [filters, setFilters] = useState(() => Object.fromEntries(HEATMAP_FILTER_KEYS.map(k => [k, ""])));
   const [openIndicatorDropdown, setOpenIndicatorDropdown] = useState(false);
   const [openXDropdown, setOpenXDropdown] = useState(false);
   const [openYDropdown, setOpenYDropdown] = useState(false);
@@ -2317,12 +2843,16 @@ const HeatMapConfigurator = memo(({ indicators, onGenerate }) => {
       alert("Select at least one indicator, one X axis parameter, and one Y axis parameter");
       return;
     }
-    onGenerate({
+    const config = {
       indicators: selectedIndicators,
       xAxis: xAxisKeys,
       yAxis: yAxisKeys,
-      fixedParams
-    });
+      fixedParams,
+      filters,
+    };
+    if (typeof onGenerate === "function") {
+      onGenerate(config);
+    }
   };
   
   if (indicators.length === 0) {
@@ -2480,8 +3010,26 @@ const HeatMapConfigurator = memo(({ indicators, onGenerate }) => {
                 </div>
               </div>
             )}
+
+            <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
+              <div className={cx("text-[11px] font-medium text-[#d9d9d9] mb-3")}>Filters</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {HEATMAP_FILTER_KEYS.map(key => (
+                  <div key={key}>
+                    <label className={cx("block mb-1 text-[10px]", ui.textMuted)}>{key}</label>
+                    <input
+                      type="text"
+                      value={filters[key] ?? ""}
+                      onChange={(e) => setFilters(prev => ({ ...prev, [key]: e.target.value }))}
+                      placeholder="—"
+                      className={cx(ui.input, "h-8 text-[11px] w-full")}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
             
-            <button onClick={handleGenerate} className={cx(ui.btnPrimary, "w-full h-9")}>
+            <button type="button" onClick={handleGenerate} className={cx(ui.btnPrimary, "w-full h-9")}>
               🎨 Generate HeatMap
             </button>
           </>
@@ -2594,6 +3142,42 @@ const HeatMapGrid = memo(() => {
   );
 });
 
+const HYPEROPT_DETAILS_TOOLTIP_TEXT = `StabilityFormula = formula
+StabilityWeight (weightMFE | weightMAE | weightAIR | weightHitRate | ABC) 0-100 GLOBAL >= 100%
+
+Final score =
+  weightMFE * normMFE
+- weightMAE * normMAE
++ weightAIR * normAIR
++ weightHitRate * normHitRate
++ weightStability (weightMFE | weightMAE | weightAIR | weightHitRate) * normStability
+
+------------------------------
+Metrics normalization formulas:
+normMFE = 1/(1+EXP(-1*(MFE - MEDIAN(MFE)) / (QUARTILE.INC(MFE,3) - QUARTILE.INC(MFE,1))))
+normMAE = 1/(1+EXP(1*(MAE - MEDIAN(MAE)) / (QUARTILE.INC(MAE,3) - QUARTILE.INC(MAE,1))))
+normAIR = 1/(1+EXP(-1*(AIR - MEDIAN(AIR)) / (QUARTILE.INC(AIR,3) - QUARTILE.INC(AIR,1))))
+normHitRate = 1/(1+EXP(-1*(HitRate - MEDIAN(HitRate)) / (QUARTILE.INC(HitRate,3) - QUARTILE.INC(HitRate,1))))
+normStability = 1/(1+EXP(-1*(Stability - MEDIAN(Stability)) / (QUARTILE.INC(Stability,3) - QUARTILE.INC(Stability,1))))`;
+
+const HyperoptDetailsTooltip = memo(function HyperoptDetailsTooltip() {
+  const [show, setShow] = useState(false);
+  return (
+    <div
+      className="relative inline-block"
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+    >
+      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#303030] text-[11px] text-[#8c8c8c] cursor-help" title="Formulas info">ⓘ</span>
+      {show && (
+        <div className="absolute z-50 bottom-full left-0 mb-1 w-[320px] max-w-[90vw] p-3 rounded-lg border border-[#303030] bg-[#1a1a1a] text-[10px] font-mono text-[#d9d9d9] whitespace-pre-wrap shadow-xl">
+          {HYPEROPT_DETAILS_TOOLTIP_TEXT}
+        </div>
+      )}
+    </div>
+  );
+});
+
 const BuilderStepper = memo(function BuilderStepper({
   activeStage,
   pairs,
@@ -2613,10 +3197,27 @@ const BuilderStepper = memo(function BuilderStepper({
   const [libraryQuery, setLibraryQuery] = useState("");
   const [libraryGroup, setLibraryGroup] = useState("All");
   const [selectedTab, setSelectedTab] = useState("list"); // list or code
+
+  // Total combinations from indicator params (product of param value counts per enabled indicator)
+  const totalCombinations = useMemo(() => {
+    if (indicators.length === 0) return 0;
+    return indicators.reduce((product, ind) => {
+      if (!ind.enabled || !Array.isArray(ind.params)) return product;
+      const perIndicator = ind.params.reduce((p, param) => p * getParamValuesFromDef(param).length, 1);
+      return product * Math.max(1, perIndicator);
+    }, 1);
+  }, [indicators]);
   
   // Hyperoptimization progress
   const [isRunningOptimization, setIsRunningOptimization] = useState(false);
   const [optimizationProgress, setOptimizationProgress] = useState(0);
+  // Technical params (Market / Technical blocks)
+  const [tEndTrunc, setTEndTrunc] = useState("");
+  const [foldSize, setFoldSize] = useState("");
+  const [maxPossibleStd, setMaxPossibleStd] = useState("");
+  const [unknowTimeRangeStart, setUnknowTimeRangeStart] = useState("");
+  const [unknowTimeRangeEnd, setUnknowTimeRangeEnd] = useState("");
+  const [hyperoptType, setHyperoptType] = useState("BIAS");
   
   // Normalization formulas: Intermediate + Final (tables shown after dropdown selection)
   const [intermediateScoreFormula, setIntermediateScoreFormula] = useState("Formula 1");
@@ -2627,8 +3228,14 @@ const BuilderStepper = memo(function BuilderStepper({
     setter(Math.min(n, 100 - othersSum));
   }, []);
   const DEFAULT_FORMULA_CODE = "1 / (1 + exp( -k * ( (MFE - median(MFE)) / median(|MFE - median(MFE)|) ) ))";
+  const DEFAULT_FINAL_SCORE_FORMULA = "weightMFE * normMFE - weightMAE * normMAE + weightAIR * normAIR + weightHitRate * normHitRate";
+  const DEFAULT_STABILITY_FORMULA = "1/(1+EXP(-1*(Stability - MEDIAN(Stability)) / (QUARTILE.INC(Stability,3) - QUARTILE.INC(Stability,1))))";
+  const DEFAULT_MFE_FORMULA = "1/(1+EXP(-1*(MFE - MEDIAN(MFE)) / (QUARTILE.INC(MFE,3) - QUARTILE.INC(MFE,1))))";
+  const DEFAULT_MAE_FORMULA = "1/(1+EXP(1*(MAE - MEDIAN(MAE)) / (QUARTILE.INC(MAE,3) - QUARTILE.INC(MAE,1))))";
+  const DEFAULT_AIR_FORMULA = "1/(1+EXP(-1*(AIR - MEDIAN(AIR)) / (QUARTILE.INC(AIR,3) - QUARTILE.INC(AIR,1))))";
+  const DEFAULT_HITRATE_FORMULA = "1/(1+EXP(-1*(HitRate - MEDIAN(HitRate)) / (QUARTILE.INC(HitRate,3) - QUARTILE.INC(HitRate,1))))";
   const FORMULA_VARIABLES = ["median", "MFE", "MAE", "AIR", "exp", "k"];
-  // Intermediate metrics table (after user selects Intermediate Score Formula)
+  // Intermediate metrics table (after user selects Normalization global formula)
   const [intMfeFormula, setIntMfeFormula] = useState("Formula 1");
   const [intMaeFormula, setIntMaeFormula] = useState("Formula 1");
   const [intAirFormula, setIntAirFormula] = useState("Formula 1");
@@ -2648,22 +3255,23 @@ const BuilderStepper = memo(function BuilderStepper({
   const [finMaeFormula, setFinMaeFormula] = useState("Formula 1");
   const [finAirFormula, setFinAirFormula] = useState("Formula 1");
   const [finHitRateFormula, setFinHitRateFormula] = useState("Formula 1");
-  const [finFinalFormulaCode, setFinFinalFormulaCode] = useState(DEFAULT_FORMULA_CODE);
-  const [finStabilityFormulaCode, setFinStabilityFormulaCode] = useState(DEFAULT_FORMULA_CODE);
-  const [finMfeFormulaCode, setFinMfeFormulaCode] = useState(DEFAULT_FORMULA_CODE);
-  const [finMaeFormulaCode, setFinMaeFormulaCode] = useState(DEFAULT_FORMULA_CODE);
-  const [finAirFormulaCode, setFinAirFormulaCode] = useState(DEFAULT_FORMULA_CODE);
-  const [finHitRateFormulaCode, setFinHitRateFormulaCode] = useState(DEFAULT_FORMULA_CODE);
+  const [finFinalFormulaCode, setFinFinalFormulaCode] = useState(DEFAULT_FINAL_SCORE_FORMULA);
+  const [finStabilityFormulaCode, setFinStabilityFormulaCode] = useState(DEFAULT_STABILITY_FORMULA);
+  const [finMfeFormulaCode, setFinMfeFormulaCode] = useState(DEFAULT_MFE_FORMULA);
+  const [finMaeFormulaCode, setFinMaeFormulaCode] = useState(DEFAULT_MAE_FORMULA);
+  const [finAirFormulaCode, setFinAirFormulaCode] = useState(DEFAULT_AIR_FORMULA);
+  const [finHitRateFormulaCode, setFinHitRateFormulaCode] = useState(DEFAULT_HITRATE_FORMULA);
   const [finStabMfeWeight, setFinStabMfeWeight] = useState(0);
   const [finStabMaeWeight, setFinStabMaeWeight] = useState(0);
   const [finStabAirWeight, setFinStabAirWeight] = useState(0);
   const [finStabHitRateWeight, setFinStabHitRateWeight] = useState(0);
+  const [finStabilityWeight, setFinStabilityWeight] = useState(0);
   const [finMfeWeight, setFinMfeWeight] = useState(0);
   const [finMaeWeight, setFinMaeWeight] = useState(0);
   const [finAirWeight, setFinAirWeight] = useState(0);
   const [finHitRateWeight, setFinHitRateWeight] = useState(0);
   const finStabWeightsSum = finStabMfeWeight + finStabMaeWeight + finStabAirWeight + finStabHitRateWeight;
-  const finWeightsSum = finStabWeightsSum + finMfeWeight + finMaeWeight + finAirWeight + finHitRateWeight;
+  const finWeightsSum = finStabilityWeight + finMfeWeight + finMaeWeight + finAirWeight + finHitRateWeight;
   
   // Formula state (unified)
   const [signalFormula, setSignalFormula] = useState(`# Define your trading signals
@@ -2684,8 +3292,30 @@ IF RSI > 70 OR Close < EMA THEN SELL
   
   // Report Modal state
   const [showReportModal, setShowReportModal] = useState(false);
+  // Hyperopt Results: Run normalization modal (same content as Normalization formulas block)
+  const [showNormalizationModal, setShowNormalizationModal] = useState(false);
+  // Hyperopt Results: which level-1 rows are expanded (collapse/expand)
+  const [hyperoptResultsExpanded, setHyperoptResultsExpanded] = useState(() => new Set(["hr1", "hr2"]));
+  const toggleHyperoptRow = useCallback((id) => {
+    setHyperoptResultsExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+  // Hyperopt Results two-level table data (level 1: runs; level 2: per-run results with Min/AVG/Max score)
+  const [hyperoptResultsRows, setHyperoptResultsRows] = useState(() => [
+    { id: "hr1", date: "2024-01-15", pairs: "BTC/USDT", timeFrame: "1h", knowRange: "2020-01-01 – 2023-06-01", unknowRange: "2023-06-01 – 2023-12-31", children: [
+      { id: "hr1-1", date: "2024-01-15", minScore: "0.20", avgScore: "0.55", maxScore: "0.89" },
+      { id: "hr1-2", date: "2024-01-16", minScore: "0.18", avgScore: "0.52", maxScore: "0.87" },
+    ]},
+    { id: "hr2", date: "2024-01-14", pairs: "ETH/USDT", timeFrame: "4h", knowRange: "2021-01-01 – 2023-09-01", unknowRange: "2023-09-01 – 2024-01-01", children: [
+      { id: "hr2-1", date: "2024-01-14", minScore: "0.22", avgScore: "0.58", maxScore: "0.91" },
+    ]},
+  ]);
   
-  // Collapsed sections in Strategy Builder (1–4)
+  // Collapsed sections in Strategy Builder (1–5)
   const [collapsedSections, setCollapsedSections] = useState(() => new Set());
   const toggleSection = useCallback((num) => {
     setCollapsedSections((prev) => {
@@ -2761,10 +3391,57 @@ IF RSI > 70 OR Close < EMA THEN SELL
   }, []);
   
   const handleGenerateHeatMap = useCallback((config, runId) => {
-    console.log('🎨 Generating HeatMap with config:', config, 'for run:', runId);
-    setGeneratedHeatMap({ ...config, runId });
-    setShowHeatMapConfig(null);
+    if (!config || runId == null) return;
+    try {
+      const fullResults = generateMockResults(config, runId);
+      setGeneratedHeatMap({
+        runId,
+        config,
+        fullResults,
+        zoomStack: [],
+      });
+      setShowHeatMapConfig(null);
+    } catch (err) {
+      console.error("HeatMap generation failed:", err);
+      alert("HeatMap generation failed. Check console for details.");
+    }
   }, []);
+
+  const handleHeatMapCellClick = useCallback((cell, runId) => {
+    setGeneratedHeatMap((prev) => {
+      if (!prev || prev.runId !== runId || !prev.config) return prev;
+      if (!cell.count || !cell.zoomRanges || !Object.keys(cell.zoomRanges).length) return prev;
+      const label = `Zoom: cell (${cell.xi + 1}, ${cell.yi + 1}) • n=${cell.count}`;
+      return {
+        ...prev,
+        zoomStack: [...prev.zoomStack, { label, zoomRanges: cell.zoomRanges }],
+      };
+    });
+  }, []);
+
+  const handleHeatMapZoomOut = useCallback((runId) => {
+    setGeneratedHeatMap((prev) => {
+      if (!prev || prev.runId !== runId || prev.zoomStack.length === 0) return prev;
+      return { ...prev, zoomStack: prev.zoomStack.slice(0, -1) };
+    });
+  }, []);
+
+  const handleHeatMapResetZoom = useCallback((runId) => {
+    setGeneratedHeatMap((prev) => {
+      if (!prev || prev.runId !== runId) return prev;
+      return { ...prev, zoomStack: [] };
+    });
+  }, []);
+
+  const heatMapZoomRanges = useMemo(() => {
+    if (!generatedHeatMap?.zoomStack?.length) return null;
+    return generatedHeatMap.zoomStack[generatedHeatMap.zoomStack.length - 1].zoomRanges;
+  }, [generatedHeatMap?.zoomStack]);
+
+  const currentHeatMapData = useMemo(() => {
+    if (!generatedHeatMap?.fullResults || !generatedHeatMap?.config) return null;
+    return buildHeatMap(generatedHeatMap.fullResults, generatedHeatMap.config, heatMapZoomRanges);
+  }, [generatedHeatMap?.fullResults, generatedHeatMap?.config, heatMapZoomRanges]);
   const stages = useMemo(
     () => [
       {
@@ -2841,7 +3518,6 @@ IF RSI > 70 OR Close < EMA THEN SELL
   const active = stages.find((s) => s.id === activeStage) ?? stages[0];
 
   const [openRunId, setOpenRunId] = useState(null);
-  const runs = useMemo(() => MOCK_OPTIMIZATION_RUNS, []);
 
   return (
     <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
@@ -2934,9 +3610,18 @@ IF RSI > 70 OR Close < EMA THEN SELL
                   <div className="lg:col-span-7">
                 <div className={cx(ui.radius, ui.panel, "overflow-hidden h-full flex flex-col")}>
                   <div className={cx("px-4 py-3", ui.panelMuted, "border-0 border-b", ui.divider)}>
-                    <div className="text-[12px] font-medium text-[#d9d9d9] mb-1">Selected Indicators</div>
-                    <div className={cx("text-[11px]", ui.textMuted)}>Enable/disable, reorder, and edit</div>
-                    
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-[12px] font-medium text-[#d9d9d9] mb-1">Selected Indicators</div>
+                        <div className={cx("text-[11px]", ui.textMuted)}>Enable/disable, reorder, and edit</div>
+                      </div>
+                      <div className={cx(
+                        "text-[11px] shrink-0 rounded-md border px-2 py-1.5",
+                        totalCombinations > 10_000_000 ? "border-red-500/50 bg-red-500/10 text-red-400" : totalCombinations > 0 ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-400" : "border-[#303030] bg-[#0f0f0f] text-[#8c8c8c]"
+                      )}>
+                        Total combinations: <span className="font-medium">{totalCombinations.toLocaleString()}</span>
+                      </div>
+                    </div>
                     <div className="mt-3 flex gap-2">
                       <button 
                         onClick={() => setSelectedTab("list")}
@@ -2979,8 +3664,6 @@ IF RSI > 70 OR Close < EMA THEN SELL
                               total={indicators.length}
                               onEdit={() => setEditingIndicator(ind)}
                               onDelete={() => handleDeleteIndicator(ind.id)}
-                              onMove={handleMoveIndicator}
-                              onToggle={handleToggleIndicator}
                             />
                           ))}
                         </div>
@@ -3051,174 +3734,107 @@ IF RSI > 70 OR Close < EMA THEN SELL
               </button>
               {!collapsedSections.has(3) && (
               <div className="p-3 space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                  <PairsDropdown value={pairs} onChange={onPairsChange} />
-                  <div>
-                    <label className={cx("block mb-1 text-xs", ui.textMuted)}>Time Range</label>
-                    <select value={timeRange} onChange={(e) => onTimeRangeChange(e.target.value)} className={cx(ui.input, "h-9 text-[12px] w-full")}>
-                      {TIME_RANGES.map((v) => (
-                        <option key={v} value={v}>{v}</option>
-                      ))}
-                    </select>
+                <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
+                  <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">Market configuration</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                    <PairsDropdown value={pairs} onChange={onPairsChange} />
+                    <div>
+                      <label className={cx("block mb-1 text-xs", ui.textMuted)}>Time Frame</label>
+                      <select value={timeRange} onChange={(e) => onTimeRangeChange(e.target.value)} className={cx(ui.input, "h-9 text-[12px] w-full")}>
+                        {TIME_RANGES.map((v) => (
+                          <option key={v} value={v}>{v}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className={cx("block mb-1 text-xs", ui.textMuted)}>Know Time Range</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="date"
+                          value={timeFrameStart}
+                          onChange={(e) => onTimeFrameStartChange(e.target.value)}
+                          className={cx(ui.input, "h-9 text-[12px] flex-1 min-w-0")}
+                          title="From"
+                        />
+                        <span className="text-[#8c8c8c] text-xs shrink-0">–</span>
+                        <input
+                          type="date"
+                          value={timeFrameEnd}
+                          onChange={(e) => onTimeFrameEndChange(e.target.value)}
+                          className={cx(ui.input, "h-9 text-[12px] flex-1 min-w-0")}
+                          title="To"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className={cx("block mb-1 text-xs", ui.textMuted)}>Unknow Time Range</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="date"
+                          value={unknowTimeRangeStart}
+                          onChange={(e) => setUnknowTimeRangeStart(e.target.value)}
+                          className={cx(ui.input, "h-9 text-[12px] flex-1 min-w-0")}
+                          title="From"
+                        />
+                        <span className="text-[#8c8c8c] text-xs shrink-0">–</span>
+                        <input
+                          type="date"
+                          value={unknowTimeRangeEnd}
+                          onChange={(e) => setUnknowTimeRangeEnd(e.target.value)}
+                          className={cx(ui.input, "h-9 text-[12px] flex-1 min-w-0")}
+                          title="To"
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <label className={cx("block mb-1 text-xs", ui.textMuted)}>Start Date</label>
-                    <input 
-                      type="date"
-                      value={timeFrameStart}
-                      onChange={(e) => onTimeFrameStartChange(e.target.value)}
-                      className={cx(ui.input, "h-9 text-[12px] w-full")}
-                    />
-                  </div>
-                  <div>
-                    <label className={cx("block mb-1 text-xs", ui.textMuted)}>End Date</label>
-                    <input 
-                      type="date"
-                      value={timeFrameEnd}
-                      onChange={(e) => onTimeFrameEndChange(e.target.value)}
-                      className={cx(ui.input, "h-9 text-[12px] w-full")}
-                    />
+                </div>
+                <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
+                  <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">Technical params</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className={cx("block mb-1 text-xs", ui.textMuted)}>t_end_trunc</label>
+                      <input type="text" value={tEndTrunc} onChange={(e) => setTEndTrunc(e.target.value)} placeholder="t_end_trunc" className={cx(ui.input, "h-9 text-[12px] w-full")} />
+                    </div>
+                    <div>
+                      <label className={cx("block mb-1 text-xs", ui.textMuted)}>Fold size</label>
+                      <input type="text" value={foldSize} onChange={(e) => setFoldSize(e.target.value)} placeholder="Fold size" className={cx(ui.input, "h-9 text-[12px] w-full")} />
+                    </div>
+                    <div>
+                      <label className={cx("block mb-1 text-xs", ui.textMuted)}>Max possible std</label>
+                      <input type="text" value={maxPossibleStd} onChange={(e) => setMaxPossibleStd(e.target.value)} placeholder="Max possible std" className={cx(ui.input, "h-9 text-[12px] w-full")} />
+                    </div>
                   </div>
                 </div>
 
-                {/* Normalization formulas — reworked: collapsible subsections, tfoot Total with color, Stability 2×2 */}
+                <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
+                  <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">Hyperopt type</div>
+                  <select value={hyperoptType} onChange={(e) => setHyperoptType(e.target.value)} className={cx(ui.input, "h-9 text-[12px] w-full max-w-[200px]")}>
+                    <option value="BIAS">BIAS</option>
+                    <option value="Brute Force">Brute Force</option>
+                  </select>
+                </div>
+
+                {/* Normalization formulas — Final Score block (no collapse) */}
                 <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
                   <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">Normalization formulas</div>
-                  <div className="space-y-3">
-                    {/* 1. Intermediate Score Formula — collapsible */}
-                    <div className={cx("rounded-lg border border-[#303030] overflow-hidden", "bg-[#141414]")}>
-                      <button
-                        type="button"
-                        onClick={() => toggleNormSection("int")}
-                        className="w-full px-3 py-2 flex items-center justify-between gap-2 text-left hover:bg-[#1a1a1a] transition-colors"
-                      >
-                        <span className="text-[12px] font-medium text-[#d9d9d9]">Intermediate Score Formula</span>
-                        <span className={cx("text-[11px]", intWeightsSum === 100 ? "text-emerald-500" : intWeightsSum > 100 ? "text-amber-500" : ui.textMuted)}>Total: {intWeightsSum}%</span>
-                        <span className="text-[#8c8c8c] text-[10px]">{collapsedNormSections.has("int") ? "▶" : "▼"}</span>
-                      </button>
-                      {!collapsedNormSections.has("int") && (
-                        <div className="p-3 pt-0 space-y-2 border-t border-[#303030]">
-                          <select value={intermediateScoreFormula} onChange={(e) => setIntermediateScoreFormula(e.target.value)} className={cx(ui.input, "h-9 text-[12px] w-full max-w-[200px]")}>
-                            {FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
-                          </select>
-                          <div className="text-[11px] font-medium text-[#d9d9d9]">Intermediate metrics formulas and weights</div>
-                          <div className="overflow-x-auto border border-[#303030] rounded-lg">
-                            <table className="w-full text-[11px] border-collapse">
-                              <thead>
-                                <tr className="bg-[#1a1a1a] text-[#8c8c8c]">
-                                  <th className="px-3 py-2 text-left font-medium border-b border-[#303030] w-24">Metrics</th>
-                                  <th className="px-3 py-2 text-left font-medium border-b border-[#303030] w-32">Formula</th>
-                                  <th className="px-3 py-2 text-left font-medium border-b border-[#303030] min-w-[200px]">Formula Code</th>
-                                  <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Weight</th>
-                                </tr>
-                              </thead>
-                              <tbody className="text-[#d9d9d9]">
-                                {[
-                                  { metric: "MFE", formula: intMfeFormula, setFormula: setIntMfeFormula, formulaCode: intMfeFormulaCode, setFormulaCode: setIntMfeFormulaCode, weight: intMfeWeight, setWeight: setIntMfeWeight, others: intMaeWeight + intAirWeight + intHitRateWeight },
-                                  { metric: "MAE", formula: intMaeFormula, setFormula: setIntMaeFormula, formulaCode: intMaeFormulaCode, setFormulaCode: setIntMaeFormulaCode, weight: intMaeWeight, setWeight: setIntMaeWeight, others: intMfeWeight + intAirWeight + intHitRateWeight },
-                                  { metric: "AIR", formula: intAirFormula, setFormula: setIntAirFormula, formulaCode: intAirFormulaCode, setFormulaCode: setIntAirFormulaCode, weight: intAirWeight, setWeight: setIntAirWeight, others: intMfeWeight + intMaeWeight + intAirWeight },
-                                  { metric: "Hit rate", formula: intHitRateFormula, setFormula: setIntHitRateFormula, formulaCode: intHitRateFormulaCode, setFormulaCode: setIntHitRateFormulaCode, weight: intHitRateWeight, setWeight: setIntHitRateWeight, others: intMfeWeight + intMaeWeight + intAirWeight },
-                                ].map((row) => (
-                                  <tr key={row.metric} className="border-b border-[#303030]">
-                                    <td className="px-3 py-2 text-[#a6a6a6] align-top">{row.metric}</td>
-                                    <td className="px-3 py-2 w-32 align-top">
-                                      <select value={row.formula} onChange={(e) => row.setFormula(e.target.value)} className={cx(ui.input, "h-8 text-[11px] w-full min-w-0")}>
-                                        {FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
-                                      </select>
-                                    </td>
-                                    <td className="px-3 py-2 align-top min-w-[200px]">
-                                      <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-8 overflow-hidden">
-                                        <div
-                                          data-formula-mirror
-                                          className="absolute inset-0 px-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden"
-                                          style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-                                          aria-hidden
-                                        >
-                                          <span className="inline-block min-w-full">
-                                            {row.formulaCode
-                                              ? renderFormulaWithVariables(row.formulaCode)
-                                              : <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>}
-                                          </span>
-                                        </div>
-                                        <input
-                                          type="text"
-                                          value={row.formulaCode}
-                                          onChange={(e) => row.setFormulaCode(e.target.value)}
-                                          onScroll={(e) => {
-                                            const mirror = e.target.parentElement?.querySelector("[data-formula-mirror]");
-                                            if (mirror) mirror.scrollLeft = e.target.scrollLeft;
-                                          }}
-                                          className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 px-3 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset"
-                                        />
-                                      </div>
-                                    </td>
-                                    <td className="px-3 py-2 align-top">
-                                      <div className="flex items-center gap-2">
-                                        <input type="range" min={0} max={100} step={1} value={row.weight} onChange={(e) => setWeightCapped(row.setWeight, e.target.value, row.others)} className="flex-1 max-w-[120px] h-2 accent-emerald-500" />
-                                        <span className="text-[#8c8c8c] w-7">{row.weight}%</span>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                              <tfoot>
-                                <tr className="bg-[#1a1a1a]">
-                                  <td colSpan={3} className="px-3 py-2 text-right text-[11px] font-medium text-[#8c8c8c]">Total</td>
-                                  <td className={cx("px-3 py-2 text-[11px] font-medium", intWeightsSum === 100 ? "text-emerald-500" : intWeightsSum > 100 ? "text-amber-500" : "text-[#8c8c8c]")}>{intWeightsSum}%</td>
-                                </tr>
-                              </tfoot>
-                            </table>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* 2. Final Score Formula — collapsible; Stability row 2×2 grid */}
-                    <div className={cx("rounded-lg border border-[#303030] overflow-hidden", "bg-[#141414]")}>
-                      <button
-                        type="button"
-                        onClick={() => toggleNormSection("fin")}
-                        className="w-full px-3 py-2 flex items-center justify-between gap-2 text-left hover:bg-[#1a1a1a] transition-colors"
-                      >
-                        <span className="text-[12px] font-medium text-[#d9d9d9]">Final Score Formula</span>
-                        <span className={cx("text-[11px]", finWeightsSum === 100 ? "text-emerald-500" : finWeightsSum > 100 ? "text-amber-500" : ui.textMuted)}>Total: {finWeightsSum}%</span>
-                        <span className="text-[#8c8c8c] text-[10px]">{collapsedNormSections.has("fin") ? "▶" : "▼"}</span>
-                      </button>
-                      {!collapsedNormSections.has("fin") && (
-                        <div className="p-3 pt-0 space-y-2 border-t border-[#303030]">
-                          <div className="flex flex-wrap items-center gap-3 gap-y-2">
-                            <select value={finalScoreFormula} onChange={(e) => setFinalScoreFormula(e.target.value)} className={cx(ui.input, "h-9 text-[12px] w-full max-w-[200px]")}>
-                              {FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
-                            </select>
-                            <div className="min-w-[200px] flex-1 max-w-[400px]">
-                              <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-9 overflow-hidden">
-                                <div
-                                  data-formula-mirror
-                                  className="absolute inset-0 px-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden"
-                                  style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-                                  aria-hidden
-                                >
-                                  <span className="inline-block min-w-full">
-                                    {finFinalFormulaCode
-                                      ? renderFormulaWithVariables(finFinalFormulaCode)
-                                      : <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>}
-                                  </span>
+                  <div className="p-3 pt-0 space-y-3 border-t border-[#303030]">
+                          <div className="space-y-1.5">
+                            <div className="text-[11px] font-medium text-[#d9d9d9]">Score formula</div>
+                            <div className="flex flex-wrap items-center gap-3 gap-y-2">
+                              <select value={finalScoreFormula} onChange={(e) => setFinalScoreFormula(e.target.value)} className={cx(ui.input, "h-9 text-[12px] w-full max-w-[200px]")}>
+                                {FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
+                              </select>
+                              <div className="min-w-[200px] flex-1 max-w-[400px]">
+                                <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-9 overflow-hidden">
+                                  <div data-formula-mirror className="absolute inset-0 px-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
+                                    <span className="inline-block min-w-full">{finFinalFormulaCode ? renderFormulaWithVariables(finFinalFormulaCode) : <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>}</span>
+                                  </div>
+                                  <input type="text" value={finFinalFormulaCode} onChange={(e) => setFinFinalFormulaCode(e.target.value)} onScroll={(e) => { const m = e.target.parentElement?.querySelector("[data-formula-mirror]"); if (m) m.scrollLeft = e.target.scrollLeft; }} placeholder="Formula code" className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 px-3 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset" />
                                 </div>
-                                <input
-                                  type="text"
-                                  value={finFinalFormulaCode}
-                                  onChange={(e) => setFinFinalFormulaCode(e.target.value)}
-                                  onScroll={(e) => {
-                                    const mirror = e.target.parentElement?.querySelector("[data-formula-mirror]");
-                                    if (mirror) mirror.scrollLeft = e.target.scrollLeft;
-                                  }}
-                                  placeholder="Formula code (shared)"
-                                  className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 px-3 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset"
-                                />
                               </div>
                             </div>
                           </div>
-                          <div className="text-[11px] font-medium text-[#d9d9d9]">Final metrics formulas and weights</div>
+                          <div className="text-[11px] font-medium text-[#d9d9d9]">Normalization metrics formulas and weights</div>
                           <div className="overflow-x-auto border border-[#303030] rounded-lg">
                             <table className="w-full text-[11px] border-collapse">
                               <thead>
@@ -3230,44 +3846,11 @@ IF RSI > 70 OR Close < EMA THEN SELL
                                 </tr>
                               </thead>
                               <tbody className="text-[#d9d9d9]">
-                                {/* Stability row: 4 sub-weights in 2×2 grid */}
-                                <tr className="border-b border-[#303030]">
-                                  <td className="px-3 py-2 text-[#a6a6a6] align-top">Stability</td>
-                                  <td className="px-3 py-2 w-32 align-top">
-                                    <select value={finStabilityFormula} onChange={(e) => setFinStabilityFormula(e.target.value)} className={cx(ui.input, "h-8 text-[11px] w-full min-w-0")}>
-                                      {FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
-                                    </select>
-                                  </td>
-                                  <td className="px-3 py-2 align-top min-w-[200px]">
-                                    <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-8 overflow-hidden">
-                                      <div data-formula-mirror className="absolute inset-0 px-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
-                                        <span className="inline-block min-w-full">{finStabilityFormulaCode ? renderFormulaWithVariables(finStabilityFormulaCode) : <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>}</span>
-                                      </div>
-                                      <input type="text" value={finStabilityFormulaCode} onChange={(e) => setFinStabilityFormulaCode(e.target.value)} onScroll={(e) => { const m = e.target.parentElement?.querySelector("[data-formula-mirror]"); if (m) m.scrollLeft = e.target.scrollLeft; }} className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 px-3 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset" />
-                                    </div>
-                                  </td>
-                                  <td className="px-3 py-2 align-top">
-                                    <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-                                      {[
-                                        { label: "Stab. MFE", val: finStabMfeWeight, set: setFinStabMfeWeight, others: finStabMaeWeight + finStabAirWeight + finStabHitRateWeight + finMfeWeight + finMaeWeight + finAirWeight + finHitRateWeight },
-                                        { label: "Stab. MAE", val: finStabMaeWeight, set: setFinStabMaeWeight, others: finStabMfeWeight + finStabAirWeight + finStabHitRateWeight + finMfeWeight + finMaeWeight + finAirWeight + finHitRateWeight },
-                                        { label: "Stab. AIR", val: finStabAirWeight, set: setFinStabAirWeight, others: finStabMfeWeight + finStabMaeWeight + finStabHitRateWeight + finMfeWeight + finMaeWeight + finAirWeight + finHitRateWeight },
-                                        { label: "Stab. Hit", val: finStabHitRateWeight, set: setFinStabHitRateWeight, others: finStabMfeWeight + finStabMaeWeight + finStabAirWeight + finMfeWeight + finMaeWeight + finAirWeight + finHitRateWeight },
-                                      ].map((s) => (
-                                        <div key={s.label} className="flex items-center gap-1.5">
-                                          <span className="text-[10px] text-[#8c8c8c] shrink-0 w-14">{s.label}</span>
-                                          <input type="range" min={0} max={100} step={1} value={s.val} onChange={(e) => setWeightCapped(s.set, e.target.value, s.others)} className="flex-1 min-w-0 h-2 accent-emerald-500" />
-                                          <span className="text-[#8c8c8c] text-[10px] w-5">{s.val}%</span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </td>
-                                </tr>
                                 {[
-                                  { metric: "MFE", formula: finMfeFormula, setFormula: setFinMfeFormula, formulaCode: finMfeFormulaCode, setFormulaCode: setFinMfeFormulaCode, weight: finMfeWeight, setWeight: setFinMfeWeight, others: finStabWeightsSum + finMaeWeight + finAirWeight + finHitRateWeight },
-                                  { metric: "MAE", formula: finMaeFormula, setFormula: setFinMaeFormula, formulaCode: finMaeFormulaCode, setFormulaCode: setFinMaeFormulaCode, weight: finMaeWeight, setWeight: setFinMaeWeight, others: finStabWeightsSum + finMfeWeight + finAirWeight + finHitRateWeight },
-                                  { metric: "AIR", formula: finAirFormula, setFormula: setFinAirFormula, formulaCode: finAirFormulaCode, setFormulaCode: setFinAirFormulaCode, weight: finAirWeight, setWeight: setFinAirWeight, others: finStabWeightsSum + finMfeWeight + finMaeWeight + finHitRateWeight },
-                                  { metric: "Hit rate", formula: finHitRateFormula, setFormula: setFinHitRateFormula, formulaCode: finHitRateFormulaCode, setFormulaCode: setFinHitRateFormulaCode, weight: finHitRateWeight, setWeight: setFinHitRateWeight, others: finStabWeightsSum + finMfeWeight + finMaeWeight + finAirWeight },
+                                  { metric: "MFE", formula: finMfeFormula, setFormula: setFinMfeFormula, formulaCode: finMfeFormulaCode, setFormulaCode: setFinMfeFormulaCode, weight: finMfeWeight, setWeight: setFinMfeWeight, others: finMaeWeight + finAirWeight + finHitRateWeight },
+                                  { metric: "MAE", formula: finMaeFormula, setFormula: setFinMaeFormula, formulaCode: finMaeFormulaCode, setFormulaCode: setFinMaeFormulaCode, weight: finMaeWeight, setWeight: setFinMaeWeight, others: finMfeWeight + finAirWeight + finHitRateWeight },
+                                  { metric: "AIR", formula: finAirFormula, setFormula: setFinAirFormula, formulaCode: finAirFormulaCode, setFormulaCode: setFinAirFormulaCode, weight: finAirWeight, setWeight: setFinAirWeight, others: finMfeWeight + finMaeWeight + finHitRateWeight },
+                                  { metric: "Hit rate", formula: finHitRateFormula, setFormula: setFinHitRateFormula, formulaCode: finHitRateFormulaCode, setFormulaCode: setFinHitRateFormulaCode, weight: finHitRateWeight, setWeight: setFinHitRateWeight, others: finMfeWeight + finMaeWeight + finAirWeight },
                                 ].map((row) => (
                                   <tr key={row.metric} className="border-b border-[#303030]">
                                     <td className="px-3 py-2 text-[#a6a6a6] align-top">{row.metric}</td>
@@ -3296,14 +3879,11 @@ IF RSI > 70 OR Close < EMA THEN SELL
                               <tfoot>
                                 <tr className="bg-[#1a1a1a]">
                                   <td colSpan={3} className="px-3 py-2 text-right text-[11px] font-medium text-[#8c8c8c]">Total</td>
-                                  <td className={cx("px-3 py-2 text-[11px] font-medium", finWeightsSum === 100 ? "text-emerald-500" : finWeightsSum > 100 ? "text-amber-500" : "text-[#8c8c8c]")}>{finWeightsSum}%</td>
+                                  <td className={cx("px-3 py-2 text-[11px] font-medium", (finMfeWeight + finMaeWeight + finAirWeight + finHitRateWeight) === 100 ? "text-emerald-500" : (finMfeWeight + finMaeWeight + finAirWeight + finHitRateWeight) > 100 ? "text-amber-500" : "text-[#8c8c8c]")}>{finMfeWeight + finMaeWeight + finAirWeight + finHitRateWeight}%</td>
                                 </tr>
                               </tfoot>
                             </table>
                           </div>
-                        </div>
-                      )}
-                    </div>
                   </div>
                 </div>
 
@@ -3360,7 +3940,7 @@ IF RSI > 70 OR Close < EMA THEN SELL
               )}
             </div>
 
-            {/* 4. OPTIMIZATION RESULTS */}
+            {/* 4. HYPEROPT RESULTS (two-level table + Run normalization modal) */}
             <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
               <button
                 type="button"
@@ -3368,114 +3948,160 @@ IF RSI > 70 OR Close < EMA THEN SELL
                 className={cx("w-full px-3 py-2 flex items-center justify-between gap-2 text-left", ui.panelMuted, "border-0 border-b", ui.divider, "hover:bg-[#1a1a1a] transition-colors")}
               >
                 <div>
-                  <div className="text-[12px] font-medium text-[#d9d9d9]">4. Optimization Results</div>
-                  <div className={cx("text-[11px]", ui.textMuted)}>History of hyperoptimization runs</div>
+                  <div className="text-[12px] font-medium text-[#d9d9d9]">4. Hyperopt Results</div>
+                  <div className={cx("text-[11px]", ui.textMuted)}>Two-level table: runs and scores</div>
                 </div>
                 <span className="flex items-center gap-2">
                   <span className="rounded-md border border-[#303030] bg-[#0f0f0f] px-2 py-0.5 text-[10px] text-[#8c8c8c]">
-                    {runs.length} runs
+                    {hyperoptResultsRows.length} runs
                   </span>
                   <span className="text-[#8c8c8c] text-[10px]">{collapsedSections.has(4) ? "▶" : "▼"}</span>
                 </span>
               </button>
               {!collapsedSections.has(4) && (
-              <div className="overflow-auto">
-                <table className="w-full border-collapse text-[11px]">
-                  <thead className="bg-[#141414] text-left text-[11px] text-[#8c8c8c]">
-                    <tr>
-                      <th className="px-3 py-2 border-b border-[#303030] font-medium">Date</th>
-                      <th className="px-2 py-2 border-b border-[#303030] font-medium">Pairs</th>
-                      <th className="px-2 py-2 border-b border-[#303030] font-medium">Range</th>
-                      <th className="px-2 py-2 border-b border-[#303030] font-medium">Period</th>
-                      <th className="px-2 py-2 border-b border-[#303030] font-medium">Indicators</th>
-                      <th className="px-2 py-2 border-b border-[#303030] font-medium">Actions</th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {runs.map((r) => (
-                      <React.Fragment key={r.id}>
-                        <tr className="bg-[#141414] hover:bg-[#1f1f1f] transition-colors">
-                          <td className="px-3 py-2 border-b border-[#303030] text-[#d9d9d9]">{r.date}</td>
-                          <td className="px-2 py-2 border-b border-[#303030] text-[#d9d9d9]">{r.pairs.join(", ")}</td>
-                          <td className="px-2 py-2 border-b border-[#303030] text-[#d9d9d9]">{r.timeRange}</td>
-                          <td className="px-2 py-2 border-b border-[#303030] text-[#a6a6a6]">{r.timeFrameStart} → {r.timeFrameEnd}</td>
-                          <td className="px-2 py-2 border-b border-[#303030] text-[#a6a6a6]">
-                            {r.indicators.join(", ")}
-                          </td>
-                          <td className="px-2 py-2 border-b border-[#303030]">
-                            <div className="flex items-center gap-2">
-                              <button 
-                                onClick={() => setShowHeatMapConfig(showHeatMapConfig === r.id ? null : r.id)} 
-                                className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
+              <div className="overflow-auto p-3">
+                <div className="overflow-x-auto border border-[#303030] rounded-lg">
+                  <table className="w-full border-collapse text-[11px]">
+                    <thead className="bg-[#1a1a1a] text-[#8c8c8c]">
+                      <tr>
+                        <th className="px-2 py-2 text-left font-medium border-b border-[#303030] w-8"></th>
+                        <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Date</th>
+                        <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Pairs</th>
+                        <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">TimeFrame</th>
+                        <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">KnowRange</th>
+                        <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">UnknowRange</th>
+                        <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-[#d9d9d9]">
+                      {hyperoptResultsRows.map((row) => (
+                        <React.Fragment key={row.id}>
+                          <tr className="border-b border-[#303030] bg-[#141414] hover:bg-[#1f1f1f]">
+                            <td className="px-2 py-2 align-middle">
+                              <button
+                                type="button"
+                                onClick={() => toggleHyperoptRow(row.id)}
+                                className="text-[#8c8c8c] hover:text-[#d9d9d9] p-0.5 rounded"
+                                aria-label={hyperoptResultsExpanded.has(row.id) ? "Collapse" : "Expand"}
                               >
-                                {showHeatMapConfig === r.id ? "Hide" : "Configure HeatMap"}
+                                {hyperoptResultsExpanded.has(row.id) ? "▼" : "▶"}
                               </button>
-                              <button 
-                                onClick={() => setShowReportModal(r.id)} 
-                                className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
+                            </td>
+                            <td className="px-3 py-2">{row.date}</td>
+                            <td className="px-3 py-2">{row.pairs}</td>
+                            <td className="px-3 py-2">{row.timeFrame}</td>
+                            <td className="px-3 py-2 text-[#a6a6a6]">{row.knowRange}</td>
+                            <td className="px-3 py-2 text-[#a6a6a6]">{row.unknowRange}</td>
+                            <td className="px-3 py-2">
+                              <button
+                                type="button"
+                                onClick={() => setShowNormalizationModal(true)}
+                                className={cx(ui.btnPrimary, "h-7 px-2 text-[10px] whitespace-nowrap")}
                               >
-                                Generate Report
+                                Run normalization
                               </button>
-                            </div>
-                          </td>
-                        </tr>
-                        
-                        {/* HeatMap Configuration for this run */}
-                        {showHeatMapConfig === r.id && (
-                          <tr>
-                            <td colSpan={6} className="p-3 bg-[#0f0f0f] border-b border-[#303030]">
-                              <HeatMapConfigurator 
-                                indicators={indicators} 
-                                onGenerate={(config) => handleGenerateHeatMap(config, r.id)} 
-                              />
                             </td>
                           </tr>
-                        )}
-                        
-                        {/* HeatMap Results for this run */}
-                        {generatedHeatMap && generatedHeatMap.runId === r.id && (
-                          <tr>
-                            <td colSpan={6} className="p-3 bg-[#0f0f0f] border-b border-[#303030]">
-                              <div className={cx(ui.radius, ui.panelMuted, "p-4")}>
-                                <div className="flex items-center justify-between gap-3 mb-3">
-                                  <div>
-                                    <div className="text-[12px] font-medium text-[#d9d9d9]">
-                                      HeatMap: {generatedHeatMap.indicators ? generatedHeatMap.indicators.map(i => i.name).join(", ") : generatedHeatMap.indicator?.name}
-                                    </div>
-                                    <div className={cx("text-[11px]", ui.textMuted)}>
-                                      X Axis: {Array.isArray(generatedHeatMap.xAxis) ? generatedHeatMap.xAxis.join(", ") : generatedHeatMap.xAxis} • Y Axis: {Array.isArray(generatedHeatMap.yAxis) ? generatedHeatMap.yAxis.join(", ") : generatedHeatMap.yAxis}
-                                      {Object.keys(generatedHeatMap.fixedParams || {}).length > 0 && (
-                                        <span> • Fixed: {Object.entries(generatedHeatMap.fixedParams).map(([k, v]) => `${k}=${v}`).join(', ')}</span>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <button onClick={() => setGeneratedHeatMap(null)} className={cx(ui.btn, "h-7 px-2 text-[10px]")}>
-                                    Clear
-                                  </button>
-                                </div>
-
-                                <div className="mt-3">
-                                  <img 
-                                    src="/heatmaps/sample-heatmap.png" 
-                                    alt="HeatMap Visualization" 
-                                    className="w-full h-auto rounded-lg border border-[#303030]"
-                                    style={{ maxHeight: '600px', objectFit: 'contain' }}
-                                    onLoad={() => console.log('✅ HeatMap image loaded successfully')}
-                                    onError={(e) => {
-                                      console.error('❌ Failed to load HeatMap image:', e);
-                                      console.log('🔍 Trying path:', e.target.src);
-                                    }}
-                                  />
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    ))}
-                  </tbody>
-                </table>
+                          {/* Level 2: only when expanded */}
+                          {hyperoptResultsExpanded.has(row.id) && row.children && row.children.length > 0 && (
+                            <>
+                              <tr>
+                                <td colSpan={7} className="p-0 bg-[#0f0f0f] border-b border-[#303030]">
+                                  <table className="w-full border-collapse text-[11px]">
+                                    <thead>
+                                      <tr className="bg-[#141414] text-[#8c8c8c]">
+                                        <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030] w-24">Date</th>
+                                        <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Min Score</th>
+                                        <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">AVG Score</th>
+                                        <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Max Score</th>
+                                        <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Details</th>
+                                        <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Actions</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {row.children.map((sub) => {
+                                        const heatMapId = `hyperopt-${row.id}-${sub.id}`;
+                                        return (
+                                          <tr key={sub.id} className="border-b border-[#303030]/50 hover:bg-[#1a1a1a]">
+                                            <td className="px-3 py-2 pl-6 text-[#a6a6a6]">{sub.date}</td>
+                                            <td className="px-3 py-2">{sub.minScore}</td>
+                                            <td className="px-3 py-2">{sub.avgScore}</td>
+                                            <td className="px-3 py-2">{sub.maxScore}</td>
+                                            <td className="px-3 py-2">
+                                              <HyperoptDetailsTooltip />
+                                            </td>
+                                            <td className="px-3 py-2">
+                                              <div className="flex items-center gap-2">
+                                                <button
+                                                  type="button"
+                                                  onClick={() => setShowHeatMapConfig(showHeatMapConfig === heatMapId ? null : heatMapId)}
+                                                  className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
+                                                >
+                                                  {showHeatMapConfig === heatMapId ? "Hide" : "Configure HeatMap"}
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => setShowReportModal(true)}
+                                                  className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
+                                                >
+                                                  Generate Report
+                                                </button>
+                                              </div>
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </td>
+                              </tr>
+                              {/* HeatMap configurator row for this hyperopt run */}
+                              {row.children.map((sub) => {
+                                const heatMapId = `hyperopt-${row.id}-${sub.id}`;
+                                return (
+                                  <React.Fragment key={`hm-cfg-${sub.id}`}>
+                                    {showHeatMapConfig === heatMapId && (
+                                      <tr>
+                                        <td colSpan={7} className="p-3 bg-[#0f0f0f] border-b border-[#303030]">
+                                          <HeatMapConfigurator
+                                            indicators={indicators}
+                                            onGenerate={(config) => handleGenerateHeatMap(config, heatMapId)}
+                                          />
+                                        </td>
+                                      </tr>
+                                    )}
+                                    {generatedHeatMap && generatedHeatMap.runId === heatMapId && (
+                                      <tr>
+                                        <td colSpan={7} className="p-3 bg-[#0f0f0f] border-b border-[#303030]">
+                                          <div className="flex items-center justify-end gap-2 mb-2">
+                                            <button onClick={() => setGeneratedHeatMap(null)} className={cx(ui.btn, "h-7 px-2 text-[10px]")}>
+                                              Clear HeatMap
+                                            </button>
+                                          </div>
+                                          <HeatMapView
+                                            heatMapData={currentHeatMapData}
+                                            config={generatedHeatMap.config}
+                                            onCellClick={(cell) => handleHeatMapCellClick(cell, heatMapId)}
+                                            onZoomOut={() => handleHeatMapZoomOut(heatMapId)}
+                                            onResetZoom={() => handleHeatMapResetZoom(heatMapId)}
+                                            canZoomOut={generatedHeatMap.zoomStack.length > 0}
+                                            canReset={generatedHeatMap.zoomStack.length > 0}
+                                            zoomLevel={generatedHeatMap.zoomStack.length}
+                                            zoomLevelLabel={generatedHeatMap.zoomStack.length > 0 ? generatedHeatMap.zoomStack[generatedHeatMap.zoomStack.length - 1].label : "Full heatmap"}
+                                          />
+                                        </td>
+                                      </tr>
+                                    )}
+                                  </React.Fragment>
+                                );
+                              })}
+                            </>
+                          )}
+                        </React.Fragment>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
               )}
             </div>
@@ -3503,6 +4129,149 @@ IF RSI > 70 OR Close < EMA THEN SELL
             alert(`Report generated for ${config.indicator.name}`);
           }} 
         />
+      )}
+      {/* Run normalization modal — same block as Normalization formulas */}
+      {showNormalizationModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={() => setShowNormalizationModal(false)}>
+          <div className={cx(ui.radius, "bg-[#141414] border border-[#303030] max-w-[720px] w-full max-h-[90vh] overflow-hidden flex flex-col shadow-xl")} onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#303030]">
+              <span className="text-[14px] font-medium text-[#d9d9d9]">Run normalization</span>
+              <button type="button" onClick={() => setShowNormalizationModal(false)} className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1">✕</button>
+            </div>
+            <div className="overflow-auto p-4">
+              <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
+                <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">Normalization formulas</div>
+                <div className="p-3 pt-0 space-y-3 border-t border-[#303030]">
+                  <div className="space-y-1.5">
+                    <div className="text-[11px] font-medium text-[#d9d9d9]">Score formula</div>
+                    <div className="flex flex-wrap items-center gap-3 gap-y-2">
+                      <select value={finalScoreFormula} onChange={(e) => setFinalScoreFormula(e.target.value)} className={cx(ui.input, "h-9 text-[12px] w-full max-w-[200px]")}>
+                        {FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
+                      </select>
+                      <div className="min-w-[200px] flex-1 max-w-[400px]">
+                        <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-9 overflow-hidden">
+                          <div data-formula-mirror className="absolute inset-0 px-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
+                            <span className="inline-block min-w-full">{finFinalFormulaCode ? renderFormulaWithVariables(finFinalFormulaCode) : <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>}</span>
+                          </div>
+                          <input type="text" value={finFinalFormulaCode} onChange={(e) => setFinFinalFormulaCode(e.target.value)} onScroll={(e) => { const m = e.target.parentElement?.querySelector("[data-formula-mirror]"); if (m) m.scrollLeft = e.target.scrollLeft; }} placeholder="Formula code" className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 px-3 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="text-[11px] font-medium text-[#d9d9d9]">Stability Formula</div>
+                    <div className="flex flex-wrap items-center gap-3 gap-y-2">
+                      <select value={finStabilityFormula} onChange={(e) => setFinStabilityFormula(e.target.value)} className={cx(ui.input, "h-9 text-[12px] w-full max-w-[200px]")}>
+                        {FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
+                      </select>
+                      <div className="min-w-[200px] flex-1 max-w-[400px]">
+                        <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-9 overflow-hidden">
+                          <div data-formula-mirror className="absolute inset-0 px-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
+                            <span className="inline-block min-w-full">{finStabilityFormulaCode ? renderFormulaWithVariables(finStabilityFormulaCode) : <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>}</span>
+                          </div>
+                          <input type="text" value={finStabilityFormulaCode} onChange={(e) => setFinStabilityFormulaCode(e.target.value)} onScroll={(e) => { const m = e.target.parentElement?.querySelector("[data-formula-mirror]"); if (m) m.scrollLeft = e.target.scrollLeft; }} className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 px-3 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="text-[11px] font-medium text-[#d9d9d9]">Stability weights (sum ≤ 100%)</div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
+                      {[
+                        { label: "StabWeightMFE", val: finStabMfeWeight, set: setFinStabMfeWeight, others: finStabMaeWeight + finStabAirWeight + finStabHitRateWeight },
+                        { label: "StabWeightMAE", val: finStabMaeWeight, set: setFinStabMaeWeight, others: finStabMfeWeight + finStabAirWeight + finStabHitRateWeight },
+                        { label: "StabWeightAIR", val: finStabAirWeight, set: setFinStabAirWeight, others: finStabMfeWeight + finStabMaeWeight + finStabHitRateWeight },
+                        { label: "StabWeightHitRate", val: finStabHitRateWeight, set: setFinStabHitRateWeight, others: finStabMfeWeight + finStabMaeWeight + finStabAirWeight },
+                      ].map((s) => (
+                        <div key={s.label} className="flex items-center gap-2">
+                          <span className="text-[10px] text-[#8c8c8c] shrink-0">{s.label}</span>
+                          <input type="range" min={0} max={100} step={1} value={s.val} onChange={(e) => setWeightCapped(s.set, e.target.value, s.others)} className="flex-1 min-w-0 h-2 accent-emerald-500" />
+                          <span className="text-[#8c8c8c] text-[10px] w-8">{s.val}%</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="text-[10px] text-[#8c8c8c]">Total: {finStabWeightsSum}%</div>
+                  </div>
+                  <div className="text-[11px] font-medium text-[#d9d9d9]">Normalization metrics formulas and weights</div>
+                  <div className="overflow-x-auto border border-[#303030] rounded-lg">
+                    <table className="w-full text-[11px] border-collapse">
+                      <thead>
+                        <tr className="bg-[#1a1a1a] text-[#8c8c8c]">
+                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030] w-24">Metrics</th>
+                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030] w-32">Formula</th>
+                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030] min-w-[200px]">Formula Code</th>
+                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Weight</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-[#d9d9d9]">
+                        <tr className="border-b border-[#303030]">
+                          <td className="px-3 py-2 text-[#a6a6a6] align-top">Stability</td>
+                          <td className="px-3 py-2 w-32 align-top">
+                            <select value={finStabilityFormula} onChange={(e) => setFinStabilityFormula(e.target.value)} className={cx(ui.input, "h-8 text-[11px] w-full min-w-0")}>
+                              {FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
+                            </select>
+                          </td>
+                          <td className="px-3 py-2 align-top min-w-[200px]">
+                            <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-8 overflow-hidden">
+                              <div data-formula-mirror className="absolute inset-0 px-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
+                                <span className="inline-block min-w-full">{finStabilityFormulaCode ? renderFormulaWithVariables(finStabilityFormulaCode) : <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>}</span>
+                              </div>
+                              <input type="text" value={finStabilityFormulaCode} onChange={(e) => setFinStabilityFormulaCode(e.target.value)} onScroll={(e) => { const m = e.target.parentElement?.querySelector("[data-formula-mirror]"); if (m) m.scrollLeft = e.target.scrollLeft; }} className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 px-3 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset" />
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 align-top">
+                            <div className="flex items-center gap-2">
+                              <input type="range" min={0} max={100} step={1} value={finStabilityWeight} onChange={(e) => setWeightCapped(setFinStabilityWeight, e.target.value, finMfeWeight + finMaeWeight + finAirWeight + finHitRateWeight)} className="flex-1 max-w-[120px] h-2 accent-emerald-500" />
+                              <span className="text-[#8c8c8c] w-7">{finStabilityWeight}%</span>
+                            </div>
+                          </td>
+                        </tr>
+                        {[
+                          { metric: "MFE", formula: finMfeFormula, setFormula: setFinMfeFormula, formulaCode: finMfeFormulaCode, setFormulaCode: setFinMfeFormulaCode, weight: finMfeWeight, setWeight: setFinMfeWeight, others: finStabilityWeight + finMaeWeight + finAirWeight + finHitRateWeight },
+                          { metric: "MAE", formula: finMaeFormula, setFormula: setFinMaeFormula, formulaCode: finMaeFormulaCode, setFormulaCode: setFinMaeFormulaCode, weight: finMaeWeight, setWeight: setFinMaeWeight, others: finStabilityWeight + finMfeWeight + finAirWeight + finHitRateWeight },
+                          { metric: "AIR", formula: finAirFormula, setFormula: setFinAirFormula, formulaCode: finAirFormulaCode, setFormulaCode: setFinAirFormulaCode, weight: finAirWeight, setWeight: setFinAirWeight, others: finStabilityWeight + finMfeWeight + finMaeWeight + finHitRateWeight },
+                          { metric: "Hit rate", formula: finHitRateFormula, setFormula: setFinHitRateFormula, formulaCode: finHitRateFormulaCode, setFormulaCode: setFinHitRateFormulaCode, weight: finHitRateWeight, setWeight: setFinHitRateWeight, others: finStabilityWeight + finMfeWeight + finMaeWeight + finAirWeight },
+                        ].map((row) => (
+                          <tr key={row.metric} className="border-b border-[#303030]">
+                            <td className="px-3 py-2 text-[#a6a6a6] align-top">{row.metric}</td>
+                            <td className="px-3 py-2 w-32 align-top">
+                              <select value={row.formula} onChange={(e) => row.setFormula(e.target.value)} className={cx(ui.input, "h-8 text-[11px] w-full min-w-0")}>
+                                {FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
+                              </select>
+                            </td>
+                            <td className="px-3 py-2 align-top min-w-[200px]">
+                              <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-8 overflow-hidden">
+                                <div data-formula-mirror className="absolute inset-0 px-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
+                                  <span className="inline-block min-w-full">{row.formulaCode ? renderFormulaWithVariables(row.formulaCode) : <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>}</span>
+                                </div>
+                                <input type="text" value={row.formulaCode} onChange={(e) => row.setFormulaCode(e.target.value)} onScroll={(e) => { const m = e.target.parentElement?.querySelector("[data-formula-mirror]"); if (m) m.scrollLeft = e.target.scrollLeft; }} className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 px-3 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset" />
+                              </div>
+                            </td>
+                            <td className="px-3 py-2 align-top">
+                              <div className="flex items-center gap-2">
+                                <input type="range" min={0} max={100} step={1} value={row.weight} onChange={(e) => setWeightCapped(row.setWeight, e.target.value, row.others)} className="flex-1 max-w-[120px] h-2 accent-emerald-500" />
+                                <span className="text-[#8c8c8c] w-7">{row.weight}%</span>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-[#1a1a1a]">
+                          <td colSpan={3} className="px-3 py-2 text-right text-[11px] font-medium text-[#8c8c8c]">Total</td>
+                          <td className={cx("px-3 py-2 text-[11px] font-medium", finWeightsSum === 100 ? "text-emerald-500" : finWeightsSum > 100 ? "text-amber-500" : "text-[#8c8c8c]")}>{finWeightsSum}%</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="px-4 py-3 border-t border-[#303030] flex justify-end">
+              <button type="button" onClick={() => setShowNormalizationModal(false)} className={cx(ui.btnPrimary, "h-8 px-3 text-[11px]")}>Apply</button>
+            </div>
+          </div>
+        </div>
       )}
       {editingIndicator && (
         <EditIndicatorModal 
@@ -3569,10 +4338,7 @@ const LoginScreen = memo(({ onLogin, onForgotPassword }) => (
   <div className={cx("min-h-screen", ui.page, "flex items-center justify-center px-4")}>
     <div className="w-full max-w-md">
       <div className="mb-6 text-center">
-        <div className={cx("mx-auto mb-3 h-10 w-10", ui.radius, ui.panel, "flex items-center justify-center")}>
-          <Logo size="h-7 w-7" />
-        </div>
-        <h1 className="text-xl font-semibold text-[#f5f5f5]">QuantSandbox</h1>
+        <Logo className="mx-auto h-14 w-auto max-w-[280px]" />
       </div>
 
       <div className={cx(ui.radius, ui.panel, "px-6 py-6", ui.shadow)}>
@@ -3635,6 +4401,8 @@ const Header = memo(function Header({
   sections,
   activeSection,
   onSectionChange,
+  settingsSubSection,
+  onSettingsSubChange,
   strategiesCount,
   disabledSections,
   queueOpen,
@@ -3645,6 +4413,8 @@ const Header = memo(function Header({
   onQueueRemove,
 }) {
   const queueRef = useOutsideClose(queueOpen, onQueueClose);
+  const [settingsDropdownOpen, setSettingsDropdownOpen] = useState(false);
+  const settingsDropdownRef = useOutsideClose(settingsDropdownOpen, () => setSettingsDropdownOpen(false));
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [panelEnter, setPanelEnter] = useState(false);
   useEffect(() => {
@@ -3692,13 +4462,8 @@ const Header = memo(function Header({
   <header className={cx("h-14", ui.panelMuted, "border-0 border-b", ui.divider)}>
     <div className="h-full px-5 flex items-center justify-between gap-4">
       <div className="flex items-center gap-4 min-w-0">
-        <div className="flex items-center gap-2">
-          <div className={cx("h-9 w-9", ui.radius, ui.panel, "flex items-center justify-center")}>
-            <Logo />
-          </div>
-          <div className="leading-tight">
-            <div className="text-sm font-semibold text-[#f5f5f5]">QuantSandbox</div>
-          </div>
+        <div className="flex items-center gap-2 min-w-0">
+          <Logo className="h-9 w-auto max-w-[180px]" />
         </div>
 
         {/* Desktop nav */}
@@ -3706,6 +4471,52 @@ const Header = memo(function Header({
           {sections.map((item) => {
             const isDisabled = disabledSections.has(item);
             const active = !isDisabled && activeSection === item;
+            const isSettings = item === "Settings";
+
+            if (isSettings) {
+              return (
+                <div key={item} ref={settingsDropdownRef} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => !isDisabled && (onSectionChange(item), setSettingsDropdownOpen((v) => !v))}
+                    disabled={isDisabled}
+                    aria-disabled={isDisabled}
+                    aria-expanded={settingsDropdownOpen}
+                    className={cx(
+                      "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] border transition",
+                      active
+                        ? "bg-emerald-500/10 text-emerald-200 border-emerald-500/40"
+                        : isDisabled
+                        ? "bg-transparent text-[#595959] border-transparent cursor-not-allowed opacity-70"
+                        : "bg-transparent text-[#d9d9d9] border-transparent hover:bg-[#1f1f1f]"
+                    )}
+                    title="Settings"
+                  >
+                    <MenuIcon name={item} active={active} />
+                    <span className="whitespace-nowrap">{item}</span>
+                    <span className="text-[10px]">{settingsDropdownOpen ? "▲" : "▼"}</span>
+                  </button>
+                  {settingsDropdownOpen && (
+                    <div className="absolute left-0 top-full mt-1 min-w-[140px] rounded-lg border border-[#303030] bg-[#1a1a1a] shadow-lg py-1 z-50">
+                      <button
+                        type="button"
+                        onClick={() => { onSectionChange("Settings"); onSettingsSubChange?.("indicators"); setSettingsDropdownOpen(false); }}
+                        className={cx("w-full text-left px-3 py-2 text-[12px] hover:bg-[#252525]", settingsSubSection === "indicators" && "text-emerald-300 bg-emerald-500/10")}
+                      >
+                        Indicators
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { onSectionChange("Settings"); onSettingsSubChange?.("formulas"); setSettingsDropdownOpen(false); }}
+                        className={cx("w-full text-left px-3 py-2 text-[12px] hover:bg-[#252525]", settingsSubSection === "formulas" && "text-emerald-300 bg-emerald-500/10")}
+                      >
+                        Formulas
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            }
 
             return (
               <button
@@ -4145,6 +4956,38 @@ const RowActionMenu = memo(({ onDuplicate, onDelete, align = "right" }) => {
   );
 });
 
+const FormulaActionsMenu = memo(({ formula, onEdit, onDelete, align = "right" }) => {
+  const [open, setOpen] = useState(false);
+  const rootRef = useOutsideClose(open, () => setOpen(false));
+  return (
+    <div ref={rootRef} className="relative inline-flex">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#303030] bg-[#0f0f0f] text-[#a6a6a6] hover:bg-[#1f1f1f] hover:text-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title="Actions"
+      >
+        <MoreIcon className="h-4 w-4" />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className={cx(
+            "absolute mt-2 w-36 overflow-hidden rounded-md border border-[#303030] bg-[#141414] shadow-[0_10px_30px_rgba(0,0,0,0.55)] z-10",
+            align === "right" ? "right-0" : "left-0"
+          )}
+        >
+          <button role="menuitem" type="button" onClick={() => { onEdit(formula); setOpen(false); }} className="w-full px-3 py-2 text-left text-[12px] text-[#d9d9d9] hover:bg-[#1f1f1f]">Edit</button>
+          <div className="h-px bg-[#303030]" />
+          <button role="menuitem" type="button" onClick={() => { onDelete(formula); setOpen(false); }} className="w-full px-3 py-2 text-left text-[12px] text-red-200 hover:bg-red-500/10">Delete</button>
+        </div>
+      )}
+    </div>
+  );
+});
+
 // ========== Users Modals (mock) ==========
 
 const CreateUserModal = memo(function CreateUserModal({ draft, onDraftChange, onClose, onCreate }) {
@@ -4564,6 +5407,7 @@ export default function App() {
 
   // Navigation
   const [activeSection, setActiveSection] = useState("Strategies");
+  const [settingsSubSection, setSettingsSubSection] = useState("indicators"); // "indicators" | "formulas"
 
   // Strategies
   const [strategies, setStrategies] = useState(INITIAL_STRATEGIES);
@@ -4648,6 +5492,45 @@ export default function App() {
     { id: 3, name: "BB - Bollinger Bands", description: "Volatility bands placed above and below a moving average", type: "Volatility", status: "Archived", createdAt: "2024-11-05" },
   ]);
   const [showAddIndicatorPage, setShowAddIndicatorPage] = useState(false);
+
+  // Formulas (Settings → Formulas)
+  const FORMULA_HYPEROPT_TYPES = ["BIAS", "Brute Force"];
+  const FORMULA_TYPES = ["Score", "Metric", "Stability"];
+  const FORMULA_SUBTYPES = ["Intermediate score", "Final score", "Stability", "MFE", "MAE", "AIR", "HitRate"];
+  const [formulas, setFormulas] = useState(() => [
+    { id: 1, hyperoptType: "Brute Force", type: "Score", subType: "Intermediate score", formula: "  weightMFE * normMFE\n- weightMAE * normMAE\n+ weightAIR * normAIR\n+ weightHitRate * normHitRate", owner: "System" },
+    { id: 2, hyperoptType: "Brute Force", type: "Metric", subType: "MFE", formula: "1/(1+EXP(-1*(MFE - MEDIAN(MFE)) / (QUARTILE.INC(MFE,3) - QUARTILE.INC(MFE,1))))", owner: "System" },
+    { id: 3, hyperoptType: "Brute Force", type: "Metric", subType: "MAE", formula: "1/(1+EXP(1*(MAE - MEDIAN(MAE)) / (QUARTILE.INC(MAE,3) - QUARTILE.INC(MAE,1))))", owner: "System" },
+    { id: 4, hyperoptType: "Brute Force", type: "Metric", subType: "AIR", formula: "1/(1+EXP(-1*(AIR - MEDIAN(AIR)) / (QUARTILE.INC(AIR,3) - QUARTILE.INC(AIR,1))))", owner: "System" },
+    { id: 5, hyperoptType: "Brute Force", type: "Metric", subType: "HitRate", formula: "1/(1+EXP(-1*(HitRate - MEDIAN(HitRate)) / (QUARTILE.INC(HitRate,3) - QUARTILE.INC(HitRate,1))))", owner: "System" },
+    { id: 6, hyperoptType: "Brute Force", type: "Score", subType: "Final score", formula: "  weightMFE * normMFE\n- weightMAE * normMAE\n+ weightAIR * normAIR\n+ weightHitRate * normHitRate", owner: "System" },
+    { id: 7, hyperoptType: "Brute Force", type: "Stability", subType: "Stability", formula: "Your Stability formula can be placed here 😁", owner: "System" },
+    { id: 8, hyperoptType: "Brute Force", type: "Metric", subType: "Stability", formula: "1/(1+EXP(-1*(Stability - MEDIAN(Stability)) / (QUARTILE.INC(Stability,3) - QUARTILE.INC(Stability,1))))", owner: "System" },
+  ]);
+  const [showFormulaModal, setShowFormulaModal] = useState(false);
+  const [formulaEditingId, setFormulaEditingId] = useState(null);
+  const [formulaDraft, setFormulaDraft] = useState({ hyperoptType: "BIAS", type: "Score", subType: "Intermediate score", formula: "" });
+  const handleOpenAddFormula = useCallback(() => {
+    setFormulaEditingId(null);
+    setFormulaDraft({ hyperoptType: "BIAS", type: "Score", subType: "Intermediate score", formula: "" });
+    setShowFormulaModal(true);
+  }, []);
+  const handleEditFormula = useCallback((formula) => {
+    setFormulaEditingId(formula.id);
+    setFormulaDraft({ hyperoptType: formula.hyperoptType, type: formula.type, subType: formula.subType, formula: formula.formula });
+    setShowFormulaModal(true);
+  }, []);
+  const handleSaveFormula = useCallback(() => {
+    if (formulaEditingId != null) {
+      setFormulas((prev) => prev.map((f) => (f.id === formulaEditingId ? { ...f, ...formulaDraft } : f)));
+    } else {
+      setFormulas((prev) => [...prev, { id: Date.now(), owner: "bogdan", ...formulaDraft }]);
+    }
+    setShowFormulaModal(false);
+  }, [formulaDraft, formulaEditingId]);
+  const handleDeleteFormula = useCallback((formula) => {
+    setFormulas((prev) => prev.filter((f) => f.id !== formula.id));
+  }, []);
 
   const owners = useMemo(() => Array.from(new Set(strategies.map((s) => s.owner))), [strategies]);
   const totalVersions = useMemo(() => strategies.reduce((acc, s) => acc + s.versions.length, 0), [strategies]);
@@ -4842,6 +5725,8 @@ export default function App() {
         sections={SECTIONS}
         activeSection={activeSection}
         onSectionChange={handleSectionChange}
+        settingsSubSection={settingsSubSection}
+        onSettingsSubChange={setSettingsSubSection}
         strategiesCount={strategies.length}
         disabledSections={DISABLED_SECTIONS}
         queueOpen={showQueuePanel}
@@ -4855,12 +5740,14 @@ export default function App() {
       <main className="flex-1 overflow-auto p-6">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
-            <h1 className="text-[16px] font-semibold text-[#f5f5f5]">{activeSection}</h1>
+            <h1 className="text-[16px] font-semibold text-[#f5f5f5]">{activeSection === "Settings" ? `${activeSection} · ${settingsSubSection === "indicators" ? "Indicators" : "Formulas"}` : activeSection}</h1>
             <p className={cx("mt-1 text-[12px]", ui.textMuted)}>
               {activeSection === "Users"
                 ? "Manage application users (mock data only)."
-                : activeSection === "Indicators"
+                : activeSection === "Settings" && settingsSubSection === "indicators"
                 ? "Manage indicator library (mock)."
+                : activeSection === "Settings" && settingsSubSection === "formulas"
+                ? "Manage formulas (Hyperopt Type, Type, SubType)."
                 : "Manage and configure your strategies."}
             </p>
           </div>
@@ -4876,9 +5763,14 @@ export default function App() {
               + Create user
             </button>
           )}
-          {activeSection === "Indicators" && (
+          {activeSection === "Settings" && settingsSubSection === "indicators" && (
             <button onClick={() => setShowAddIndicatorPage(true)} className={ui.btnPrimary}>
               Add indicator
+            </button>
+          )}
+          {activeSection === "Settings" && settingsSubSection === "formulas" && (
+            <button onClick={handleOpenAddFormula} className={ui.btnPrimary}>
+              Add Formula
             </button>
           )}
         </div>
@@ -5129,7 +6021,7 @@ export default function App() {
         )}
 
         {/* Indicators page (mock) */}
-        {activeSection === "Indicators" && (
+        {(activeSection === "Settings" && settingsSubSection === "indicators") && (
           <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
             <div className={cx("flex items-center justify-between px-4 py-3", ui.panelMuted, "border-0 border-b", ui.divider)}>
               <div>
@@ -5176,6 +6068,52 @@ export default function App() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {/* Formulas page (Settings → Formulas) */}
+        {(activeSection === "Settings" && settingsSubSection === "formulas") && (
+          <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
+            <div className={cx("flex items-center justify-between px-4 py-3", ui.panelMuted, "border-0 border-b", ui.divider)}>
+              <div>
+                <div className="text-[12px] font-medium text-[#d9d9d9]">Formulas</div>
+                <div className={cx("text-[11px]", ui.textMuted)}>Hyperopt Type, Type, SubType, Formula</div>
+              </div>
+              <span className="rounded-md border border-[#303030] bg-[#0f0f0f] px-2 py-0.5 text-[10px] text-[#8c8c8c]">
+                {formulas.length} formulas
+              </span>
+            </div>
+            <div className="overflow-auto">
+              <table className="w-full border-collapse text-[12px]">
+                <thead className="bg-[#1f1f1f] text-left text-[12px] text-[#8c8c8c]">
+                  <tr>
+                    <th className="px-3 py-2 border-b border-[#303030] font-medium">Hyperopt Type</th>
+                    <th className="px-3 py-2 border-b border-[#303030] font-medium">Type</th>
+                    <th className="px-3 py-2 border-b border-[#303030] font-medium">SubType</th>
+                    <th className="px-3 py-2 border-b border-[#303030] font-medium min-w-[200px]">Formula</th>
+                    <th className="px-3 py-2 border-b border-[#303030] font-medium">Owner</th>
+                    <th className="px-3 py-2 border-b border-[#303030] font-medium w-20">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {formulas.map((f) => (
+                    <tr key={f.id} className="bg-[#141414] hover:bg-[#1f1f1f] transition-colors">
+                      <td className="px-3 py-2 border-b border-[#303030] text-[#d9d9d9]">{f.hyperoptType}</td>
+                      <td className="px-3 py-2 border-b border-[#303030] text-[#d9d9d9]">{f.type}</td>
+                      <td className="px-3 py-2 border-b border-[#303030] text-[#a6a6a6]">{f.subType}</td>
+                      <td className="px-3 py-2 border-b border-[#303030] text-[#a6a6a6] max-w-[280px] truncate font-mono text-[11px]" title={f.formula}>{f.formula || "—"}</td>
+                      <td className="px-3 py-2 border-b border-[#303030] text-[#a6a6a6]">{f.owner ?? "—"}</td>
+                      <td className="px-3 py-2 border-b border-[#303030]">
+                        <FormulaActionsMenu formula={f} onEdit={handleEditFormula} onDelete={handleDeleteFormula} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {formulas.length === 0 && (
+                <div className={cx("py-12 text-center text-[12px]", ui.textMuted)}>No formulas yet. Click &quot;Add Formula&quot; to create one.</div>
+              )}
             </div>
           </div>
         )}
@@ -5247,6 +6185,45 @@ export default function App() {
           onClose={() => setShowAddIndicatorPage(false)}
           onAdd={handleAddPageIndicator}
         />
+      )}
+
+      {showFormulaModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={() => setShowFormulaModal(false)}>
+          <div className={cx(ui.radius, "bg-[#141414] border border-[#303030] max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col shadow-xl")} onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#303030]">
+              <span className="text-[14px] font-medium text-[#d9d9d9]">{formulaEditingId != null ? "Edit Formula" : "Add Formula"}</span>
+              <button type="button" onClick={() => setShowFormulaModal(false)} className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1">✕</button>
+            </div>
+            <div className="overflow-auto p-4 space-y-4">
+              <div>
+                <label className={cx("block mb-1 text-xs", ui.textMuted)}>Hyperopt Type</label>
+                <select value={formulaDraft.hyperoptType} onChange={(e) => setFormulaDraft((d) => ({ ...d, hyperoptType: e.target.value }))} className={cx(ui.input, "h-9 text-[12px] w-full")}>
+                  {FORMULA_HYPEROPT_TYPES.map((v) => <option key={v} value={v}>{v}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={cx("block mb-1 text-xs", ui.textMuted)}>Type</label>
+                <select value={formulaDraft.type} onChange={(e) => setFormulaDraft((d) => ({ ...d, type: e.target.value }))} className={cx(ui.input, "h-9 text-[12px] w-full")}>
+                  {FORMULA_TYPES.map((v) => <option key={v} value={v}>{v}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={cx("block mb-1 text-xs", ui.textMuted)}>SubType</label>
+                <select value={formulaDraft.subType} onChange={(e) => setFormulaDraft((d) => ({ ...d, subType: e.target.value }))} className={cx(ui.input, "h-9 text-[12px] w-full")}>
+                  {FORMULA_SUBTYPES.map((v) => <option key={v} value={v}>{v}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={cx("block mb-1 text-xs", ui.textMuted)}>Formula</label>
+                <textarea value={formulaDraft.formula} onChange={(e) => setFormulaDraft((d) => ({ ...d, formula: e.target.value }))} rows={6} placeholder="Formula expression..." className={cx(ui.input, "text-[12px] w-full font-mono resize-y min-h-[120px]")} />
+              </div>
+            </div>
+            <div className="px-4 py-3 border-t border-[#303030] flex justify-end gap-2">
+              <button type="button" onClick={() => setShowFormulaModal(false)} className={cx(ui.btn, "h-8 px-3 text-[11px]")}>Cancel</button>
+              <button type="button" onClick={handleSaveFormula} className={cx(ui.btnPrimary, "h-8 px-3 text-[11px]")}>Save</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -1,6 +1,6 @@
 // Application-level constants
 
-export const SECTIONS = ["Strategies", "Backtesting", "Users", "Indicators"];
+export const SECTIONS = ["Strategies", "Backtesting", "Users", "Settings"];
 // Only Backtesting is disabled in the header; Users is now available
 export const DISABLED_SECTIONS = new Set(["Backtesting"]);
 
