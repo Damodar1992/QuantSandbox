@@ -5498,26 +5498,26 @@ export default function App() {
   const FORMULA_TYPES = ["Score", "Metric", "Stability"];
   const FORMULA_SUBTYPES = ["Intermediate score", "Final score", "Stability", "MFE", "MAE", "AIR", "HitRate"];
   const [formulas, setFormulas] = useState(() => [
-    { id: 1, hyperoptType: "Brute Force", type: "Score", subType: "Intermediate score", formula: "  weightMFE * normMFE\n- weightMAE * normMAE\n+ weightAIR * normAIR\n+ weightHitRate * normHitRate", owner: "System" },
-    { id: 2, hyperoptType: "Brute Force", type: "Metric", subType: "MFE", formula: "1/(1+EXP(-1*(MFE - MEDIAN(MFE)) / (QUARTILE.INC(MFE,3) - QUARTILE.INC(MFE,1))))", owner: "System" },
-    { id: 3, hyperoptType: "Brute Force", type: "Metric", subType: "MAE", formula: "1/(1+EXP(1*(MAE - MEDIAN(MAE)) / (QUARTILE.INC(MAE,3) - QUARTILE.INC(MAE,1))))", owner: "System" },
-    { id: 4, hyperoptType: "Brute Force", type: "Metric", subType: "AIR", formula: "1/(1+EXP(-1*(AIR - MEDIAN(AIR)) / (QUARTILE.INC(AIR,3) - QUARTILE.INC(AIR,1))))", owner: "System" },
-    { id: 5, hyperoptType: "Brute Force", type: "Metric", subType: "HitRate", formula: "1/(1+EXP(-1*(HitRate - MEDIAN(HitRate)) / (QUARTILE.INC(HitRate,3) - QUARTILE.INC(HitRate,1))))", owner: "System" },
-    { id: 6, hyperoptType: "Brute Force", type: "Score", subType: "Final score", formula: "  weightMFE * normMFE\n- weightMAE * normMAE\n+ weightAIR * normAIR\n+ weightHitRate * normHitRate", owner: "System" },
-    { id: 7, hyperoptType: "Brute Force", type: "Stability", subType: "Stability", formula: "Your Stability formula can be placed here 😁", owner: "System" },
-    { id: 8, hyperoptType: "Brute Force", type: "Metric", subType: "Stability", formula: "1/(1+EXP(-1*(Stability - MEDIAN(Stability)) / (QUARTILE.INC(Stability,3) - QUARTILE.INC(Stability,1))))", owner: "System" },
+    { id: 1, name: "Intermediate score", hyperoptType: "Brute Force", type: "Score", subType: "Intermediate score", formula: "  weightMFE * normMFE\n- weightMAE * normMAE\n+ weightAIR * normAIR\n+ weightHitRate * normHitRate", owner: "System" },
+    { id: 2, name: "MFE", hyperoptType: "Brute Force", type: "Metric", subType: "MFE", formula: "1/(1+EXP(-1*(MFE - MEDIAN(MFE)) / (QUARTILE.INC(MFE,3) - QUARTILE.INC(MFE,1))))", owner: "System" },
+    { id: 3, name: "MAE", hyperoptType: "Brute Force", type: "Metric", subType: "MAE", formula: "1/(1+EXP(1*(MAE - MEDIAN(MAE)) / (QUARTILE.INC(MAE,3) - QUARTILE.INC(MAE,1))))", owner: "System" },
+    { id: 4, name: "AIR", hyperoptType: "Brute Force", type: "Metric", subType: "AIR", formula: "1/(1+EXP(-1*(AIR - MEDIAN(AIR)) / (QUARTILE.INC(AIR,3) - QUARTILE.INC(AIR,1))))", owner: "System" },
+    { id: 5, name: "HitRate", hyperoptType: "Brute Force", type: "Metric", subType: "HitRate", formula: "1/(1+EXP(-1*(HitRate - MEDIAN(HitRate)) / (QUARTILE.INC(HitRate,3) - QUARTILE.INC(HitRate,1))))", owner: "System" },
+    { id: 6, name: "Final score", hyperoptType: "Brute Force", type: "Score", subType: "Final score", formula: "  weightMFE * normMFE\n- weightMAE * normMAE\n+ weightAIR * normAIR\n+ weightHitRate * normHitRate", owner: "System" },
+    { id: 7, name: "Stability (formula)", hyperoptType: "Brute Force", type: "Stability", subType: "Stability", formula: "Your Stability formula can be placed here 😁", owner: "System" },
+    { id: 8, name: "Stability (metric)", hyperoptType: "Brute Force", type: "Metric", subType: "Stability", formula: "1/(1+EXP(-1*(Stability - MEDIAN(Stability)) / (QUARTILE.INC(Stability,3) - QUARTILE.INC(Stability,1))))", owner: "System" },
   ]);
   const [showFormulaModal, setShowFormulaModal] = useState(false);
   const [formulaEditingId, setFormulaEditingId] = useState(null);
-  const [formulaDraft, setFormulaDraft] = useState({ hyperoptType: "BIAS", type: "Score", subType: "Intermediate score", formula: "" });
+  const [formulaDraft, setFormulaDraft] = useState({ name: "", hyperoptType: "BIAS", type: "Score", subType: "Intermediate score", formula: "" });
   const handleOpenAddFormula = useCallback(() => {
     setFormulaEditingId(null);
-    setFormulaDraft({ hyperoptType: "BIAS", type: "Score", subType: "Intermediate score", formula: "" });
+    setFormulaDraft({ name: "", hyperoptType: "BIAS", type: "Score", subType: "Intermediate score", formula: "" });
     setShowFormulaModal(true);
   }, []);
   const handleEditFormula = useCallback((formula) => {
     setFormulaEditingId(formula.id);
-    setFormulaDraft({ hyperoptType: formula.hyperoptType, type: formula.type, subType: formula.subType, formula: formula.formula });
+    setFormulaDraft({ name: formula.name ?? "", hyperoptType: formula.hyperoptType, type: formula.type, subType: formula.subType, formula: formula.formula });
     setShowFormulaModal(true);
   }, []);
   const handleSaveFormula = useCallback(() => {
@@ -6088,6 +6088,7 @@ export default function App() {
               <table className="w-full border-collapse text-[12px]">
                 <thead className="bg-[#1f1f1f] text-left text-[12px] text-[#8c8c8c]">
                   <tr>
+                    <th className="px-3 py-2 border-b border-[#303030] font-medium">Name</th>
                     <th className="px-3 py-2 border-b border-[#303030] font-medium">Hyperopt Type</th>
                     <th className="px-3 py-2 border-b border-[#303030] font-medium">Type</th>
                     <th className="px-3 py-2 border-b border-[#303030] font-medium">SubType</th>
@@ -6099,6 +6100,7 @@ export default function App() {
                 <tbody>
                   {formulas.map((f) => (
                     <tr key={f.id} className="bg-[#141414] hover:bg-[#1f1f1f] transition-colors">
+                      <td className="px-3 py-2 border-b border-[#303030] text-[#d9d9d9]">{f.name ?? "—"}</td>
                       <td className="px-3 py-2 border-b border-[#303030] text-[#d9d9d9]">{f.hyperoptType}</td>
                       <td className="px-3 py-2 border-b border-[#303030] text-[#d9d9d9]">{f.type}</td>
                       <td className="px-3 py-2 border-b border-[#303030] text-[#a6a6a6]">{f.subType}</td>
@@ -6195,6 +6197,10 @@ export default function App() {
               <button type="button" onClick={() => setShowFormulaModal(false)} className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1">✕</button>
             </div>
             <div className="overflow-auto p-4 space-y-4">
+              <div>
+                <label className={cx("block mb-1 text-xs", ui.textMuted)}>Name</label>
+                <input type="text" value={formulaDraft.name ?? ""} onChange={(e) => setFormulaDraft((d) => ({ ...d, name: e.target.value }))} placeholder="Formula name" className={cx(ui.input, "h-9 text-[12px] w-full")} />
+              </div>
               <div>
                 <label className={cx("block mb-1 text-xs", ui.textMuted)}>Hyperopt Type</label>
                 <select value={formulaDraft.hyperoptType} onChange={(e) => setFormulaDraft((d) => ({ ...d, hyperoptType: e.target.value }))} className={cx(ui.input, "h-9 text-[12px] w-full")}>
