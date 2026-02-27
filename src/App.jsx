@@ -3272,7 +3272,149 @@ const BuilderStepper = memo(function BuilderStepper({
   const [finHitRateWeight, setFinHitRateWeight] = useState(0);
   const finStabWeightsSum = finStabMfeWeight + finStabMaeWeight + finStabAirWeight + finStabHitRateWeight;
   const finWeightsSum = finStabilityWeight + finMfeWeight + finMaeWeight + finAirWeight + finHitRateWeight;
-  
+
+  // Formula Editor helpers (for Score formula)
+  const FORMULA_EDITOR_VARIABLES = [
+    "MFE",
+    "MAE",
+    "AIR",
+    "HitRate",
+    "Stability",
+    "weightMFE",
+    "normMFE",
+    "weightMAE",
+    "normMAE",
+    "weightAIR",
+    "normAIR",
+    "weightHitRate",
+    "normHitRate",
+  ];
+  const FORMULA_EDITOR_FUNCTIONS = [
+    { label: "IF", template: "IF(cond; a; b)" },
+    { label: "IFS", template: "IFS(c1; v1; c2; v2; default)" },
+    { label: "AND", template: "AND(a; b; c)" },
+    { label: "OR", template: "OR(a; b)" },
+    { label: "NOT", template: "NOT(a)" },
+    { label: "IFERROR", template: "IFERROR(expr; fallback)" },
+    { label: "ABS", template: "ABS(x)" },
+    { label: "MIN", template: "MIN(a; b; c)" },
+    { label: "MAX", template: "MAX(a; b; c)" },
+    { label: "ROUND", template: "ROUND(x; digits)" },
+  ];
+  const FORMULA_EDITOR_OPERATORS = [
+    "+",
+    "-",
+    "*",
+    "/",
+    "^",
+    "=",
+    "<>",
+    "<",
+    "<=",
+    ">",
+    ">=",
+  ];
+
+  const [showFormulaEditor, setShowFormulaEditor] = useState(false);
+  const [formulaEditorValue, setFormulaEditorValue] = useState("");
+  const formulaEditorRef = useRef(null);
+  const formulaEditorMirrorRef = useRef(null);
+  const [formulaEditorSelection, setFormulaEditorSelection] = useState({ start: 0, end: 0 });
+
+  const formulaEditorVariableRegex = useMemo(
+    () => new RegExp("\\b(" + [...FORMULA_EDITOR_VARIABLES].sort((a, b) => b.length - a.length).join("|") + ")\\b", "g"),
+    [],
+  );
+  const renderFormulaEditorWithVariables = useCallback(
+    (text) => {
+      if (!text) return null;
+      const parts = text.split(formulaEditorVariableRegex);
+      return parts.map((part, i) =>
+        FORMULA_EDITOR_VARIABLES.includes(part) ? (
+          <span key={i} className="rounded bg-emerald-500/25 px-0.5 text-emerald-400">
+            {part}
+          </span>
+        ) : (
+          part
+        ),
+      );
+    },
+    [formulaEditorVariableRegex],
+  );
+  const [formulaEditorApplyFn, setFormulaEditorApplyFn] = useState(null);
+
+  const openFormulaEditor = useCallback((initialValue, applyFn) => {
+    setFormulaEditorValue(initialValue || "");
+    setFormulaEditorApplyFn(() => applyFn);
+    setShowFormulaEditor(true);
+  }, []);
+
+  const handleFormulaEditorChange = useCallback((e) => {
+    const { value, selectionStart, selectionEnd } = e.target;
+    setFormulaEditorValue(value);
+    setFormulaEditorSelection({
+      start: selectionStart ?? value.length,
+      end: selectionEnd ?? selectionStart ?? value.length,
+    });
+  }, []);
+
+  const handleFormulaEditorSelect = useCallback((e) => {
+    const { selectionStart, selectionEnd } = e.target;
+    setFormulaEditorSelection({
+      start: selectionStart ?? 0,
+      end: selectionEnd ?? selectionStart ?? 0,
+    });
+  }, []);
+
+  const insertIntoFormulaEditor = useCallback(
+    (snippet) => {
+      setFormulaEditorValue((prev) => {
+        const textarea = formulaEditorRef.current;
+        const start = textarea?.selectionStart ?? formulaEditorSelection.start ?? prev.length;
+        const end = textarea?.selectionEnd ?? formulaEditorSelection.end ?? start;
+        const before = prev.slice(0, start);
+        const after = prev.slice(end);
+        const next = `${before}${snippet}${after}`;
+        const newPos = start + snippet.length;
+
+        queueMicrotask(() => {
+          const el = formulaEditorRef.current;
+          if (el) {
+            el.focus();
+            el.selectionStart = newPos;
+            el.selectionEnd = newPos;
+          }
+          setFormulaEditorSelection({ start: newPos, end: newPos });
+        });
+
+        return next;
+      });
+    },
+    [formulaEditorSelection.start, formulaEditorSelection.end],
+  );
+
+  const handleFormulaEditorApply = useCallback(() => {
+    if (typeof formulaEditorApplyFn === "function") {
+      formulaEditorApplyFn(formulaEditorValue);
+    }
+    setShowFormulaEditor(false);
+  }, [formulaEditorApplyFn, formulaEditorValue]);
+
+  const handleFormulaEditorCancel = useCallback(() => {
+    setShowFormulaEditor(false);
+  }, []);
+
+  const handleFormulaEditorClear = useCallback(() => {
+    setFormulaEditorValue("");
+    setFormulaEditorSelection({ start: 0, end: 0 });
+    const el = formulaEditorRef.current;
+    if (el) {
+      el.focus();
+      el.selectionStart = 0;
+      el.selectionEnd = 0;
+    }
+  }, []);
+
   // Formula state (unified)
   const [signalFormula, setSignalFormula] = useState(`# Define your trading signals
 # Example:
@@ -3336,20 +3478,26 @@ IF RSI > 70 OR Close < EMA THEN SELL
     });
   }, []);
 
-  const renderFormulaWithVariables = useCallback((code) => {
-    if (!code) return null;
-    const re = new RegExp(`\\b(${FORMULA_VARIABLES.map((v) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`, "g");
-    const parts = code.split(re);
-    return parts.map((part, i) =>
-      FORMULA_VARIABLES.includes(part) ? (
-        <span key={i} className="underline decoration-[#8c8c8c] underline-offset-1">
-          {part}
-        </span>
-      ) : (
-        part
-      )
-    );
-  }, []);
+  const formulaDisplayVariableRegex = useMemo(
+    () => new RegExp("\\b(" + [...FORMULA_EDITOR_VARIABLES].sort((a, b) => b.length - a.length).join("|") + ")\\b", "g"),
+    [],
+  );
+  const renderFormulaWithVariables = useCallback(
+    (code) => {
+      if (!code) return null;
+      const parts = code.split(formulaDisplayVariableRegex);
+      return parts.map((part, i) =>
+        FORMULA_EDITOR_VARIABLES.includes(part) ? (
+          <span key={i} className="rounded bg-emerald-500/25 px-0.5 text-emerald-400">
+            {part}
+          </span>
+        ) : (
+          part
+        )
+      );
+    },
+    [formulaDisplayVariableRegex],
+  );
 
   const handleAddIndicatorFromLibrary = useCallback((indicatorKey) => {
     setAddModalType(indicatorKey);
@@ -3819,17 +3967,44 @@ IF RSI > 70 OR Close < EMA THEN SELL
                   <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">Normalization formulas</div>
                   <div className="p-3 pt-0 space-y-3 border-t border-[#303030]">
                           <div className="space-y-1.5">
-                            <div className="text-[11px] font-medium text-[#d9d9d9]">Score formula</div>
+                            <div className="flex items-center gap-2">
+                              <div className="text-[11px] font-medium text-[#d9d9d9]">Score formula</div>
+                              {finFinalFormulaCode && (
+                                <span className="inline-flex items-center rounded-md border border-emerald-500/60 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-400">
+                                  fx
+                                </span>
+                              )}
+                            </div>
                             <div className="flex flex-wrap items-center gap-3 gap-y-2">
                               <select value={finalScoreFormula} onChange={(e) => setFinalScoreFormula(e.target.value)} className={cx(ui.input, "h-9 text-[12px] w-full max-w-[200px]")}>
                                 {FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
                               </select>
                               <div className="min-w-[200px] flex-1 max-w-[400px]">
                                 <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-9 overflow-hidden">
-                                  <div data-formula-mirror className="absolute inset-0 px-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
+                                  <div data-formula-mirror className="absolute left-0 top-0 bottom-0 right-8 pl-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
                                     <span className="inline-block min-w-full">{finFinalFormulaCode ? renderFormulaWithVariables(finFinalFormulaCode) : <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>}</span>
                                   </div>
-                                  <input type="text" value={finFinalFormulaCode} onChange={(e) => setFinFinalFormulaCode(e.target.value)} onScroll={(e) => { const m = e.target.parentElement?.querySelector("[data-formula-mirror]"); if (m) m.scrollLeft = e.target.scrollLeft; }} placeholder="Formula code" className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 px-3 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset" />
+                                  <input
+                                    type="text"
+                                    value={finFinalFormulaCode}
+                                    onChange={(e) => setFinFinalFormulaCode(e.target.value)}
+                                    onScroll={(e) => {
+                                      const m = e.target.parentElement?.querySelector("[data-formula-mirror]");
+                                      if (m) m.scrollLeft = e.target.scrollLeft;
+                                    }}
+                                    placeholder="Formula code"
+                                    className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 pl-3 pr-8 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => openFormulaEditor(finFinalFormulaCode, setFinFinalFormulaCode)}
+                                    className="absolute right-0 top-0 bottom-0 z-20 flex items-center justify-center w-8 h-full bg-emerald-600 text-white hover:bg-emerald-500 active:bg-emerald-700 rounded-r-md"
+                                    title="Формула"
+                                  >
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                                      <path fillRule="nonzero" d="M5 4.5C5 3.672 5.672 3 6.5 3h11c.828 0 1.5.672 1.5 1.5V5c0 .552-.448 1-1 1s-1-.448-1-1V5H7v.54l6.562 5.625c.512.44.512 1.232 0 1.671L7 18.46V19h10c.552 0 1 .448 1 1s-.448 1-1 1H6.5C5.672 21 5 20.328 5 19.5v-1.27c0-.438.191-.854.524-1.139l5.94-4.091L5.524 6.909C5.191 6.624 5 6.208 5 5.77V4.5z" />
+                                    </svg>
+                                  </button>
                                 </div>
                               </div>
                             </div>
@@ -3860,11 +4035,39 @@ IF RSI > 70 OR Close < EMA THEN SELL
                                       </select>
                                     </td>
                                     <td className="px-3 py-2 align-top min-w-[200px]">
-                                      <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-8 overflow-hidden">
-                                        <div data-formula-mirror className="absolute inset-0 px-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
-                                          <span className="inline-block min-w-full">{row.formulaCode ? renderFormulaWithVariables(row.formulaCode) : <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>}</span>
+                                      <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-8 overflow-hidden min-w-[200px]">
+                                        <div
+                                          data-formula-mirror
+                                          className="absolute left-0 top-0 bottom-0 right-8 pl-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden"
+                                          style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+                                          aria-hidden
+                                        >
+                                          <span className="inline-block min-w-full">
+                                            {row.formulaCode
+                                              ? renderFormulaWithVariables(row.formulaCode)
+                                              : <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>}
+                                          </span>
                                         </div>
-                                        <input type="text" value={row.formulaCode} onChange={(e) => row.setFormulaCode(e.target.value)} onScroll={(e) => { const m = e.target.parentElement?.querySelector("[data-formula-mirror]"); if (m) m.scrollLeft = e.target.scrollLeft; }} className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 px-3 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset" />
+                                        <input
+                                          type="text"
+                                          value={row.formulaCode}
+                                          onChange={(e) => row.setFormulaCode(e.target.value)}
+                                          onScroll={(e) => {
+                                            const m = e.target.parentElement?.querySelector("[data-formula-mirror]");
+                                            if (m) m.scrollLeft = e.target.scrollLeft;
+                                          }}
+                                          className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 pl-3 pr-8 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset"
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => openFormulaEditor(row.formulaCode, row.setFormulaCode)}
+                                          className="absolute right-0 top-0 bottom-0 z-20 flex items-center justify-center w-8 h-full bg-emerald-600 text-white hover:bg-emerald-500 active:bg-emerald-700 rounded-r-md"
+                                          title="Формула"
+                                        >
+                                          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                                            <path fillRule="nonzero" d="M5 4.5C5 3.672 5.672 3 6.5 3h11c.828 0 1.5.672 1.5 1.5V5c0 .552-.448 1-1 1s-1-.448-1-1V5H7v.54l6.562 5.625c.512.44.512 1.232 0 1.671L7 18.46V19h10c.552 0 1 .448 1 1s-.448 1-1 1H6.5C5.672 21 5 20.328 5 19.5v-1.27c0-.438.191-.854.524-1.139l5.94-4.091L5.524 6.909C5.191 6.624 5 6.208 5 5.77V4.5z" />
+                                          </svg>
+                                        </button>
                                       </div>
                                     </td>
                                     <td className="px-3 py-2 align-top">
@@ -4130,6 +4333,150 @@ IF RSI > 70 OR Close < EMA THEN SELL
           }} 
         />
       )}
+      {/* Formula Editor modal */}
+      {showFormulaEditor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={handleFormulaEditorCancel}>
+          <div
+            className={cx(
+              ui.radius,
+              "bg-[#141414] border border-[#303030] max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col shadow-xl"
+            )}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#303030]">
+              <span className="text-[14px] font-medium text-[#d9d9d9]">Formula Editor</span>
+              <button
+                type="button"
+                onClick={handleFormulaEditorCancel}
+                className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-4 space-y-4">
+              {/* Textarea */}
+              <div className="space-y-1.5">
+                <div className="text-[11px] font-medium text-[#d9d9d9]">Score formula</div>
+                <div className="relative min-h-[140px] rounded-md border border-[#303030] bg-[#0f0f0f] overflow-hidden">
+                  <div
+                    ref={formulaEditorMirrorRef}
+                    className="absolute inset-0 overflow-auto px-3 py-2 text-[11px] font-mono text-[#d9d9d9] whitespace-pre-wrap break-words pointer-events-none [&::-webkit-scrollbar]:hidden"
+                    style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+                    aria-hidden
+                  >
+                    {formulaEditorValue ? (
+                      renderFormulaEditorWithVariables(formulaEditorValue)
+                    ) : (
+                      <span className="text-[#595959]">Enter formula...</span>
+                    )}
+                  </div>
+                  <textarea
+                    ref={formulaEditorRef}
+                    value={formulaEditorValue}
+                    onChange={handleFormulaEditorChange}
+                    onSelect={handleFormulaEditorSelect}
+                    onScroll={(e) => {
+                      const m = formulaEditorMirrorRef.current;
+                      if (m) {
+                        m.scrollTop = e.target.scrollTop;
+                        m.scrollLeft = e.target.scrollLeft;
+                      }
+                    }}
+                    className={cx(
+                      "relative z-10 w-full min-h-[140px] resize-y rounded-md border-0 bg-transparent px-3 py-2 text-[11px] font-mono text-transparent caret-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset"
+                    )}
+                    placeholder="Enter formula..."
+                  />
+                </div>
+              </div>
+              {/* Variables & Functions */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <div className="text-[11px] font-medium text-[#d9d9d9]">Variables</div>
+                  <div className="flex items-center gap-2">
+                    <select
+                      className={cx(ui.input, "h-8 text-[11px] flex-1")}
+                      onChange={(e) => {
+                        if (!e.target.value) return;
+                        insertIntoFormulaEditor(e.target.value);
+                        e.target.selectedIndex = 0;
+                      }}
+                    >
+                      <option value="">Select variable…</option>
+                      {FORMULA_EDITOR_VARIABLES.map((v) => (
+                        <option key={v} value={v}>
+                          {v}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="text-[11px] font-medium text-[#d9d9d9]">Functions</div>
+                  <div className="flex items-center gap-2">
+                    <select
+                      className={cx(ui.input, "h-8 text-[11px] flex-1")}
+                      onChange={(e) => {
+                        if (!e.target.value) return;
+                        insertIntoFormulaEditor(e.target.value);
+                        e.target.selectedIndex = 0;
+                      }}
+                    >
+                      <option value="">Select function…</option>
+                      {FORMULA_EDITOR_FUNCTIONS.map((fn) => (
+                        <option key={fn.label} value={fn.template}>
+                          {fn.label} — {fn.template}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+              {/* Operators */}
+              <div className="space-y-2">
+                <div className="text-[11px] font-medium text-[#d9d9d9]">Operators</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {FORMULA_EDITOR_OPERATORS.map((op) => (
+                    <button
+                      key={op}
+                      type="button"
+                      onClick={() => insertIntoFormulaEditor(op)}
+                      className="inline-flex items-center justify-center rounded-md border border-[#303030] bg-[#0f0f0f] px-2.5 py-1 text-[11px] text-[#d9d9d9] hover:bg-[#1f1f1f] active:translate-y-[0.5px]"
+                    >
+                      {op}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-[#303030] bg-[#111111]">
+              <button
+                type="button"
+                onClick={handleFormulaEditorClear}
+                className="text-[11px] text-[#8c8c8c] hover:text-[#d9d9d9]"
+              >
+                Clear
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleFormulaEditorCancel}
+                  className={cx(ui.btn, "h-8 px-3 text-[11px]")}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleFormulaEditorApply}
+                  className={cx(ui.btnPrimary, "h-8 px-3 text-[11px]")}
+                >
+                  Apply
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Run normalization modal — same block as Normalization formulas */}
       {showNormalizationModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={() => setShowNormalizationModal(false)}>
@@ -4143,17 +4490,44 @@ IF RSI > 70 OR Close < EMA THEN SELL
                 <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">Normalization formulas</div>
                 <div className="p-3 pt-0 space-y-3 border-t border-[#303030]">
                   <div className="space-y-1.5">
-                    <div className="text-[11px] font-medium text-[#d9d9d9]">Score formula</div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-[11px] font-medium text-[#d9d9d9]">Score formula</div>
+                      {finFinalFormulaCode && (
+                        <span className="inline-flex items-center rounded-md border border-emerald-500/60 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-400">
+                          fx
+                        </span>
+                      )}
+                    </div>
                     <div className="flex flex-wrap items-center gap-3 gap-y-2">
                       <select value={finalScoreFormula} onChange={(e) => setFinalScoreFormula(e.target.value)} className={cx(ui.input, "h-9 text-[12px] w-full max-w-[200px]")}>
                         {FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
                       </select>
                       <div className="min-w-[200px] flex-1 max-w-[400px]">
                         <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-9 overflow-hidden">
-                          <div data-formula-mirror className="absolute inset-0 px-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
+                          <div data-formula-mirror className="absolute left-0 top-0 bottom-0 right-8 pl-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
                             <span className="inline-block min-w-full">{finFinalFormulaCode ? renderFormulaWithVariables(finFinalFormulaCode) : <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>}</span>
                           </div>
-                          <input type="text" value={finFinalFormulaCode} onChange={(e) => setFinFinalFormulaCode(e.target.value)} onScroll={(e) => { const m = e.target.parentElement?.querySelector("[data-formula-mirror]"); if (m) m.scrollLeft = e.target.scrollLeft; }} placeholder="Formula code" className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 px-3 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset" />
+                          <input
+                            type="text"
+                            value={finFinalFormulaCode}
+                            onChange={(e) => setFinFinalFormulaCode(e.target.value)}
+                            onScroll={(e) => {
+                              const m = e.target.parentElement?.querySelector("[data-formula-mirror]");
+                              if (m) m.scrollLeft = e.target.scrollLeft;
+                            }}
+                            placeholder="Formula code"
+                            className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 pl-3 pr-8 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => openFormulaEditor(finFinalFormulaCode, setFinFinalFormulaCode)}
+                            className="absolute right-0 top-0 bottom-0 z-20 flex items-center justify-center w-8 h-full bg-emerald-600 text-white hover:bg-emerald-500 active:bg-emerald-700 rounded-r-md"
+                            title="Формула"
+                          >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                              <path fillRule="nonzero" d="M5 4.5C5 3.672 5.672 3 6.5 3h11c.828 0 1.5.672 1.5 1.5V5c0 .552-.448 1-1 1s-1-.448-1-1V5H7v.54l6.562 5.625c.512.44.512 1.232 0 1.671L7 18.46V19h10c.552 0 1 .448 1 1s-.448 1-1 1H6.5C5.672 21 5 20.328 5 19.5v-1.27c0-.438.191-.854.524-1.139l5.94-4.091L5.524 6.909C5.191 6.624 5 6.208 5 5.77V4.5z" />
+                            </svg>
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -4240,11 +4614,16 @@ IF RSI > 70 OR Close < EMA THEN SELL
                               </select>
                             </td>
                             <td className="px-3 py-2 align-top min-w-[200px]">
-                              <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-8 overflow-hidden">
-                                <div data-formula-mirror className="absolute inset-0 px-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
+                              <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-8 overflow-hidden min-w-[200px]">
+                                <div data-formula-mirror className="absolute left-0 top-0 bottom-0 right-8 pl-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
                                   <span className="inline-block min-w-full">{row.formulaCode ? renderFormulaWithVariables(row.formulaCode) : <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>}</span>
                                 </div>
-                                <input type="text" value={row.formulaCode} onChange={(e) => row.setFormulaCode(e.target.value)} onScroll={(e) => { const m = e.target.parentElement?.querySelector("[data-formula-mirror]"); if (m) m.scrollLeft = e.target.scrollLeft; }} className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 px-3 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset" />
+                                <input type="text" value={row.formulaCode} onChange={(e) => row.setFormulaCode(e.target.value)} onScroll={(e) => { const m = e.target.parentElement?.querySelector("[data-formula-mirror]"); if (m) m.scrollLeft = e.target.scrollLeft; }} className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 pl-3 pr-8 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset" />
+                                <button type="button" onClick={() => openFormulaEditor(row.formulaCode, row.setFormulaCode)} className="absolute right-0 top-0 bottom-0 z-20 flex items-center justify-center w-8 h-full bg-emerald-600 text-white hover:bg-emerald-500 active:bg-emerald-700 rounded-r-md" title="Формула">
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                                    <path fillRule="nonzero" d="M5 4.5C5 3.672 5.672 3 6.5 3h11c.828 0 1.5.672 1.5 1.5V5c0 .552-.448 1-1 1s-1-.448-1-1V5H7v.54l6.562 5.625c.512.44.512 1.232 0 1.671L7 18.46V19h10c.552 0 1 .448 1 1s-.448 1-1 1H6.5C5.672 21 5 20.328 5 19.5v-1.27c0-.438.191-.854.524-1.139l5.94-4.091L5.524 6.909C5.191 6.624 5 6.208 5 5.77V4.5z" />
+                                  </svg>
+                                </button>
                               </div>
                             </td>
                             <td className="px-3 py-2 align-top">
@@ -4722,14 +5101,6 @@ const CreateStrategyModal = memo(function CreateStrategyModal({
         <div>
           <label className={cx("block mb-1 text-xs", ui.textMuted)}>Strategy name</label>
           <input value={name} onChange={(e) => onNameChange(e.target.value)} className={ui.input} placeholder="e.g. EMA Bounce" />
-        </div>
-
-        <div>
-          <label className={cx("block mb-1 text-xs", ui.textMuted)}>Create strategy type</label>
-          <select value={template} onChange={(e) => onTemplateChange(e.target.value)} className={cx(ui.input, "h-9")}>
-            <option value="Strategy Code">Strategy Code</option>
-            <option value="Strategy Builder">Strategy Builder</option>
-          </select>
         </div>
 
         <div>
