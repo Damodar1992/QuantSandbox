@@ -5868,6 +5868,71 @@ export default function App() {
   const FORMULA_HYPEROPT_TYPES = ["BIAS", "Brute Force"];
   const FORMULA_TYPES = ["Score", "Metric", "Stability"];
   const FORMULA_SUBTYPES = ["Intermediate score", "Final score", "Stability", "MFE", "MAE", "AIR", "HitRate"];
+  const FORMULA_MODAL_VARIABLES = [
+    "MFE", "MAE", "AIR", "HitRate", "Stability",
+    "weightMFE", "normMFE", "weightMAE", "normMAE", "weightAIR", "normAIR", "weightHitRate", "normHitRate",
+  ];
+  const FORMULA_MODAL_FUNCTIONS = [
+    { label: "IF", template: "IF(cond; a; b)" },
+    { label: "IFS", template: "IFS(c1; v1; c2; v2; default)" },
+    { label: "AND", template: "AND(a; b; c)" },
+    { label: "OR", template: "OR(a; b)" },
+    { label: "NOT", template: "NOT(a)" },
+    { label: "IFERROR", template: "IFERROR(expr; fallback)" },
+    { label: "ABS", template: "ABS(x)" },
+    { label: "MIN", template: "MIN(a; b; c)" },
+    { label: "MAX", template: "MAX(a; b; c)" },
+    { label: "ROUND", template: "ROUND(x; digits)" },
+  ];
+  const FORMULA_MODAL_OPERATORS = ["+", "-", "*", "/", "^", "=", "<>", "<", "<=", ">", ">="];
+  const formulaModalFormulaRef = useRef(null);
+  const formulaModalMirrorRef = useRef(null);
+  const [formulaModalSelection, setFormulaModalSelection] = useState({ start: 0, end: 0 });
+  const formulaModalVariableRegex = useMemo(
+    () => new RegExp("\\b(" + [...FORMULA_MODAL_VARIABLES].sort((a, b) => b.length - a.length).join("|") + ")\\b", "g"),
+    [],
+  );
+  const renderFormulaModalWithVariables = useCallback(
+    (text) => {
+      try {
+        const str = typeof text === "string" ? text : String(text ?? "");
+        if (!str) return null;
+        const parts = str.split(formulaModalVariableRegex);
+        return parts.map((part, i) =>
+          FORMULA_MODAL_VARIABLES.includes(part) ? (
+            <span key={i} className="rounded bg-emerald-500/25 px-0.5 text-emerald-400">{part}</span>
+          ) : (
+            part
+          )
+        );
+      } catch {
+        return typeof text === "string" ? text : null;
+      }
+    },
+    [formulaModalVariableRegex],
+  );
+  const insertIntoFormulaModal = useCallback((snippet) => {
+    setFormulaDraft((prev) => {
+      const textarea = formulaModalFormulaRef.current;
+      const start = textarea?.selectionStart ?? formulaModalSelection.start ?? (prev.formula ?? "").length;
+      const end = textarea?.selectionEnd ?? formulaModalSelection.end ?? start;
+      const formula = prev.formula ?? "";
+      const before = formula.slice(0, start);
+      const after = formula.slice(end);
+      const next = before + snippet + after;
+      const newPos = start + snippet.length;
+      queueMicrotask(() => {
+        const el = formulaModalFormulaRef.current;
+        if (el) {
+          el.focus();
+          el.selectionStart = newPos;
+          el.selectionEnd = newPos;
+        }
+        setFormulaModalSelection({ start: newPos, end: newPos });
+      });
+      return { ...prev, formula: next };
+    });
+  }, [formulaModalSelection.start, formulaModalSelection.end]);
   const [formulas, setFormulas] = useState(() => [
     { id: 1, name: "Intermediate score", hyperoptType: "Brute Force", type: "Score", subType: "Intermediate score", formula: "  weightMFE * normMFE\n- weightMAE * normMAE\n+ weightAIR * normAIR\n+ weightHitRate * normHitRate", owner: "System" },
     { id: 2, name: "MFE", hyperoptType: "Brute Force", type: "Metric", subType: "MFE", formula: "1/(1+EXP(-1*(MFE - MEDIAN(MFE)) / (QUARTILE.INC(MFE,3) - QUARTILE.INC(MFE,1))))", owner: "System" },
@@ -6590,9 +6655,96 @@ export default function App() {
                   {FORMULA_SUBTYPES.map((v) => <option key={v} value={v}>{v}</option>)}
                 </select>
               </div>
-              <div>
+              <div className="space-y-2">
                 <label className={cx("block mb-1 text-xs", ui.textMuted)}>Formula</label>
-                <textarea value={formulaDraft.formula} onChange={(e) => setFormulaDraft((d) => ({ ...d, formula: e.target.value }))} rows={6} placeholder="Formula expression..." className={cx(ui.input, "text-[12px] w-full font-mono resize-y min-h-[120px]")} />
+                <div className="relative min-h-[120px] rounded-md border border-[#303030] bg-[#0f0f0f] overflow-hidden">
+                  <div
+                    ref={formulaModalMirrorRef}
+                    className="absolute inset-0 overflow-auto px-3 py-2 text-[11px] font-mono text-[#d9d9d9] whitespace-pre-wrap break-words pointer-events-none [&::-webkit-scrollbar]:hidden"
+                    style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+                    aria-hidden
+                  >
+                    {formulaDraft.formula ? (
+                      renderFormulaModalWithVariables(formulaDraft.formula)
+                    ) : (
+                      <span className="text-[#595959]">Formula expression...</span>
+                    )}
+                  </div>
+                  <textarea
+                    ref={formulaModalFormulaRef}
+                    value={formulaDraft.formula ?? ""}
+                    onChange={(e) => {
+                      const { value, selectionStart, selectionEnd } = e.target;
+                      setFormulaDraft((d) => ({ ...d, formula: value }));
+                      setFormulaModalSelection({ start: selectionStart ?? value.length, end: selectionEnd ?? value.length });
+                    }}
+                    onSelect={(e) => {
+                      const { selectionStart, selectionEnd } = e.target;
+                      setFormulaModalSelection({ start: selectionStart ?? 0, end: selectionEnd ?? 0 });
+                    }}
+                    onScroll={(e) => {
+                      const m = formulaModalMirrorRef.current;
+                      if (m) {
+                        m.scrollTop = e.target.scrollTop;
+                        m.scrollLeft = e.target.scrollLeft;
+                      }
+                    }}
+                    rows={6}
+                    placeholder="Formula expression..."
+                    className="relative z-10 w-full min-h-[120px] resize-y rounded-md border-0 bg-transparent px-3 py-2 text-[11px] font-mono text-transparent caret-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <div className="text-[11px] font-medium text-[#d9d9d9]">Variables</div>
+                  <select
+                    className={cx(ui.input, "h-8 text-[11px] flex-1 w-full")}
+                    onChange={(e) => {
+                      if (!e.target.value) return;
+                      insertIntoFormulaModal(e.target.value);
+                      e.target.selectedIndex = 0;
+                    }}
+                  >
+                    <option value="">Select variable…</option>
+                    {FORMULA_MODAL_VARIABLES.map((v) => (
+                      <option key={v} value={v}>{v}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <div className="text-[11px] font-medium text-[#d9d9d9]">Functions</div>
+                  <select
+                    className={cx(ui.input, "h-8 text-[11px] flex-1 w-full")}
+                    onChange={(e) => {
+                      if (!e.target.value) return;
+                      insertIntoFormulaModal(e.target.value);
+                      e.target.selectedIndex = 0;
+                    }}
+                  >
+                    <option value="">Select function…</option>
+                    {FORMULA_MODAL_FUNCTIONS.map((fn) => (
+                      <option key={fn.label} value={fn.template}>
+                        {fn.label} — {fn.template}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="text-[11px] font-medium text-[#d9d9d9]">Operators</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {FORMULA_MODAL_OPERATORS.map((op) => (
+                    <button
+                      key={op}
+                      type="button"
+                      onClick={() => insertIntoFormulaModal(op)}
+                      className="inline-flex items-center justify-center rounded-md border border-[#303030] bg-[#0f0f0f] px-2.5 py-1 text-[11px] text-[#d9d9d9] hover:bg-[#1f1f1f] active:translate-y-[0.5px]"
+                    >
+                      {op}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
             <div className="px-4 py-3 border-t border-[#303030] flex justify-end gap-2">
