@@ -1132,18 +1132,6 @@ const IndicatorItem = memo(({ indicator, index, total, onEdit, onDelete }) => {
       indicator.enabled ? "border-[#303030] bg-[#0f0f0f]" : "border-[#303030] bg-[#0f0f0f]/50 opacity-60"
     )}>
       <div className="flex items-start gap-3">
-        {/* Drag handle */}
-        <div className="pt-1 text-[#595959]">
-          <svg viewBox="0 0 24 24" className="h-4 w-4">
-            <circle cx="9" cy="5" r="1" fill="currentColor" />
-            <circle cx="9" cy="12" r="1" fill="currentColor" />
-            <circle cx="9" cy="19" r="1" fill="currentColor" />
-            <circle cx="15" cy="5" r="1" fill="currentColor" />
-            <circle cx="15" cy="12" r="1" fill="currentColor" />
-            <circle cx="15" cy="19" r="1" fill="currentColor" />
-          </svg>
-        </div>
-        
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
             <span className="text-[12px] font-medium text-[#d9d9d9]">{indicator.name}</span>
@@ -1817,8 +1805,6 @@ const FormulaEditor = memo(({ value, onChange, indicators }) => {
   const [pythonCodeManuallyEdited, setPythonCodeManuallyEdited] = useState(false);
   const [generatedPythonCode, setGeneratedPythonCode] = useState('');
   
-  const lines = useMemo(() => (value || "").split("\n").length, [value]);
-  
   // Initialize table rules if empty
   useEffect(() => {
     if (tableRules.length === 0) {
@@ -2348,22 +2334,25 @@ const FormulaEditor = memo(({ value, onChange, indicators }) => {
             <button
               onClick={() => handleModeSwitch('table')}
               className={cx(
-                "h-7 px-3 text-[10px] transition-colors border-l border-[#303030]",
+                "h-7 px-3 text-[10px] transition-colors border-l border-[#303030] inline-flex items-center gap-1.5",
                 editorMode === 'table' 
                   ? "bg-emerald-500/20 text-emerald-300 font-medium" 
                   : "bg-[#1a1a1a] text-[#8c8c8c] hover:text-[#d9d9d9]"
               )}
-              title="Table Editor"
+              title="Builder"
             >
-              📊 Table
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="7" height="7" rx="1" />
+                <rect x="14" y="3" width="7" height="7" rx="1" />
+                <rect x="3" y="14" width="7" height="7" rx="1" />
+                <rect x="14" y="14" width="7" height="7" rx="1" />
+              </svg>
+              Builder
             </button>
           </div>
           
           {editorMode === 'python' && (
             <>
-              <span className="text-[10px] px-2 py-0.5 rounded border border-[#303030] bg-[#0f0f0f] text-[#8c8c8c]">
-                {lines} lines
-              </span>
               {pythonCodeManuallyEdited && (
                 <button 
                   onClick={handleResetPythonCode}
@@ -2745,12 +2734,67 @@ const HEATMAP_FILTER_KEYS = [
   "Stability Score",
 ];
 
+const FILTER_OPERATIONS = [
+  { value: "EQ", label: "Equals" },
+  { value: "NEQ", label: "Not Equals" },
+  { value: "GT", label: "Greater Than" },
+  { value: "GTE", label: "Greater Than or Equal" },
+  { value: "LT", label: "Less Than" },
+  { value: "LTE", label: "Less Than or Equal" },
+  { value: "BETWEEN", label: "Between" },
+  { value: "IN", label: "In List" },
+  { value: "NOT_IN", label: "Not In List" },
+  { value: "LIKE", label: "Contains" },
+  { value: "IS_NULL", label: "Is Empty" },
+  { value: "IS_NOT_NULL", label: "Is Not Empty" },
+];
+
+const genId = () => `_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+const FILTER_PRESET_BUILTIN = {
+  "Super filter": () => ({
+    rootLogic: "and",
+    groups: [{
+      id: genId(),
+      logic: "and",
+      conditions: [
+        { id: genId(), field: "median_MFE", op: "GT", value: "" },
+        { id: genId(), field: "median_MAE", op: "GT", value: "" },
+        { id: genId(), field: "median_AIR", op: "GT", value: "" },
+        { id: genId(), field: "Final Score", op: "GT", value: "" },
+      ],
+    }],
+  }),
+  "Tresh filter": () => ({
+    rootLogic: "or",
+    groups: [
+      { id: genId(), logic: "or", conditions: [{ id: genId(), field: "median_MFE", op: "LT", value: "" }] },
+      { id: genId(), logic: "or", conditions: [{ id: genId(), field: "median_AIR", op: "GT", value: "" }] },
+      { id: genId(), logic: "or", conditions: [{ id: genId(), field: "Final Score", op: "GT", value: "" }] },
+    ],
+  }),
+};
+
+const cloneFilterRootWithNewIds = (root) => ({
+  rootLogic: root.rootLogic,
+  groups: root.groups.map((g) => ({
+    id: genId(),
+    logic: g.logic,
+    conditions: g.conditions.map((c) => ({ id: genId(), field: c.field, op: c.op, value: c.value ?? "" })),
+  })),
+});
+
 const HeatMapConfigurator = memo(({ indicators, onGenerate }) => {
   const [selectedIndicatorIds, setSelectedIndicatorIds] = useState([]);
   const [xAxisKeys, setXAxisKeys] = useState([]);
   const [yAxisKeys, setYAxisKeys] = useState([]);
   const [fixedParams, setFixedParams] = useState({});
-  const [filters, setFilters] = useState(() => Object.fromEntries(HEATMAP_FILTER_KEYS.map(k => [k, ""])));
+  const [filterRoot, setFilterRoot] = useState(() => ({
+    rootLogic: "or",
+    groups: [{ id: genId(), logic: "and", conditions: [] }],
+  }));
+  const [filterPreset, setFilterPreset] = useState("");
+  const [customPresets, setCustomPresets] = useState([]);
   const [openIndicatorDropdown, setOpenIndicatorDropdown] = useState(false);
   const [openXDropdown, setOpenXDropdown] = useState(false);
   const [openYDropdown, setOpenYDropdown] = useState(false);
@@ -2838,11 +2882,95 @@ const HeatMapConfigurator = memo(({ indicators, onGenerate }) => {
     setXAxisKeys(prev => prev.filter(k => k !== compositeKey));
   }, []);
   
+  const setRootLogic = useCallback((logic) => {
+    setFilterRoot((prev) => ({ ...prev, rootLogic: logic }));
+  }, []);
+  const addGroup = useCallback(() => {
+    setFilterRoot((prev) => ({
+      ...prev,
+      groups: [...prev.groups, { id: genId(), logic: "and", conditions: [] }],
+    }));
+  }, []);
+  const removeGroup = useCallback((groupId) => {
+    setFilterRoot((prev) => ({ ...prev, groups: prev.groups.filter((g) => g.id !== groupId) }));
+  }, []);
+  const setGroupLogic = useCallback((groupId, logic) => {
+    setFilterRoot((prev) => ({
+      ...prev,
+      groups: prev.groups.map((g) => (g.id === groupId ? { ...g, logic } : g)),
+    }));
+  }, []);
+  const addCondition = useCallback((groupId) => {
+    const firstField = HEATMAP_FILTER_KEYS[0];
+    setFilterRoot((prev) => ({
+      ...prev,
+      groups: prev.groups.map((g) =>
+        g.id === groupId
+          ? { ...g, conditions: [...g.conditions, { id: genId(), field: firstField, op: "EQ", value: "" }] }
+          : g
+      ),
+    }));
+  }, []);
+  const removeCondition = useCallback((groupId, conditionId) => {
+    setFilterRoot((prev) => ({
+      ...prev,
+      groups: prev.groups.map((g) =>
+        g.id === groupId ? { ...g, conditions: g.conditions.filter((c) => c.id !== conditionId) } : g
+      ),
+    }));
+  }, []);
+  const updateCondition = useCallback((groupId, conditionId, patch) => {
+    setFilterRoot((prev) => ({
+      ...prev,
+      groups: prev.groups.map((g) =>
+        g.id === groupId
+          ? {
+              ...g,
+              conditions: g.conditions.map((c) =>
+                c.id === conditionId ? { ...c, ...patch } : c
+              ),
+            }
+          : g
+      ),
+    }));
+  }, []);
+
+  const applyFilterPreset = useCallback((presetKey) => {
+    if (!presetKey) return;
+    const builtin = FILTER_PRESET_BUILTIN[presetKey];
+    if (builtin) {
+      setFilterRoot(builtin());
+      return;
+    }
+    const custom = customPresets.find((p) => p.name === presetKey);
+    if (custom) setFilterRoot(cloneFilterRootWithNewIds(custom.filter));
+  }, [customPresets]);
+
+  const handlePresetChange = useCallback((e) => {
+    const value = e.target.value;
+    setFilterPreset(value);
+    applyFilterPreset(value);
+  }, [applyFilterPreset]);
+
+  const handleSaveFilterAs = useCallback(() => {
+    const name = window.prompt("Enter preset name");
+    if (!name || !name.trim()) return;
+    setCustomPresets((prev) => [...prev, { id: genId(), name: name.trim(), filter: cloneFilterRootWithNewIds(filterRoot) }]);
+    setFilterPreset(name.trim());
+  }, [filterRoot]);
+
   const handleGenerate = () => {
     if (selectedIndicators.length === 0 || xAxisKeys.length === 0 || yAxisKeys.length === 0) {
       alert("Select at least one indicator, one X axis parameter, and one Y axis parameter");
       return;
     }
+    const filters = {
+      logic: filterRoot.rootLogic,
+      groups: filterRoot.groups.map((g) => ({
+        logic: g.logic,
+        conditions: g.conditions.map((c) => ({ field: c.field, op: c.op, value: c.value })),
+      })),
+    };
     const config = {
       indicators: selectedIndicators,
       xAxis: xAxisKeys,
@@ -3013,17 +3141,144 @@ const HeatMapConfigurator = memo(({ indicators, onGenerate }) => {
 
             <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
               <div className={cx("text-[11px] font-medium text-[#d9d9d9] mb-3")}>Filters</div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {HEATMAP_FILTER_KEYS.map(key => (
-                  <div key={key}>
-                    <label className={cx("block mb-1 text-[10px]", ui.textMuted)}>{key}</label>
-                    <input
-                      type="text"
-                      value={filters[key] ?? ""}
-                      onChange={(e) => setFilters(prev => ({ ...prev, [key]: e.target.value }))}
-                      placeholder="—"
-                      className={cx(ui.input, "h-8 text-[11px] w-full")}
-                    />
+              <div className="space-y-3">
+                {/* Filter Preset + Save filter as */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className={cx("text-[10px]", ui.textMuted)}>Filter Preset</label>
+                  <select
+                    value={filterPreset}
+                    onChange={handlePresetChange}
+                    className={cx(ui.input, "h-8 text-[11px] min-w-[160px]")}
+                  >
+                    <option value="">—</option>
+                    {Object.keys(FILTER_PRESET_BUILTIN).map((key) => (
+                      <option key={key} value={key}>{key}</option>
+                    ))}
+                    {customPresets.map((p) => (
+                      <option key={p.id} value={p.name}>{p.name}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleSaveFilterAs}
+                    className={cx(ui.btn, "h-8 px-3 text-[11px]")}
+                  >
+                    Save filter as
+                  </button>
+                </div>
+                {/* Root: logical operation + Add Group */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex rounded-md overflow-hidden border border-[#303030]">
+                    <button
+                      type="button"
+                      onClick={() => setRootLogic("and")}
+                      className={cx("px-3 py-1.5 text-[11px] font-medium", filterRoot.rootLogic === "and" ? "bg-rose-600/80 text-white" : "bg-[#1a1a1a] text-[#8c8c8c] hover:bg-[#252525]")}
+                    >
+                      And
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRootLogic("or")}
+                      className={cx("px-3 py-1.5 text-[11px] font-medium", filterRoot.rootLogic === "or" ? "bg-rose-600/80 text-white" : "bg-[#1a1a1a] text-[#8c8c8c] hover:bg-[#252525]")}
+                    >
+                      Or
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addGroup}
+                    className="inline-flex items-center justify-center rounded-md border border-emerald-600 bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 px-2 py-1.5 text-[11px]"
+                  >
+                    + Add Group
+                  </button>
+                </div>
+                {/* Groups */}
+                {filterRoot.groups.map((group) => (
+                  <div key={group.id} className="rounded-lg border border-[#303030] bg-[#141414] overflow-hidden border-l-4 border-l-sky-500/50">
+                    <div className="flex flex-wrap items-center gap-2 px-3 py-2 bg-sky-500/10 border-b border-[#303030]">
+                      <button
+                        type="button"
+                        onClick={() => removeGroup(group.id)}
+                        className="text-red-400/90 hover:text-red-300 p-0.5 rounded text-[14px] leading-none"
+                        aria-label="Remove group"
+                      >
+                        ×
+                      </button>
+                      <div className="flex rounded overflow-hidden border border-[#303030]">
+                        <button
+                          type="button"
+                          onClick={() => setGroupLogic(group.id, "and")}
+                          className={cx("px-2 py-1 text-[10px] font-medium", group.logic === "and" ? "bg-rose-600/80 text-white" : "bg-[#1a1a1a] text-[#8c8c8c] hover:bg-[#252525]")}
+                        >
+                          And
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setGroupLogic(group.id, "or")}
+                          className={cx("px-2 py-1 text-[10px] font-medium", group.logic === "or" ? "bg-rose-600/80 text-white" : "bg-[#1a1a1a] text-[#8c8c8c] hover:bg-[#252525]")}
+                        >
+                          Or
+                        </button>
+                      </div>
+                      <span className="text-[10px] text-sky-200/90">Group</span>
+                      <button
+                        type="button"
+                        onClick={() => addCondition(group.id)}
+                        className="inline-flex items-center justify-center rounded border border-emerald-600 bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 px-2 py-1 text-[10px] ml-auto"
+                      >
+                        + Add Condition
+                      </button>
+                    </div>
+                    <div className="p-2 space-y-2 overflow-x-auto min-w-0">
+                      {group.conditions.length === 0 ? (
+                        <div className="text-[10px] text-[#595959] py-2 px-3">No conditions. Add a condition above.</div>
+                      ) : (
+                        group.conditions.map((cond) => {
+                          const noValue = cond.op === "IS_NULL" || cond.op === "IS_NOT_NULL";
+                          return (
+                            <div key={cond.id} className="flex flex-nowrap items-center gap-1.5 py-1.5 px-2 rounded border border-[#303030]/50 bg-[#0f0f0f] min-w-0">
+                              <button
+                                type="button"
+                                onClick={() => removeCondition(group.id, cond.id)}
+                                className="text-red-400/90 hover:text-red-300 p-0.5 rounded text-[14px] leading-none shrink-0"
+                                aria-label="Remove condition"
+                              >
+                                ×
+                              </button>
+                              <select
+                                value={cond.field}
+                                onChange={(e) => updateCondition(group.id, cond.id, { field: e.target.value })}
+                                className={cx(ui.input, "h-7 text-[10px] w-[115px] min-w-0 shrink-0 bg-sky-900/30 border-sky-500/50 text-sky-100")}
+                              >
+                                {HEATMAP_FILTER_KEYS.map((f) => (
+                                  <option key={f} value={f}>{f}</option>
+                                ))}
+                              </select>
+                              <select
+                                value={cond.op}
+                                onChange={(e) => updateCondition(group.id, cond.id, { op: e.target.value })}
+                                className={cx(ui.input, "h-7 text-[10px] w-[115px] min-w-0 shrink-0 bg-emerald-900/30 border-emerald-500/50 text-emerald-100")}
+                              >
+                                {FILTER_OPERATIONS.map((op) => (
+                                  <option key={op.value} value={op.value}>{op.label}</option>
+                                ))}
+                              </select>
+                              {noValue ? (
+                                <span className="text-[10px] text-[#595959] shrink-0">(no value)</span>
+                              ) : (
+                                <input
+                                  type="text"
+                                  value={cond.value}
+                                  onChange={(e) => updateCondition(group.id, cond.id, { value: e.target.value })}
+                                  placeholder="Value"
+                                  className={cx(ui.input, "h-7 text-[10px] min-w-[70px] flex-1 bg-[#1a1a1a] text-[#d9d9d9]")}
+                                />
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -3160,21 +3415,17 @@ normAIR = 1/(1+EXP(-1*(AIR - MEDIAN(AIR)) / (QUARTILE.INC(AIR,3) - QUARTILE.INC(
 normHitRate = 1/(1+EXP(-1*(HitRate - MEDIAN(HitRate)) / (QUARTILE.INC(HitRate,3) - QUARTILE.INC(HitRate,1))))
 normStability = 1/(1+EXP(-1*(Stability - MEDIAN(Stability)) / (QUARTILE.INC(Stability,3) - QUARTILE.INC(Stability,1))))`;
 
-const HyperoptDetailsTooltip = memo(function HyperoptDetailsTooltip() {
-  const [show, setShow] = useState(false);
+const HyperoptDetailsTooltip = memo(function HyperoptDetailsTooltip({ onShowDetails }) {
   return (
-    <div
-      className="relative inline-block"
-      onMouseEnter={() => setShow(true)}
-      onMouseLeave={() => setShow(false)}
+    <button
+      type="button"
+      onClick={() => onShowDetails?.()}
+      className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#303030] text-[11px] text-[#8c8c8c] cursor-pointer hover:bg-[#404040] hover:text-[#d9d9d9] transition-colors"
+      title="Formulas info"
+      aria-label="Show formulas info"
     >
-      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#303030] text-[11px] text-[#8c8c8c] cursor-help" title="Formulas info">ⓘ</span>
-      {show && (
-        <div className="absolute z-50 bottom-full left-0 mb-1 w-[320px] max-w-[90vw] p-3 rounded-lg border border-[#303030] bg-[#1a1a1a] text-[10px] font-mono text-[#d9d9d9] whitespace-pre-wrap shadow-xl">
-          {HYPEROPT_DETAILS_TOOLTIP_TEXT}
-        </div>
-      )}
-    </div>
+      ⓘ
+    </button>
   );
 });
 
@@ -3430,12 +3681,15 @@ IF RSI > 70 OR Close < EMA THEN SELL
   
   // HeatMap state
   const [showHeatMapConfig, setShowHeatMapConfig] = useState(false);
+  const [heatMapConfigModalId, setHeatMapConfigModalId] = useState(null);
+  const [heatMapViewModalId, setHeatMapViewModalId] = useState(null);
   const [generatedHeatMap, setGeneratedHeatMap] = useState(null);
   
   // Report Modal state
   const [showReportModal, setShowReportModal] = useState(false);
   // Hyperopt Results: Run normalization modal (same content as Normalization formulas block)
   const [showNormalizationModal, setShowNormalizationModal] = useState(false);
+  const [showHyperoptDetailsModal, setShowHyperoptDetailsModal] = useState(false);
   // Hyperopt Results: which level-1 rows are expanded (collapse/expand)
   const [hyperoptResultsExpanded, setHyperoptResultsExpanded] = useState(() => new Set(["hr1", "hr2"]));
   const toggleHyperoptRow = useCallback((id) => {
@@ -3446,14 +3700,32 @@ IF RSI > 70 OR Close < EMA THEN SELL
       return next;
     });
   }, []);
-  // Hyperopt Results two-level table data (level 1: runs; level 2: per-run results with Min/AVG/Max score)
+  // Level 3 (HeatMaps & Reports) expanded per level-2 row id
+  const [hyperoptLevel3Expanded, setHyperoptLevel3Expanded] = useState(() => new Set(["hr1-1", "hr1-2"]));
+  const toggleHyperoptLevel3 = useCallback((id) => {
+    setHyperoptLevel3Expanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+  // Hyperopt Results three-level table data (level 1: runs; level 2: normalization results; level 3: HeatMaps & Reports)
   const [hyperoptResultsRows, setHyperoptResultsRows] = useState(() => [
     { id: "hr1", date: "2024-01-15", pairs: "BTC/USDT", timeFrame: "1h", knowRange: "2020-01-01 – 2023-06-01", unknowRange: "2023-06-01 – 2023-12-31", children: [
-      { id: "hr1-1", date: "2024-01-15", minScore: "0.20", avgScore: "0.55", maxScore: "0.89" },
-      { id: "hr1-2", date: "2024-01-16", minScore: "0.18", avgScore: "0.52", maxScore: "0.87" },
+      { id: "hr1-1", date: "2024-01-15", minScore: "0.20", avgScore: "0.55", maxScore: "0.89", heatmapsAndReports: [
+        { id: "hr1-1-h1", date: "2024-01-15", type: "Heatmap" },
+        { id: "hr1-1-r1", date: "2024-01-15", type: "Report" },
+      ]},
+      { id: "hr1-2", date: "2024-01-16", minScore: "0.18", avgScore: "0.52", maxScore: "0.87", heatmapsAndReports: [
+        { id: "hr1-2-h1", date: "2024-01-16", type: "Heatmap" },
+      ]},
     ]},
     { id: "hr2", date: "2024-01-14", pairs: "ETH/USDT", timeFrame: "4h", knowRange: "2021-01-01 – 2023-09-01", unknowRange: "2023-09-01 – 2024-01-01", children: [
-      { id: "hr2-1", date: "2024-01-14", minScore: "0.22", avgScore: "0.58", maxScore: "0.91" },
+      { id: "hr2-1", date: "2024-01-14", minScore: "0.22", avgScore: "0.58", maxScore: "0.91", heatmapsAndReports: [
+        { id: "hr2-1-h1", date: "2024-01-14", type: "Heatmap" },
+        { id: "hr2-1-r1", date: "2024-01-14", type: "Report" },
+      ]},
     ]},
   ]);
   
@@ -3549,6 +3821,7 @@ IF RSI > 70 OR Close < EMA THEN SELL
         zoomStack: [],
       });
       setShowHeatMapConfig(null);
+      setHeatMapConfigModalId(null);
     } catch (err) {
       console.error("HeatMap generation failed:", err);
       alert("HeatMap generation failed. Check console for details.");
@@ -3761,7 +4034,6 @@ IF RSI > 70 OR Close < EMA THEN SELL
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="text-[12px] font-medium text-[#d9d9d9] mb-1">Selected Indicators</div>
-                        <div className={cx("text-[11px]", ui.textMuted)}>Enable/disable, reorder, and edit</div>
                       </div>
                       <div className={cx(
                         "text-[11px] shrink-0 rounded-md border px-2 py-1.5",
@@ -3770,34 +4042,10 @@ IF RSI > 70 OR Close < EMA THEN SELL
                         Total combinations: <span className="font-medium">{totalCombinations.toLocaleString()}</span>
                       </div>
                     </div>
-                    <div className="mt-3 flex gap-2">
-                      <button 
-                        onClick={() => setSelectedTab("list")}
-                        className={cx(
-                          "px-3 py-1.5 text-[11px] rounded-md border transition",
-                          selectedTab === "list" 
-                            ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
-                            : "border-[#303030] bg-transparent text-[#d9d9d9] hover:bg-[#1f1f1f]"
-                        )}
-                      >
-                        List
-                      </button>
-                      <button 
-                        onClick={() => setSelectedTab("code")}
-                        className={cx(
-                          "px-3 py-1.5 text-[11px] rounded-md border transition",
-                          selectedTab === "code" 
-                            ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
-                            : "border-[#303030] bg-transparent text-[#d9d9d9] hover:bg-[#1f1f1f]"
-                        )}
-                      >
-                        Code Preview
-                      </button>
-                    </div>
                   </div>
                   
                   <div className="flex-1 overflow-auto p-3">
-                    {selectedTab === "list" ? (
+                    {true ? (
                       indicators.length === 0 ? (
                         <div className={cx(ui.radius, ui.panelMuted, "p-6 text-center text-[12px]", ui.textMuted)}>
                           No indicators yet. Add one from the library.
@@ -3852,7 +4100,7 @@ IF RSI > 70 OR Close < EMA THEN SELL
               >
                 <div>
                   <div className="text-[12px] font-medium text-[#d9d9d9]">2. Signal Formulas</div>
-                  <div className={cx("text-[11px]", ui.textMuted)}>Define trading signals using IF-THEN syntax</div>
+                  <div className={cx("text-[11px]", ui.textMuted)}>Define trading signals using python formula or builder</div>
                 </div>
                 <span className="text-[#8c8c8c] text-[10px]">{collapsedSections.has(2) ? "▶" : "▼"}</span>
               </button>
@@ -3944,10 +4192,6 @@ IF RSI > 70 OR Close < EMA THEN SELL
                       <input type="text" value={tEndTrunc} onChange={(e) => setTEndTrunc(e.target.value)} placeholder="t_end_trunc" className={cx(ui.input, "h-9 text-[12px] w-full")} />
                     </div>
                     <div>
-                      <label className={cx("block mb-1 text-xs", ui.textMuted)}>Fold size</label>
-                      <input type="text" value={foldSize} onChange={(e) => setFoldSize(e.target.value)} placeholder="Fold size" className={cx(ui.input, "h-9 text-[12px] w-full")} />
-                    </div>
-                    <div>
                       <label className={cx("block mb-1 text-xs", ui.textMuted)}>Max possible std</label>
                       <input type="text" value={maxPossibleStd} onChange={(e) => setMaxPossibleStd(e.target.value)} placeholder="Max possible std" className={cx(ui.input, "h-9 text-[12px] w-full")} />
                     </div>
@@ -3962,19 +4206,13 @@ IF RSI > 70 OR Close < EMA THEN SELL
                   </select>
                 </div>
 
-                {/* Normalization formulas — Final Score block (no collapse) */}
+                {/* Normalization formulas — shown only when Hyperopt type is not Brute Force */}
+                {hyperoptType !== "Brute Force" && (
                 <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
                   <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">Normalization formulas</div>
                   <div className="p-3 pt-0 space-y-3 border-t border-[#303030]">
                           <div className="space-y-1.5">
-                            <div className="flex items-center gap-2">
-                              <div className="text-[11px] font-medium text-[#d9d9d9]">Score formula</div>
-                              {finFinalFormulaCode && (
-                                <span className="inline-flex items-center rounded-md border border-emerald-500/60 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-400">
-                                  fx
-                                </span>
-                              )}
-                            </div>
+                          <div className="text-[11px] font-medium text-[#d9d9d9]">Score formula</div>
                             <div className="flex flex-wrap items-center gap-3 gap-y-2">
                               <select value={finalScoreFormula} onChange={(e) => setFinalScoreFormula(e.target.value)} className={cx(ui.input, "h-9 text-[12px] w-full max-w-[200px]")}>
                                 {FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
@@ -4089,6 +4327,7 @@ IF RSI > 70 OR Close < EMA THEN SELL
                           </div>
                   </div>
                 </div>
+                )}
 
                 {!isRunningOptimization ? (
                   <button 
@@ -4167,6 +4406,9 @@ IF RSI > 70 OR Close < EMA THEN SELL
                   <table className="w-full border-collapse text-[11px]">
                     <thead className="bg-[#1a1a1a] text-[#8c8c8c]">
                       <tr>
+                        <th colSpan={7} className="px-3 py-2 text-left font-medium border-b border-[#303030] border-l-4 border-l-emerald-500 bg-emerald-500/10 text-emerald-200">Hyperopt result</th>
+                      </tr>
+                      <tr>
                         <th className="px-2 py-2 text-left font-medium border-b border-[#303030] w-8"></th>
                         <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Date</th>
                         <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Pairs</th>
@@ -4205,14 +4447,17 @@ IF RSI > 70 OR Close < EMA THEN SELL
                               </button>
                             </td>
                           </tr>
-                          {/* Level 2: only when expanded */}
                           {hyperoptResultsExpanded.has(row.id) && row.children && row.children.length > 0 && (
                             <>
                               <tr>
                                 <td colSpan={7} className="p-0 bg-[#0f0f0f] border-b border-[#303030]">
                                   <table className="w-full border-collapse text-[11px]">
                                     <thead>
+                                      <tr>
+                                        <th colSpan={7} className="px-3 py-1.5 text-left font-medium border-b border-[#303030] border-l-4 border-l-sky-500 bg-sky-500/10 text-sky-200">Normalization result</th>
+                                      </tr>
                                       <tr className="bg-[#141414] text-[#8c8c8c]">
+                                        <th className="px-2 py-1.5 text-left font-medium border-b border-[#303030] w-8"></th>
                                         <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030] w-24">Date</th>
                                         <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Min Score</th>
                                         <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">AVG Score</th>
@@ -4224,80 +4469,100 @@ IF RSI > 70 OR Close < EMA THEN SELL
                                     <tbody>
                                       {row.children.map((sub) => {
                                         const heatMapId = `hyperopt-${row.id}-${sub.id}`;
+                                        const level3Items = sub.heatmapsAndReports || [];
+                                        const isLevel3Expanded = hyperoptLevel3Expanded.has(sub.id);
                                         return (
-                                          <tr key={sub.id} className="border-b border-[#303030]/50 hover:bg-[#1a1a1a]">
-                                            <td className="px-3 py-2 pl-6 text-[#a6a6a6]">{sub.date}</td>
-                                            <td className="px-3 py-2">{sub.minScore}</td>
-                                            <td className="px-3 py-2">{sub.avgScore}</td>
-                                            <td className="px-3 py-2">{sub.maxScore}</td>
-                                            <td className="px-3 py-2">
-                                              <HyperoptDetailsTooltip />
-                                            </td>
-                                            <td className="px-3 py-2">
-                                              <div className="flex items-center gap-2">
-                                                <button
-                                                  type="button"
-                                                  onClick={() => setShowHeatMapConfig(showHeatMapConfig === heatMapId ? null : heatMapId)}
-                                                  className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
-                                                >
-                                                  {showHeatMapConfig === heatMapId ? "Hide" : "Configure HeatMap"}
-                                                </button>
-                                                <button
-                                                  type="button"
-                                                  onClick={() => setShowReportModal(true)}
-                                                  className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
-                                                >
-                                                  Generate Report
-                                                </button>
-                                              </div>
-                                            </td>
-                                          </tr>
+                                          <React.Fragment key={sub.id}>
+                                            <tr className="border-b border-[#303030]/50 hover:bg-[#1a1a1a]">
+                                              <td className="px-2 py-2 align-middle">
+                                                {level3Items.length > 0 && (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => toggleHyperoptLevel3(sub.id)}
+                                                    className="text-[#8c8c8c] hover:text-[#d9d9d9] p-0.5 rounded"
+                                                    aria-label={isLevel3Expanded ? "Collapse" : "Expand"}
+                                                  >
+                                                    {isLevel3Expanded ? "▼" : "▶"}
+                                                  </button>
+                                                )}
+                                              </td>
+                                              <td className="px-3 py-2 pl-4 text-[#a6a6a6]">{sub.date}</td>
+                                              <td className="px-3 py-2">{sub.minScore}</td>
+                                              <td className="px-3 py-2">{sub.avgScore}</td>
+                                              <td className="px-3 py-2">{sub.maxScore}</td>
+                                              <td className="px-3 py-2">
+                                                <HyperoptDetailsTooltip onShowDetails={() => setShowHyperoptDetailsModal(true)} />
+                                              </td>
+                                              <td className="px-3 py-2">
+                                                <div className="flex items-center gap-2">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => setHeatMapConfigModalId(heatMapId)}
+                                                    className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
+                                                  >
+                                                    Configure HeatMap
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => setShowReportModal(true)}
+                                                    className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
+                                                  >
+                                                    Generate Report
+                                                  </button>
+                                                </div>
+                                              </td>
+                                            </tr>
+                                            {isLevel3Expanded && level3Items.length > 0 && (
+                                              <tr>
+                                                <td colSpan={7} className="p-0 bg-[#0a0a0a] border-b border-[#303030]/50">
+                                                  <table className="w-full border-collapse text-[11px]">
+                                                    <thead>
+                                                      <tr>
+                                                        <th colSpan={4} className="px-3 py-1.5 text-left font-medium border-b border-[#303030] border-l-4 border-l-amber-500 bg-amber-500/10 text-amber-200 pl-8">HeatMaps &amp; Reports</th>
+                                                      </tr>
+                                                      <tr className="bg-[#141414] text-[#8c8c8c]">
+                                                        <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030] w-24 pl-8">Date</th>
+                                                        <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Type</th>
+                                                        <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Details</th>
+                                                        <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Actions</th>
+                                                      </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                      {level3Items.map((item) => (
+                                                        <tr key={item.id} className="border-b border-[#303030]/30 hover:bg-[#141414]">
+                                                          <td className="px-3 py-2 pl-8 text-[#a6a6a6]">{item.date}</td>
+                                                          <td className="px-3 py-2">{item.type}</td>
+                                                          <td className="px-3 py-2">
+                                                            <button
+                                                              type="button"
+                                                              title="info"
+                                                              className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1 rounded inline-flex items-center justify-center"
+                                                              aria-label="Info"
+                                                            >
+                                                              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" /></svg>
+                                                            </button>
+                                                          </td>
+                                                          <td className="px-3 py-2">
+                                                            {item.type === "Heatmap" ? (
+                                                              <button type="button" onClick={() => setHeatMapViewModalId(heatMapId)} className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}>Show heatmap</button>
+                                                            ) : (
+                                                              <button type="button" onClick={() => setShowReportModal(true)} className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}>Download report</button>
+                                                            )}
+                                                          </td>
+                                                        </tr>
+                                                      ))}
+                                                    </tbody>
+                                                  </table>
+                                                </td>
+                                              </tr>
+                                            )}
+                                          </React.Fragment>
                                         );
                                       })}
                                     </tbody>
                                   </table>
                                 </td>
                               </tr>
-                              {/* HeatMap configurator row for this hyperopt run */}
-                              {row.children.map((sub) => {
-                                const heatMapId = `hyperopt-${row.id}-${sub.id}`;
-                                return (
-                                  <React.Fragment key={`hm-cfg-${sub.id}`}>
-                                    {showHeatMapConfig === heatMapId && (
-                                      <tr>
-                                        <td colSpan={7} className="p-3 bg-[#0f0f0f] border-b border-[#303030]">
-                                          <HeatMapConfigurator
-                                            indicators={indicators}
-                                            onGenerate={(config) => handleGenerateHeatMap(config, heatMapId)}
-                                          />
-                                        </td>
-                                      </tr>
-                                    )}
-                                    {generatedHeatMap && generatedHeatMap.runId === heatMapId && (
-                                      <tr>
-                                        <td colSpan={7} className="p-3 bg-[#0f0f0f] border-b border-[#303030]">
-                                          <div className="flex items-center justify-end gap-2 mb-2">
-                                            <button onClick={() => setGeneratedHeatMap(null)} className={cx(ui.btn, "h-7 px-2 text-[10px]")}>
-                                              Clear HeatMap
-                                            </button>
-                                          </div>
-                                          <HeatMapView
-                                            heatMapData={currentHeatMapData}
-                                            config={generatedHeatMap.config}
-                                            onCellClick={(cell) => handleHeatMapCellClick(cell, heatMapId)}
-                                            onZoomOut={() => handleHeatMapZoomOut(heatMapId)}
-                                            onResetZoom={() => handleHeatMapResetZoom(heatMapId)}
-                                            canZoomOut={generatedHeatMap.zoomStack.length > 0}
-                                            canReset={generatedHeatMap.zoomStack.length > 0}
-                                            zoomLevel={generatedHeatMap.zoomStack.length}
-                                            zoomLevelLabel={generatedHeatMap.zoomStack.length > 0 ? generatedHeatMap.zoomStack[generatedHeatMap.zoomStack.length - 1].label : "Full heatmap"}
-                                          />
-                                        </td>
-                                      </tr>
-                                    )}
-                                  </React.Fragment>
-                                );
-                              })}
                             </>
                           )}
                         </React.Fragment>
@@ -4490,14 +4755,7 @@ IF RSI > 70 OR Close < EMA THEN SELL
                 <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">Normalization formulas</div>
                 <div className="p-3 pt-0 space-y-3 border-t border-[#303030]">
                   <div className="space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      <div className="text-[11px] font-medium text-[#d9d9d9]">Score formula</div>
-                      {finFinalFormulaCode && (
-                        <span className="inline-flex items-center rounded-md border border-emerald-500/60 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-400">
-                          fx
-                        </span>
-                      )}
-                    </div>
+                    <div className="text-[11px] font-medium text-[#d9d9d9]">Score formula</div>
                     <div className="flex flex-wrap items-center gap-3 gap-y-2">
                       <select value={finalScoreFormula} onChange={(e) => setFinalScoreFormula(e.target.value)} className={cx(ui.input, "h-9 text-[12px] w-full max-w-[200px]")}>
                         {FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
@@ -4540,10 +4798,15 @@ IF RSI > 70 OR Close < EMA THEN SELL
                       </select>
                       <div className="min-w-[200px] flex-1 max-w-[400px]">
                         <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-9 overflow-hidden">
-                          <div data-formula-mirror className="absolute inset-0 px-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
+                          <div data-formula-mirror className="absolute left-0 top-0 bottom-0 right-8 pl-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
                             <span className="inline-block min-w-full">{finStabilityFormulaCode ? renderFormulaWithVariables(finStabilityFormulaCode) : <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>}</span>
                           </div>
-                          <input type="text" value={finStabilityFormulaCode} onChange={(e) => setFinStabilityFormulaCode(e.target.value)} onScroll={(e) => { const m = e.target.parentElement?.querySelector("[data-formula-mirror]"); if (m) m.scrollLeft = e.target.scrollLeft; }} className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 px-3 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset" />
+                          <input type="text" value={finStabilityFormulaCode} onChange={(e) => setFinStabilityFormulaCode(e.target.value)} onScroll={(e) => { const m = e.target.parentElement?.querySelector("[data-formula-mirror]"); if (m) m.scrollLeft = e.target.scrollLeft; }} className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 pl-3 pr-8 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset" />
+                          <button type="button" onClick={() => openFormulaEditor(finStabilityFormulaCode, setFinStabilityFormulaCode)} className="absolute right-0 top-0 bottom-0 z-20 flex items-center justify-center w-8 h-full bg-emerald-600 text-white hover:bg-emerald-500 active:bg-emerald-700 rounded-r-md" title="Формула">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                              <path fillRule="nonzero" d="M5 4.5C5 3.672 5.672 3 6.5 3h11c.828 0 1.5.672 1.5 1.5V5c0 .552-.448 1-1 1s-1-.448-1-1V5H7v.54l6.562 5.625c.512.44.512 1.232 0 1.671L7 18.46V19h10c.552 0 1 .448 1 1s-.448 1-1 1H6.5C5.672 21 5 20.328 5 19.5v-1.27c0-.438.191-.854.524-1.139l5.94-4.091L5.524 6.909C5.191 6.624 5 6.208 5 5.77V4.5z" />
+                            </svg>
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -4586,11 +4849,16 @@ IF RSI > 70 OR Close < EMA THEN SELL
                             </select>
                           </td>
                           <td className="px-3 py-2 align-top min-w-[200px]">
-                            <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-8 overflow-hidden">
-                              <div data-formula-mirror className="absolute inset-0 px-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
+                            <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-8 overflow-hidden min-w-[200px]">
+                              <div data-formula-mirror className="absolute left-0 top-0 bottom-0 right-8 pl-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
                                 <span className="inline-block min-w-full">{finStabilityFormulaCode ? renderFormulaWithVariables(finStabilityFormulaCode) : <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>}</span>
                               </div>
-                              <input type="text" value={finStabilityFormulaCode} onChange={(e) => setFinStabilityFormulaCode(e.target.value)} onScroll={(e) => { const m = e.target.parentElement?.querySelector("[data-formula-mirror]"); if (m) m.scrollLeft = e.target.scrollLeft; }} className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 px-3 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset" />
+                              <input type="text" value={finStabilityFormulaCode} onChange={(e) => setFinStabilityFormulaCode(e.target.value)} onScroll={(e) => { const m = e.target.parentElement?.querySelector("[data-formula-mirror]"); if (m) m.scrollLeft = e.target.scrollLeft; }} className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 pl-3 pr-8 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset" />
+                              <button type="button" onClick={() => openFormulaEditor(finStabilityFormulaCode, setFinStabilityFormulaCode)} className="absolute right-0 top-0 bottom-0 z-20 flex items-center justify-center w-8 h-full bg-emerald-600 text-white hover:bg-emerald-500 active:bg-emerald-700 rounded-r-md" title="Формула">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                                  <path fillRule="nonzero" d="M5 4.5C5 3.672 5.672 3 6.5 3h11c.828 0 1.5.672 1.5 1.5V5c0 .552-.448 1-1 1s-1-.448-1-1V5H7v.54l6.562 5.625c.512.44.512 1.232 0 1.671L7 18.46V19h10c.552 0 1 .448 1 1s-.448 1-1 1H6.5C5.672 21 5 20.328 5 19.5v-1.27c0-.438.191-.854.524-1.139l5.94-4.091L5.524 6.909C5.191 6.624 5 6.208 5 5.77V4.5z" />
+                                </svg>
+                              </button>
                             </div>
                           </td>
                           <td className="px-3 py-2 align-top">
@@ -4648,6 +4916,167 @@ IF RSI > 70 OR Close < EMA THEN SELL
             </div>
             <div className="px-4 py-3 border-t border-[#303030] flex justify-end">
               <button type="button" onClick={() => setShowNormalizationModal(false)} className={cx(ui.btnPrimary, "h-8 px-3 text-[11px]")}>Apply</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Formulas info modal (read-only) — opens when Details ⓘ is clicked */}
+      {showHyperoptDetailsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={() => setShowHyperoptDetailsModal(false)}>
+          <div className={cx(ui.radius, "bg-[#141414] border border-[#303030] max-w-[720px] w-full max-h-[90vh] overflow-hidden flex flex-col shadow-xl")} onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#303030]">
+              <span className="text-[14px] font-medium text-[#d9d9d9]">Formulas info (read-only)</span>
+              <button type="button" onClick={() => setShowHyperoptDetailsModal(false)} className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1">✕</button>
+            </div>
+            <div className="overflow-auto p-4">
+              <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
+                <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">Normalization formulas</div>
+                <div className="p-3 pt-0 space-y-3 border-t border-[#303030]">
+                  <div className="space-y-1.5">
+                    <div className="text-[11px] font-medium text-[#d9d9d9]">Score formula</div>
+                    <div className="flex flex-wrap items-center gap-3 gap-y-2">
+                      <span className="text-[11px] text-[#a6a6a6]">{finalScoreFormula}</span>
+                      <div className="min-w-[200px] flex-1 max-w-[400px] rounded-md border border-[#303030] bg-[#0f0f0f] px-3 py-2 text-[11px] font-mono text-[#d9d9d9]">
+                        {finFinalFormulaCode ? renderFormulaWithVariables(finFinalFormulaCode) : <span className="text-[#595959]">—</span>}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="text-[11px] font-medium text-[#d9d9d9]">Stability Formula</div>
+                    <div className="flex flex-wrap items-center gap-3 gap-y-2">
+                      <span className="text-[11px] text-[#a6a6a6]">{finStabilityFormula}</span>
+                      <div className="min-w-[200px] flex-1 max-w-[400px] rounded-md border border-[#303030] bg-[#0f0f0f] px-3 py-2 text-[11px] font-mono text-[#d9d9d9]">
+                        {finStabilityFormulaCode ? renderFormulaWithVariables(finStabilityFormulaCode) : <span className="text-[#595959]">—</span>}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="text-[11px] font-medium text-[#d9d9d9]">Stability weights (sum ≤ 100%)</div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
+                      {[
+                        { label: "StabWeightMFE", val: finStabMfeWeight },
+                        { label: "StabWeightMAE", val: finStabMaeWeight },
+                        { label: "StabWeightAIR", val: finStabAirWeight },
+                        { label: "StabWeightHitRate", val: finStabHitRateWeight },
+                      ].map((s) => (
+                        <div key={s.label} className="flex items-center gap-2">
+                          <span className="text-[10px] text-[#8c8c8c] shrink-0">{s.label}</span>
+                          <span className="text-[#d9d9d9] text-[11px]">{s.val}%</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="text-[10px] text-[#8c8c8c]">Total: {finStabWeightsSum}%</div>
+                  </div>
+                  <div className="text-[11px] font-medium text-[#d9d9d9]">Normalization metrics formulas and weights</div>
+                  <div className="overflow-x-auto border border-[#303030] rounded-lg">
+                    <table className="w-full text-[11px] border-collapse">
+                      <thead>
+                        <tr className="bg-[#1a1a1a] text-[#8c8c8c]">
+                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030] w-24">Metrics</th>
+                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030] w-32">Formula</th>
+                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030] min-w-[200px]">Formula Code</th>
+                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Weight</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-[#d9d9d9]">
+                        <tr className="border-b border-[#303030]">
+                          <td className="px-3 py-2 text-[#a6a6a6] align-top">Stability</td>
+                          <td className="px-3 py-2 align-top">{finStabilityFormula}</td>
+                          <td className="px-3 py-2 align-top min-w-[200px]">
+                            <div className="rounded border border-[#303030] bg-[#0f0f0f] px-2 py-1.5 text-[11px] font-mono">
+                              {finStabilityFormulaCode ? renderFormulaWithVariables(finStabilityFormulaCode) : <span className="text-[#595959]">—</span>}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 align-top">{finStabilityWeight}%</td>
+                        </tr>
+                        {[
+                          { metric: "MFE", formula: finMfeFormula, formulaCode: finMfeFormulaCode, weight: finMfeWeight },
+                          { metric: "MAE", formula: finMaeFormula, formulaCode: finMaeFormulaCode, weight: finMaeWeight },
+                          { metric: "AIR", formula: finAirFormula, formulaCode: finAirFormulaCode, weight: finAirWeight },
+                          { metric: "Hit rate", formula: finHitRateFormula, formulaCode: finHitRateFormulaCode, weight: finHitRateWeight },
+                        ].map((row) => (
+                          <tr key={row.metric} className="border-b border-[#303030]">
+                            <td className="px-3 py-2 text-[#a6a6a6] align-top">{row.metric}</td>
+                            <td className="px-3 py-2 align-top">{row.formula}</td>
+                            <td className="px-3 py-2 align-top min-w-[200px]">
+                              <div className="rounded border border-[#303030] bg-[#0f0f0f] px-2 py-1.5 text-[11px] font-mono">
+                                {row.formulaCode ? renderFormulaWithVariables(row.formulaCode) : <span className="text-[#595959]">—</span>}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2 align-top">{row.weight}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-[#1a1a1a]">
+                          <td colSpan={3} className="px-3 py-2 text-right text-[11px] font-medium text-[#8c8c8c]">Total</td>
+                          <td className={cx("px-3 py-2 text-[11px] font-medium", finWeightsSum === 100 ? "text-emerald-500" : finWeightsSum > 100 ? "text-amber-500" : "text-[#8c8c8c]")}>{finWeightsSum}%</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="px-4 py-3 border-t border-[#303030] flex justify-end">
+              <button type="button" onClick={() => setShowHyperoptDetailsModal(false)} className={cx(ui.btn, "h-8 px-3 text-[11px]")}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* HeatMap configurator modal — opens when Configure HeatMap is clicked */}
+      {heatMapConfigModalId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={() => setHeatMapConfigModalId(null)}>
+          <div className={cx(ui.radius, "bg-[#141414] border border-[#303030] w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col shadow-xl")} onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#303030]">
+              <span className="text-[14px] font-medium text-[#d9d9d9]">Configure HeatMap</span>
+              <button type="button" onClick={() => setHeatMapConfigModalId(null)} className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1">✕</button>
+            </div>
+            <div className="overflow-auto p-4">
+              <HeatMapConfigurator
+                indicators={indicators}
+                onGenerate={(config) => handleGenerateHeatMap(config, heatMapConfigModalId)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+      {/* HeatMap view modal — opens when Show heatmap is clicked */}
+      {heatMapViewModalId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={() => setHeatMapViewModalId(null)}>
+          <div className={cx(ui.radius, "bg-[#141414] border border-[#303030] w-full max-w-[95vw] max-h-[90vh] overflow-hidden flex flex-col shadow-xl")} onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#303030]">
+              <span className="text-[14px] font-medium text-[#d9d9d9]">Heatmap</span>
+              <div className="flex items-center gap-2">
+                {generatedHeatMap && generatedHeatMap.runId === heatMapViewModalId && (
+                  <button type="button" onClick={() => { setGeneratedHeatMap(null); setHeatMapViewModalId(null); }} className={cx(ui.btn, "h-7 px-2 text-[10px]")}>
+                    Clear HeatMap
+                  </button>
+                )}
+                <button type="button" onClick={() => setHeatMapViewModalId(null)} className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1">✕</button>
+              </div>
+            </div>
+            <div className="overflow-auto p-4 flex-1 min-h-0">
+              {generatedHeatMap && generatedHeatMap.runId === heatMapViewModalId ? (
+                <HeatMapView
+                  heatMapData={currentHeatMapData}
+                  config={generatedHeatMap.config}
+                  onCellClick={(cell) => handleHeatMapCellClick(cell, heatMapViewModalId)}
+                  onZoomOut={() => handleHeatMapZoomOut(heatMapViewModalId)}
+                  onResetZoom={() => handleHeatMapResetZoom(heatMapViewModalId)}
+                  canZoomOut={generatedHeatMap.zoomStack.length > 0}
+                  canReset={generatedHeatMap.zoomStack.length > 0}
+                  zoomLevel={generatedHeatMap.zoomStack.length}
+                  zoomLevelLabel={generatedHeatMap.zoomStack.length > 0 ? generatedHeatMap.zoomStack[generatedHeatMap.zoomStack.length - 1].label : "Full heatmap"}
+                />
+              ) : (
+                <div className="py-8 text-center text-[#8c8c8c] text-[13px]">
+                  <p className="mb-3">No heatmap generated for this run.</p>
+                  <button type="button" onClick={() => { setHeatMapViewModalId(null); setHeatMapConfigModalId(heatMapViewModalId); }} className={cx(ui.btnPrimary, "h-8 px-3 text-[12px]")}>
+                    Configure &amp; Generate HeatMap
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -5543,164 +5972,204 @@ function getIndicatorTemplate(key) {
   return { name: base.name, description: base.description || "", code, parameters, group: base.group };
 }
 
+const DEFAULT_CUSTOM_CODE = "import pandas as pd\n\ndef run(df: pd.DataFrame, **kwargs):\n    # Indicator implementation\n    return {}";
+
+const PARAM_TYPES = ["int", "float", "enum", "bool"];
+
+const INDICATOR_CATEGORIES = [
+  "Trend", "Momentum", "Volatility", "Volume", "Structure",
+  "Stat & Math", "Risk", "Liquidity", "Sentiment", "Composite", "Utility",
+];
+
 const AddIndicatorPageModal = memo(function AddIndicatorPageModal({ onClose, onAdd }) {
-  const [selectedKey, setSelectedKey] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [description, setDescription] = useState("");
-  const [paramValues, setParamValues] = useState({});
+  const [indicatorCategory, setIndicatorCategory] = useState("Trend");
+  const [code, setCode] = useState(DEFAULT_CUSTOM_CODE);
+  const [parameters, setParameters] = useState(() => [
+    { name: "", type: "int", default_value: "", min: "", max: "", step: "" },
+  ]);
 
-  const template = selectedKey ? getIndicatorTemplate(selectedKey) : null;
-
-  useEffect(() => {
-    if (!selectedKey || !template) return;
-    setDisplayName(template.name);
-    setDescription(template.description);
-    const next = {};
-    template.parameters.forEach((p) => {
-      next[p.name] = { default_value: p.default_value, min: p.min, max: p.max, step: p.step };
+  const updateParam = (index, field, value) => {
+    setParameters((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], [field]: value };
+      return next;
     });
-    setParamValues(next);
-  }, [selectedKey]);
+  };
+
+  const addParam = () => {
+    setParameters((prev) => [...prev, { name: "", type: "int", default_value: "", min: "", max: "", step: "" }]);
+  };
+
+  const removeParam = (index) => {
+    setParameters((prev) => prev.filter((_, i) => i !== index));
+  };
 
   const handleAdd = () => {
     onAdd({
       name: displayName,
       description,
-      code: template?.code ?? "",
-      parameters: template?.parameters?.map((p) => ({
-        name: p.name,
-        type: p.type,
-        default_value: paramValues[p.name]?.default_value ?? p.default_value,
-        min: paramValues[p.name]?.min ?? p.min,
-        max: paramValues[p.name]?.max ?? p.max,
-        step: paramValues[p.name]?.step ?? p.step,
-      })) ?? [],
-      group: template?.group ?? "Custom",
+      code,
+      parameters: parameters
+        .filter((p) => String(p.name ?? "").trim() !== "")
+        .map((p) => ({
+          name: String(p.name ?? "").trim(),
+          type: p.type ?? "int",
+          default_value: p.default_value ?? "",
+          min: p.min ?? "",
+          max: p.max ?? "",
+          step: p.step ?? "",
+        })),
+      group: indicatorCategory,
     });
     onClose();
   };
 
   return (
-    <ModalShell title="Add indicator" onClose={onClose}>
+    <ModalShell title="Add custom indicator" onClose={onClose}>
       <div className="space-y-4 max-h-[70vh] overflow-auto">
         <div>
-          <label className={cx("block mb-1 text-xs", ui.textMuted)}>Indicator</label>
+          <label className={cx("block mb-1 text-xs", ui.textMuted)}>Display name</label>
+          <input
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            className={ui.input}
+            placeholder="Display name"
+          />
+        </div>
+        <div>
+          <label className={cx("block mb-1 text-xs", ui.textMuted)}>Description</label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className={cx(ui.input, "w-full min-h-[60px]")}
+            placeholder="Description"
+            rows={2}
+          />
+        </div>
+        <div>
+          <label className={cx("block mb-1 text-xs", ui.textMuted)}>Indicator category</label>
           <select
-            value={selectedKey}
-            onChange={(e) => setSelectedKey(e.target.value)}
+            value={indicatorCategory}
+            onChange={(e) => setIndicatorCategory(e.target.value)}
             className={cx(ui.input, "h-9 w-full")}
           >
-            <option value="">Select indicator...</option>
-            {Object.entries(BASE_INDICATORS).map(([k, v]) => (
-              <option key={k} value={k}>{v.name}</option>
+            {INDICATOR_CATEGORIES.map((cat) => (
+              <option key={cat} value={cat}>{cat}</option>
             ))}
           </select>
         </div>
 
-        {template && (
-          <>
-            <div>
-              <label className={cx("block mb-1 text-xs", ui.textMuted)}>Display name</label>
-              <input
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                className={ui.input}
-                placeholder="Display name"
-              />
+        {/* Parameters (first) */}
+        <div>
+          <label className={cx("block mb-2 text-xs", ui.textMuted)}>Parameters</label>
+          <div className="border border-[#303030] rounded-lg overflow-hidden">
+            <table className="w-full text-[11px] border-collapse">
+              <thead className="bg-[#1f1f1f] text-[#8c8c8c]">
+                <tr>
+                  <th className="px-2 py-1.5 text-left font-medium">Param name</th>
+                  <th className="px-2 py-1.5 text-left font-medium">Param type</th>
+                  <th className="px-2 py-1.5 text-left font-medium">Default value</th>
+                  <th className="px-2 py-1.5 text-left font-medium">Min</th>
+                  <th className="px-2 py-1.5 text-left font-medium">Max</th>
+                  <th className="px-2 py-1.5 text-left font-medium">Step</th>
+                  <th className="px-2 py-1.5 w-8" />
+                </tr>
+              </thead>
+              <tbody className="text-[#d9d9d9]">
+                {parameters.map((p, idx) => (
+                  <tr key={idx} className="border-t border-[#303030]">
+                    <td className="px-2 py-1.5">
+                      <input
+                        type="text"
+                        value={p.name}
+                        onChange={(e) => updateParam(idx, "name", e.target.value)}
+                        placeholder="name"
+                        className={cx(ui.input, "h-7 min-w-[80px] text-[11px] font-mono")}
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <select
+                        value={p.type}
+                        onChange={(e) => updateParam(idx, "type", e.target.value)}
+                        className={cx(ui.input, "h-7 text-[11px] min-w-[72px]")}
+                      >
+                        {PARAM_TYPES.map((t) => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input
+                        type="text"
+                        value={p.default_value}
+                        onChange={(e) => updateParam(idx, "default_value", e.target.value)}
+                        className={cx(ui.input, "h-7 w-16 text-[11px]")}
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input
+                        type="text"
+                        value={p.min}
+                        onChange={(e) => updateParam(idx, "min", e.target.value)}
+                        className={cx(ui.input, "h-7 w-14 text-[11px]")}
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input
+                        type="text"
+                        value={p.max}
+                        onChange={(e) => updateParam(idx, "max", e.target.value)}
+                        className={cx(ui.input, "h-7 w-14 text-[11px]")}
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input
+                        type="text"
+                        value={p.step}
+                        onChange={(e) => updateParam(idx, "step", e.target.value)}
+                        className={cx(ui.input, "h-7 w-14 text-[11px]")}
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <button
+                        type="button"
+                        onClick={() => removeParam(idx)}
+                        className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1"
+                        title="Remove"
+                        aria-label="Remove"
+                      >
+                        ×
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="px-2 py-1.5 border-t border-[#303030] bg-[#1f1f1f]">
+              <button type="button" onClick={addParam} className={cx("text-[11px]", ui.textMuted, "hover:text-[#d9d9d9]")}>
+                + Add parameter
+              </button>
             </div>
-            <div>
-              <label className={cx("block mb-1 text-xs", ui.textMuted)}>Description</label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className={cx(ui.input, "w-full min-h-[60px]")}
-                placeholder="Description"
-                rows={2}
-              />
-            </div>
-            <div>
-              <label className={cx("block mb-1 text-xs", ui.textMuted)}>Code (not editable)</label>
-              <pre className={cx("text-[11px] font-mono text-[#a6a6a6] p-3 rounded-lg bg-[#0f0f0f] border border-[#303030] whitespace-pre-wrap overflow-auto max-h-40")}>
-                {template.code}
-              </pre>
-            </div>
-            {template.parameters.length > 0 && (
-              <div>
-                <label className={cx("block mb-2 text-xs", ui.textMuted)}>Parameters</label>
-                <div className="border border-[#303030] rounded-lg overflow-hidden">
-                  <table className="w-full text-[11px] border-collapse">
-                    <thead className="bg-[#1f1f1f] text-[#8c8c8c]">
-                      <tr>
-                        <th className="px-2 py-1.5 text-left font-medium">Param name</th>
-                        <th className="px-2 py-1.5 text-left font-medium">Param type</th>
-                        <th className="px-2 py-1.5 text-left font-medium">Default value</th>
-                        <th className="px-2 py-1.5 text-left font-medium">Min</th>
-                        <th className="px-2 py-1.5 text-left font-medium">Max</th>
-                        <th className="px-2 py-1.5 text-left font-medium">Step</th>
-                      </tr>
-                    </thead>
-                    <tbody className="text-[#d9d9d9]">
-                      {template.parameters.map((p) => (
-                        <tr key={p.name} className="border-t border-[#303030]">
-                          <td className="px-2 py-1.5 font-mono">{p.name}</td>
-                          <td className="px-2 py-1.5">{p.type}</td>
-                          <td className="px-2 py-1.5">
-                            <input
-                              type="text"
-                              value={paramValues[p.name]?.default_value ?? p.default_value}
-                              onChange={(e) => setParamValues((prev) => ({
-                                ...prev,
-                                [p.name]: { ...prev[p.name], default_value: e.target.value },
-                              }))}
-                              className={cx(ui.input, "h-7 w-16 text-[11px]")}
-                            />
-                          </td>
-                          <td className="px-2 py-1.5">
-                            <input
-                              type="text"
-                              value={paramValues[p.name]?.min ?? p.min}
-                              onChange={(e) => setParamValues((prev) => ({
-                                ...prev,
-                                [p.name]: { ...prev[p.name], min: e.target.value },
-                              }))}
-                              className={cx(ui.input, "h-7 w-14 text-[11px]")}
-                            />
-                          </td>
-                          <td className="px-2 py-1.5">
-                            <input
-                              type="text"
-                              value={paramValues[p.name]?.max ?? p.max}
-                              onChange={(e) => setParamValues((prev) => ({
-                                ...prev,
-                                [p.name]: { ...prev[p.name], max: e.target.value },
-                              }))}
-                              className={cx(ui.input, "h-7 w-14 text-[11px]")}
-                            />
-                          </td>
-                          <td className="px-2 py-1.5">
-                            <input
-                              type="text"
-                              value={paramValues[p.name]?.step ?? p.step}
-                              onChange={(e) => setParamValues((prev) => ({
-                                ...prev,
-                                [p.name]: { ...prev[p.name], step: e.target.value },
-                              }))}
-                              className={cx(ui.input, "h-7 w-14 text-[11px]")}
-                            />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </>
-        )}
+          </div>
+        </div>
+
+        {/* Code (editable, second) */}
+        <div>
+          <label className={cx("block mb-1 text-xs", ui.textMuted)}>Code</label>
+          <textarea
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            className={cx("text-[11px] font-mono text-[#a6a6a6] p-3 rounded-lg bg-[#0f0f0f] border border-[#303030] w-full min-h-[140px] max-h-40 resize-y", ui.input)}
+            placeholder="Indicator code..."
+            spellCheck={false}
+          />
+        </div>
 
         <div className="flex justify-end gap-2 pt-2">
           <button onClick={onClose} className={ui.btn}>Cancel</button>
-          <button onClick={handleAdd} className={ui.btnPrimary} disabled={!selectedKey || !displayName.trim()}>
+          <button onClick={handleAdd} className={ui.btnPrimary} disabled={!displayName.trim()}>
             Add indicator
           </button>
         </div>
@@ -5788,6 +6257,7 @@ export default function App() {
 
   // Detail tabs
   const [detailTab, setDetailTab] = useState("Strategy Builder"); // "Strategy Builder" | "Strategy Code"
+  const [actionsDropdownOpen, setActionsDropdownOpen] = useState(false);
 
   // Builder fields (mock)
   const [builderStage] = useState(1);
@@ -5858,9 +6328,9 @@ export default function App() {
 
   // Indicators page (mock)
   const [pageIndicators, setPageIndicators] = useState(() => [
-    { id: 1, name: "RSI - Relative Strength Index", description: "Momentum oscillator measuring speed and magnitude of price changes", type: "Momentum", status: "Active", createdAt: "2025-01-10" },
-    { id: 2, name: "EMA - Exponential Moving Average", description: "Moving average giving more weight to recent prices", type: "Trend", status: "Active", createdAt: "2025-01-12" },
-    { id: 3, name: "BB - Bollinger Bands", description: "Volatility bands placed above and below a moving average", type: "Volatility", status: "Archived", createdAt: "2024-11-05" },
+    { id: 1, name: "RSI - Relative Strength Index", description: "Momentum oscillator measuring speed and magnitude of price changes", type: "Momentum", indicatorType: "System", status: "Active", createdAt: "2025-01-10" },
+    { id: 2, name: "EMA - Exponential Moving Average", description: "Moving average giving more weight to recent prices", type: "Trend", indicatorType: "System", status: "Active", createdAt: "2025-01-12" },
+    { id: 3, name: "BB - Bollinger Bands", description: "Volatility bands placed above and below a moving average", type: "Volatility", indicatorType: "System", status: "Archived", createdAt: "2024-11-05" },
   ]);
   const [showAddIndicatorPage, setShowAddIndicatorPage] = useState(false);
 
@@ -6058,7 +6528,6 @@ export default function App() {
     console.assert(typeof totalVersions === "number" && totalVersions > 0, "[Test] totalVersions should be > 0");
     const ids = strategies.map((s) => s.id);
     console.assert(new Set(ids).size === ids.length, "[Test] strategy ids should be unique");
-    console.assert(DISABLED_SECTIONS.has("Backtesting"), "[Test] disabledSections include Backtesting");
     console.assert(SECTIONS.includes("Strategies"), "[Test] sections include Strategies");
   }, [strategies, totalVersions]);
 
@@ -6329,9 +6798,33 @@ export default function App() {
                 </div>
               </div>
 
-              <button className={ui.btnPrimary} onClick={() => alert("Validate & Publish (mock)")}>
-                Validate &amp; Publish
-              </button>
+              <div
+                className="relative"
+                onMouseEnter={() => setActionsDropdownOpen(true)}
+                onMouseLeave={() => setActionsDropdownOpen(false)}
+              >
+                <button type="button" className={ui.btnPrimary} aria-haspopup="true" aria-expanded={actionsDropdownOpen}>
+                  Actions
+                </button>
+                {actionsDropdownOpen && (
+                  <div className="absolute right-0 top-full z-50 mt-1 min-w-[180px] rounded-md border border-[#303030] bg-[#1a1a1a] py-1 shadow-lg">
+                    <button
+                      type="button"
+                      onClick={() => { alert("Create new version (mock)"); setActionsDropdownOpen(false); }}
+                      className="block w-full px-3 py-2 text-left text-[12px] text-[#d9d9d9] hover:bg-[#252525]"
+                    >
+                      Create new version
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { alert("Duplicate strategy (mock)"); setActionsDropdownOpen(false); }}
+                      className="block w-full px-3 py-2 text-left text-[12px] text-[#d9d9d9] hover:bg-[#252525]"
+                    >
+                      Duplicate strategy
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Tabs */}
@@ -6361,17 +6854,6 @@ export default function App() {
                   )}
                 >
                   Strategy Code
-                </button>
-
-                <button
-                  type="button"
-                  disabled
-                  aria-disabled
-                  className="px-2 py-2 border-b-2 border-transparent text-[#595959] cursor-not-allowed"
-                  title="Backtesting (soon)"
-                >
-                  Backtesting
-                  <span className="ml-2 rounded-md border border-[#303030] bg-[#0f0f0f] px-2 py-0.5 text-[10px] text-[#8c8c8c]">soon</span>
                 </button>
               </nav>
             </div>
@@ -6475,6 +6957,7 @@ export default function App() {
                   <tr>
                     <th className="px-4 py-3 border-b border-[#303030] font-medium">Indicator</th>
                     <th className="px-2 py-3 border-b border-[#303030] font-medium">Description</th>
+                    <th className="px-2 py-3 border-b border-[#303030] font-medium">Category</th>
                     <th className="px-2 py-3 border-b border-[#303030] font-medium">Type</th>
                     <th className="px-2 py-3 border-b border-[#303030] font-medium">Status</th>
                     <th className="px-2 py-3 border-b border-[#303030] font-medium">Created At</th>
@@ -6489,6 +6972,7 @@ export default function App() {
                       <td className="px-2 py-2 border-b border-[#303030]">
                         <Badge status={ind.type} type="indicatorGroup" />
                       </td>
+                      <td className="px-2 py-2 border-b border-[#303030] text-[#d9d9d9]">{ind.indicatorType ?? "System"}</td>
                       <td className="px-2 py-2 border-b border-[#303030]">
                         <Badge status={ind.status} type="status" />
                       </td>
@@ -6697,22 +7181,6 @@ export default function App() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <div className="text-[11px] font-medium text-[#d9d9d9]">Variables</div>
-                  <select
-                    className={cx(ui.input, "h-8 text-[11px] flex-1 w-full")}
-                    onChange={(e) => {
-                      if (!e.target.value) return;
-                      insertIntoFormulaModal(e.target.value);
-                      e.target.selectedIndex = 0;
-                    }}
-                  >
-                    <option value="">Select variable…</option>
-                    {FORMULA_MODAL_VARIABLES.map((v) => (
-                      <option key={v} value={v}>{v}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-2">
                   <div className="text-[11px] font-medium text-[#d9d9d9]">Functions</div>
                   <select
                     className={cx(ui.input, "h-8 text-[11px] flex-1 w-full")}
@@ -6729,6 +7197,21 @@ export default function App() {
                       </option>
                     ))}
                   </select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="text-[11px] font-medium text-[#d9d9d9]">Variables</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {FORMULA_MODAL_VARIABLES.map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => insertIntoFormulaModal(v)}
+                      className="inline-flex items-center justify-center rounded-md border border-[#303030] bg-[#0f0f0f] px-2.5 py-1 text-[11px] text-[#d9d9d9] hover:bg-[#1f1f1f] active:translate-y-[0.5px]"
+                    >
+                      {v}
+                    </button>
+                  ))}
                 </div>
               </div>
               <div className="space-y-2">

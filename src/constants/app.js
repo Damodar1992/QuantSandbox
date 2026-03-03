@@ -1,8 +1,8 @@
 // Application-level constants
 
-export const SECTIONS = ["Strategies", "Backtesting", "Users", "Settings"];
-// Only Backtesting is disabled in the header; Users is now available
-export const DISABLED_SECTIONS = new Set(["Backtesting"]);
+export const SECTIONS = ["Strategies", "Users", "Settings"];
+// No disabled sections at the moment
+export const DISABLED_SECTIONS = new Set([]);
 
 export const PAIR_OPTIONS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "ADA/USDT"];
 export const TIME_RANGES = ["5m", "10m", "15m", "30m", "1h", "4h", "1d"];
