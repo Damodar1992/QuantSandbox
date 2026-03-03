@@ -3248,7 +3248,7 @@ const HeatMapConfigurator = memo(({ indicators, onGenerate }) => {
                               <select
                                 value={cond.field}
                                 onChange={(e) => updateCondition(group.id, cond.id, { field: e.target.value })}
-                                className={cx(ui.input, "h-7 text-[10px] w-[115px] min-w-0 shrink-0 bg-sky-900/30 border-sky-500/50 text-sky-100")}
+                                className={cx(ui.input, "h-6 text-[10px] flex-1 min-w-0 bg-sky-900/30 border-sky-500/50 text-sky-100")}
                               >
                                 {HEATMAP_FILTER_KEYS.map((f) => (
                                   <option key={f} value={f}>{f}</option>
@@ -3257,21 +3257,21 @@ const HeatMapConfigurator = memo(({ indicators, onGenerate }) => {
                               <select
                                 value={cond.op}
                                 onChange={(e) => updateCondition(group.id, cond.id, { op: e.target.value })}
-                                className={cx(ui.input, "h-7 text-[10px] w-[115px] min-w-0 shrink-0 bg-emerald-900/30 border-emerald-500/50 text-emerald-100")}
+                                className={cx(ui.input, "h-6 text-[10px] flex-1 min-w-0 bg-emerald-900/30 border-emerald-500/50 text-emerald-100")}
                               >
                                 {FILTER_OPERATIONS.map((op) => (
                                   <option key={op.value} value={op.value}>{op.label}</option>
                                 ))}
                               </select>
                               {noValue ? (
-                                <span className="text-[10px] text-[#595959] shrink-0">(no value)</span>
+                                <span className="text-[10px] text-[#595959] flex-1 min-w-0">(no value)</span>
                               ) : (
                                 <input
                                   type="text"
                                   value={cond.value}
                                   onChange={(e) => updateCondition(group.id, cond.id, { value: e.target.value })}
                                   placeholder="Value"
-                                  className={cx(ui.input, "h-7 text-[10px] min-w-[70px] flex-1 bg-[#1a1a1a] text-[#d9d9d9]")}
+                                  className={cx(ui.input, "h-6 text-[10px] flex-1 min-w-0 bg-[#1a1a1a] text-[#d9d9d9]")}
                                 />
                               )}
                             </div>
