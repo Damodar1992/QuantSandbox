@@ -1649,7 +1649,7 @@ const BuilderStepper = memo(function BuilderStepper({
   const [optimizationProgress, setOptimizationProgress] = useState(0);
   // Technical params (Market / Technical blocks)
   const [tEndTrunc, setTEndTrunc] = useState("");
-  const [foldSize, setFoldSize] = useState("");
+  const [foldSize, setFoldSize] = useState("12");
   const [maxPossibleStd, setMaxPossibleStd] = useState("");
   const [unknowTimeRangeStart, setUnknowTimeRangeStart] = useState("");
   const [unknowTimeRangeEnd, setUnknowTimeRangeEnd] = useState("");
@@ -2374,6 +2374,14 @@ IF RSI > 70 OR Close < EMA THEN SELL
                     <div>
                       <label className={cx("block mb-1 text-xs", ui.textMuted)}>t_end_trunc</label>
                       <input type="text" value={tEndTrunc} onChange={(e) => setTEndTrunc(e.target.value)} placeholder="t_end_trunc" className={cx(ui.input, "h-9 text-[12px] w-full")} />
+                    </div>
+                    <div>
+                      <label className={cx("block mb-1 text-xs", ui.textMuted)}>Fold size</label>
+                      <select value={foldSize} onChange={(e) => setFoldSize(e.target.value)} className={cx(ui.input, "h-9 text-[12px] w-full")}>
+                        <option value="12">12</option>
+                        <option value="24">24</option>
+                        <option value="48">48</option>
+                      </select>
                     </div>
                     <div>
                       <label className={cx("block mb-1 text-xs", ui.textMuted)}>Max possible std</label>
@@ -3656,6 +3664,7 @@ export default function App() {
   const FORMULA_MODAL_VARIABLES = [
     "MFE", "MAE", "AIR", "HitRate", "Stability",
     "weightMFE", "normMFE", "weightMAE", "normMAE", "weightAIR", "normAIR", "weightHitRate", "normHitRate",
+    "midMFE", "midMAE", "midAIR", "midHitRate",
   ];
   const FORMULA_MODAL_FUNCTIONS = [
     { label: "IF", template: "IF(cond; a; b)" },
