@@ -1868,6 +1868,21 @@ IF RSI > 70 OR Close < EMA THEN SELL
   const [heatMapConfigModalId, setHeatMapConfigModalId] = useState(null);
   const [heatMapViewModalId, setHeatMapViewModalId] = useState(null);
   const [generatedHeatMap, setGeneratedHeatMap] = useState(null);
+  const [showTruncateModal, setShowTruncateModal] = useState(false);
+  const [selectedNormalizationRow, setSelectedNormalizationRow] = useState(null);
+  const [truncateForm, setTruncateForm] = useState({
+    tEndTrunc: "",
+    foldSize: "12",
+  });
+  const [normalizationDetailsExpanded, setNormalizationDetailsExpanded] = useState(() => new Set());
+  const toggleNormalizationDetails = useCallback((id) => {
+    setNormalizationDetailsExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
   
   // Report Modal state
   const [showReportModal, setShowReportModal] = useState(false);
@@ -1897,7 +1912,7 @@ IF RSI > 70 OR Close < EMA THEN SELL
   // Hyperopt Results three-level table data (level 1: runs; level 2: normalization results; level 3: HeatMaps & Reports)
   const [hyperoptResultsRows, setHyperoptResultsRows] = useState(() => [
     { id: "hr1", date: "2024-01-15", pairs: "BTC/USDT", timeFrame: "1h", knowRange: "2020-01-01 – 2023-06-01", unknowRange: "2023-06-01 – 2023-12-31", children: [
-      { id: "hr1-1", date: "2024-01-15", minScore: "0.20", avgScore: "0.55", maxScore: "0.89", heatmapsAndReports: [
+      { id: "hr1-1", date: "2024-01-15", minScore: "0.20", avgScore: "0.55", maxScore: "0.89", foldSize: "24", truncScores: { min: "-0.14", avg: "-0.45", max: "0.84" }, heatmapsAndReports: [
         { id: "hr1-1-h1", date: "2024-01-15", type: "Heatmap" },
         { id: "hr1-1-r1", date: "2024-01-15", type: "Report" },
       ]},
@@ -2372,20 +2387,14 @@ IF RSI > 70 OR Close < EMA THEN SELL
                   <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">Technical params</div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
-                      <label className={cx("block mb-1 text-xs", ui.textMuted)}>t_end_trunc</label>
-                      <input type="text" value={tEndTrunc} onChange={(e) => setTEndTrunc(e.target.value)} placeholder="t_end_trunc" className={cx(ui.input, "h-9 text-[12px] w-full")} />
-                    </div>
-                    <div>
-                      <label className={cx("block mb-1 text-xs", ui.textMuted)}>Fold size</label>
-                      <select value={foldSize} onChange={(e) => setFoldSize(e.target.value)} className={cx(ui.input, "h-9 text-[12px] w-full")}>
-                        <option value="12">12</option>
-                        <option value="24">24</option>
-                        <option value="48">48</option>
-                      </select>
-                    </div>
-                    <div>
                       <label className={cx("block mb-1 text-xs", ui.textMuted)}>Max possible std</label>
-                      <input type="text" value={maxPossibleStd} onChange={(e) => setMaxPossibleStd(e.target.value)} placeholder="Max possible std" className={cx(ui.input, "h-9 text-[12px] w-full")} />
+                      <input
+                        type="text"
+                        value={maxPossibleStd}
+                        onChange={(e) => setMaxPossibleStd(e.target.value)}
+                        placeholder="Max possible std"
+                        className={cx(ui.input, "h-9 text-[12px] w-full")}
+                      />
                     </div>
                   </div>
                 </div>
@@ -2656,10 +2665,7 @@ IF RSI > 70 OR Close < EMA THEN SELL
                                           <tr>
                                             <th className="px-2 py-1.5 text-left font-medium border-b border-[#303030] w-8"></th>
                                             <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030] w-24">Date</th>
-                                            <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Min Score</th>
-                                            <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">AVG Score</th>
-                                            <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Max Score</th>
-                                            <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Details</th>
+                                            <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Normalization formula info</th>
                                             <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Actions</th>
                                           </tr>
                                         </thead>
@@ -2668,89 +2674,184 @@ IF RSI > 70 OR Close < EMA THEN SELL
                                             const heatMapId = `hyperopt-${row.id}-${sub.id}`;
                                             const level3Items = sub.heatmapsAndReports || [];
                                             const isLevel3Expanded = hyperoptLevel3Expanded.has(sub.id);
+                                            const hasTruncData = !!sub.truncScores;
+                                            const isDetailsExpanded = normalizationDetailsExpanded.has(sub.id);
+
                                             return (
                                               <React.Fragment key={sub.id}>
                                                 <tr className="border-b border-[#303030]/50 hover:bg-[#1a1a1a]">
                                                   <td className="px-2 py-2 align-middle">
-                                                    {level3Items.length > 0 && (
-                                                      <button
-                                                        type="button"
-                                                        onClick={() => toggleHyperoptLevel3(sub.id)}
-                                                        className="text-[#8c8c8c] hover:text-[#d9d9d9] p-0.5 rounded"
-                                                        aria-label={isLevel3Expanded ? "Collapse" : "Expand"}
-                                                      >
-                                                        {isLevel3Expanded ? "▼" : "▶"}
-                                                      </button>
-                                                    )}
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => toggleNormalizationDetails(sub.id)}
+                                                      className="text-[#8c8c8c] hover:text-[#d9d9d9] p-0.5 rounded"
+                                                      aria-label={isDetailsExpanded ? "Collapse" : "Expand"}
+                                                    >
+                                                      {isDetailsExpanded ? "▼" : "▶"}
+                                                    </button>
                                                   </td>
                                                   <td className="px-3 py-2 text-[#a6a6a6]">{sub.date}</td>
-                                                  <td className="px-3 py-2">{sub.minScore}</td>
-                                                  <td className="px-3 py-2">{sub.avgScore}</td>
-                                                  <td className="px-3 py-2">{sub.maxScore}</td>
                                                   <td className="px-3 py-2">
                                                     <HyperoptDetailsTooltip onShowDetails={() => setShowHyperoptDetailsModal(true)} />
                                                   </td>
                                                   <td className="px-3 py-2">
-                                                    <div className="flex items-center gap-2">
-                                                      <button
-                                                        type="button"
-                                                        onClick={() => setHeatMapConfigModalId(heatMapId)}
-                                                        className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
-                                                      >
-                                                        Configure HeatMap
-                                                      </button>
-                                                      <button
-                                                        type="button"
-                                                        onClick={() => setShowReportModal(true)}
-                                                        className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
-                                                      >
-                                                        Generate Report
-                                                      </button>
-                                                    </div>
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => {
+                                                        setSelectedNormalizationRow(sub);
+                                                        setShowTruncateModal(true);
+                                                      }}
+                                                      className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
+                                                    >
+                                                      Add truncate
+                                                    </button>
                                                   </td>
                                                 </tr>
-                                                {isLevel3Expanded && level3Items.length > 0 && (
+                                                {isDetailsExpanded && (
                                                   <tr>
-                                                    <td colSpan={7} className="p-0 align-top bg-[#0a0a0a]">
-                                                      {/* Block 3: HeatMaps & Reports */}
-                                                      <div className="ml-4 mt-2 mb-2 rounded-lg border border-[#303030] overflow-hidden border-l-4 border-l-amber-500">
-                                                        <div className="px-3 py-1.5 font-medium border-b border-[#303030] bg-amber-500/10 text-amber-200 text-[11px]">
-                                                          HeatMaps &amp; Reports
+                                                    <td colSpan={4} className="p-0 align-top bg-[#0f0f0f]">
+                                                      {/* Block 2.5: Normalization details (per normalization row) */}
+                                                      <div className="ml-4 mt-2 mb-2 rounded-lg border border-[#303030] overflow-hidden border-l-4 border-l-emerald-500 bg-[#111111]">
+                                                        <div className="px-3 py-1.5 font-medium border-b border-[#303030] bg-emerald-500/10 text-emerald-200 text-[11px]">
+                                                          Normalization details
                                                         </div>
                                                         <div className="overflow-x-auto">
                                                           <table className="w-full border-collapse text-[11px]">
                                                             <thead className="bg-[#1a1a1a] text-[#8c8c8c]">
                                                               <tr>
+                                                                <th className="px-2 py-1.5 text-left font-medium border-b border-[#303030] w-8"></th>
                                                                 <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030] w-24">Date</th>
-                                                                <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Type</th>
-                                                                <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Details</th>
+                                                                <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Data period</th>
+                                                                <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Min score</th>
+                                                                <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">AVG score</th>
+                                                                <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Max score</th>
+                                                                <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Fold size</th>
                                                                 <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Actions</th>
                                                               </tr>
                                                             </thead>
                                                             <tbody>
-                                                              {level3Items.map((item) => (
-                                                                <tr key={item.id} className="border-b border-[#303030]/30 hover:bg-[#141414]">
-                                                                  <td className="px-3 py-2 text-[#a6a6a6]">{item.date}</td>
-                                                                  <td className="px-3 py-2">{item.type}</td>
-                                                                  <td className="px-3 py-2">
-                                                                    <button
-                                                                      type="button"
-                                                                      title="info"
-                                                                      className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1 rounded inline-flex items-center justify-center"
-                                                                      aria-label="Info"
-                                                                    >
-                                                                      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" /></svg>
-                                                                    </button>
-                                                                  </td>
-                                                                  <td className="px-3 py-2">
-                                                                    {item.type === "Heatmap" ? (
-                                                                      <button type="button" onClick={() => setHeatMapViewModalId(heatMapId)} className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}>Show heatmap</button>
-                                                                    ) : (
-                                                                      <button type="button" onClick={() => setShowReportModal(true)} className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}>Download report</button>
+                                                              {[
+                                                                {
+                                                                  id: `${sub.id}-full`,
+                                                                  label: "Full data",
+                                                                  scores: {
+                                                                    min: sub.minScore,
+                                                                    avg: sub.avgScore,
+                                                                    max: sub.maxScore,
+                                                                  },
+                                                                },
+                                                                hasTruncData && {
+                                                                  id: `${sub.id}-trunc`,
+                                                                  label: "Trunc data",
+                                                                  scores: sub.truncScores,
+                                                                },
+                                                              ]
+                                                                .filter(Boolean)
+                                                                .map((detail) => (
+                                                                  <React.Fragment key={detail.id}>
+                                                                    <tr className="border-b border-[#303030]/50 hover:bg-[#1a1a1a]">
+                                                                      <td className="px-2 py-2 align-middle">
+                                                                        {level3Items.length > 0 && (
+                                                                          <button
+                                                                            type="button"
+                                                                            onClick={() => toggleHyperoptLevel3(sub.id)}
+                                                                            className="text-[#8c8c8c] hover:text-[#d9d9d9] p-0.5 rounded"
+                                                                            aria-label={isLevel3Expanded ? "Collapse" : "Expand"}
+                                                                          >
+                                                                            {isLevel3Expanded ? "▼" : "▶"}
+                                                                          </button>
+                                                                        )}
+                                                                      </td>
+                                                                      <td className="px-3 py-2 text-[#a6a6a6]">{sub.date}</td>
+                                                                      <td className="px-3 py-2">{detail.label}</td>
+                                                                      <td className="px-3 py-2">{detail.scores?.min ?? "-"}</td>
+                                                                      <td className="px-3 py-2">{detail.scores?.avg ?? "-"}</td>
+                                                                      <td className="px-3 py-2">{detail.scores?.max ?? "-"}</td>
+                                                                      <td className="px-3 py-2">
+                                                                        {detail.label === "Trunc data" ? sub.foldSize ?? "-" : "-"}
+                                                                      </td>
+                                                                      <td className="px-3 py-2">
+                                                                        <div className="flex items-center gap-2">
+                                                                          <button
+                                                                            type="button"
+                                                                            onClick={() => setHeatMapConfigModalId(heatMapId)}
+                                                                            className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
+                                                                          >
+                                                                            Configure HeatMap
+                                                                          </button>
+                                                                          <button
+                                                                            type="button"
+                                                                            onClick={() => setShowReportModal(true)}
+                                                                            className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
+                                                                          >
+                                                                            Generate Report
+                                                                          </button>
+                                                                        </div>
+                                                                      </td>
+                                                                    </tr>
+                                                                    {isLevel3Expanded && level3Items.length > 0 && (
+                                                                      <tr>
+                                                                        <td colSpan={8} className="p-0 align-top bg-[#0a0a0a]">
+                                                                          {/* Block 3: HeatMaps & Reports (child of Normalization details) */}
+                                                                          <div className="ml-4 mt-2 mb-2 rounded-lg border border-[#303030] overflow-hidden border-l-4 border-l-amber-500">
+                                                                            <div className="px-3 py-1.5 font-medium border-b border-[#303030] bg-amber-500/10 text-amber-200 text-[11px]">
+                                                                              HeatMaps &amp; Reports
+                                                                            </div>
+                                                                            <div className="overflow-x-auto">
+                                                                              <table className="w-full border-collapse text-[11px]">
+                                                                                <thead className="bg-[#1a1a1a] text-[#8c8c8c]">
+                                                                                  <tr>
+                                                                                    <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030] w-24">Date</th>
+                                                                                    <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Type</th>
+                                                                                    <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Details</th>
+                                                                                    <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Actions</th>
+                                                                                  </tr>
+                                                                                </thead>
+                                                                                <tbody>
+                                                                                  {level3Items.map((item) => (
+                                                                                    <tr key={item.id} className="border-b border-[#303030]/30 hover:bg-[#141414]">
+                                                                                      <td className="px-3 py-2 text-[#a6a6a6]">{item.date}</td>
+                                                                                      <td className="px-3 py-2">{item.type}</td>
+                                                                                      <td className="px-3 py-2">
+                                                                                        <button
+                                                                                          type="button"
+                                                                                          title="info"
+                                                                                          className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1 rounded inline-flex items-center justify-center"
+                                                                                          aria-label="Info"
+                                                                                        >
+                                                                                          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" /></svg>
+                                                                                        </button>
+                                                                                      </td>
+                                                                                      <td className="px-3 py-2">
+                                                                                        {item.type === "Heatmap" ? (
+                                                                                          <button
+                                                                                            type="button"
+                                                                                            onClick={() => setHeatMapViewModalId(heatMapId)}
+                                                                                            className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
+                                                                                          >
+                                                                                            Show heatmap
+                                                                                          </button>
+                                                                                        ) : (
+                                                                                          <button
+                                                                                            type="button"
+                                                                                            onClick={() => setShowReportModal(true)}
+                                                                                            className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
+                                                                                          >
+                                                                                            Download report
+                                                                                          </button>
+                                                                                        )}
+                                                                                      </td>
+                                                                                    </tr>
+                                                                                  ))}
+                                                                                </tbody>
+                                                                              </table>
+                                                                            </div>
+                                                                          </div>
+                                                                        </td>
+                                                                      </tr>
                                                                     )}
-                                                                  </td>
-                                                                </tr>
-                                                              ))}
+                                                                  </React.Fragment>
+                                                                ))}
                                                             </tbody>
                                                           </table>
                                                         </div>
@@ -3120,6 +3221,108 @@ IF RSI > 70 OR Close < EMA THEN SELL
             </div>
             <div className="px-4 py-3 border-t border-[#303030] flex justify-end">
               <button type="button" onClick={() => setShowNormalizationModal(false)} className={cx(ui.btnPrimary, "h-8 px-3 text-[11px]")}>Apply</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Add truncate modal */}
+      {showTruncateModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
+          onClick={() => {
+            setShowTruncateModal(false);
+            setSelectedNormalizationRow(null);
+          }}
+        >
+          <div
+            className={cx(
+              ui.radius,
+              "bg-[#141414] border border-[#303030] max-w-[420px] w-full max-h-[90vh] overflow-hidden flex flex-col shadow-xl",
+            )}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#303030]">
+              <span className="text-[14px] font-medium text-[#d9d9d9]">Add truncate</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowTruncateModal(false);
+                  setSelectedNormalizationRow(null);
+                }}
+                className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="overflow-auto p-4 space-y-4">
+              {selectedNormalizationRow && (
+                <div className="text-[11px] text-[#8c8c8c]">
+                  <div className="font-medium text-[#d9d9d9] mb-1">Normalization context</div>
+                  <div>Date: {selectedNormalizationRow.date}</div>
+                </div>
+              )}
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-medium text-[#d9d9d9]">
+                    t_end_trunc
+                    <input
+                      type="number"
+                      value={truncateForm.tEndTrunc}
+                      onChange={(e) =>
+                        setTruncateForm((prev) => ({
+                          ...prev,
+                          tEndTrunc: e.target.value,
+                        }))
+                      }
+                      className={cx(ui.input, "mt-1 h-8 text-[12px]")}
+                      placeholder="Enter t_end_trunc"
+                    />
+                  </label>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-medium text-[#d9d9d9]">
+                    Fold size
+                    <select
+                      value={truncateForm.foldSize}
+                      onChange={(e) =>
+                        setTruncateForm((prev) => ({
+                          ...prev,
+                          foldSize: e.target.value,
+                        }))
+                      }
+                      className={cx(ui.input, "mt-1 h-8 text-[12px]")}
+                    >
+                      <option value="12">12</option>
+                      <option value="24">24</option>
+                      <option value="48">48</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t border-[#303030] px-4 py-3 bg-[#101010]">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowTruncateModal(false);
+                  setSelectedNormalizationRow(null);
+                }}
+                className={cx(ui.btnGhost, "h-8 px-3 text-[12px]")}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  // Placeholder: here in future we'll persist truncate settings
+                  // For now just close modal.
+                  setShowTruncateModal(false);
+                  setSelectedNormalizationRow(null);
+                }}
+                className={cx(ui.btn, "h-8 px-3 text-[12px]")}
+              >
+                Save
+              </button>
             </div>
           </div>
         </div>
