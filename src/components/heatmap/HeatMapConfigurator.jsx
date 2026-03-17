@@ -10,7 +10,6 @@ export const HeatMapConfigurator = memo(({ indicators, onGenerate }) => {
   const [selectedIndicatorIds, setSelectedIndicatorIds] = useState([]);
   const [xAxisKeys, setXAxisKeys] = useState([]);
   const [yAxisKeys, setYAxisKeys] = useState([]);
-  const [fixedParams, setFixedParams] = useState({});
   const [filterRoot, setFilterRoot] = useState(() => ({
     rootLogic: "or",
     groups: [{ id: genId(), logic: "and", conditions: [] }],
@@ -52,17 +51,10 @@ export const HeatMapConfigurator = memo(({ indicators, onGenerate }) => {
     return out;
   }, [selectedIndicators]);
 
-  const remainingParams = useMemo(() => {
-    return availableParams.filter(p => !xAxisKeys.includes(p.compositeKey) && !yAxisKeys.includes(p.compositeKey));
-  }, [availableParams, xAxisKeys, yAxisKeys]);
-
-  const getParamValues = useCallback((param) => {
-    const values = [];
-    for (let val = param.min; val <= param.max; val += param.step) {
-      values.push(val);
-    }
-    return values;
-  }, []);
+  const remainingParams = useMemo(
+    () => availableParams.filter(p => !xAxisKeys.includes(p.compositeKey) && !yAxisKeys.includes(p.compositeKey)),
+    [availableParams, xAxisKeys, yAxisKeys],
+  );
 
   useEffect(() => {
     if (indicators.length > 0 && selectedIndicatorIds.length === 0) {
@@ -71,13 +63,6 @@ export const HeatMapConfigurator = memo(({ indicators, onGenerate }) => {
   }, [indicators]);
 
   const remainingKeys = useMemo(() => remainingParams.map(p => p.compositeKey).sort().join(","), [remainingParams]);
-  useEffect(() => {
-    const next = {};
-    remainingParams.forEach(p => {
-      next[p.compositeKey] = p.default;
-    });
-    setFixedParams(prev => ({ ...next, ...prev }));
-  }, [remainingKeys]);
 
   const toggleIndicator = useCallback((id) => {
     setSelectedIndicatorIds(prev =>
@@ -85,7 +70,6 @@ export const HeatMapConfigurator = memo(({ indicators, onGenerate }) => {
     );
     setXAxisKeys([]);
     setYAxisKeys([]);
-    setFixedParams({});
   }, []);
 
   const toggleXAxis = useCallback((compositeKey) => {
@@ -197,7 +181,6 @@ export const HeatMapConfigurator = memo(({ indicators, onGenerate }) => {
       indicators: selectedIndicators,
       xAxis: xAxisKeys,
       yAxis: yAxisKeys,
-      fixedParams,
       filters,
     };
     if (typeof onGenerate === "function") {
@@ -325,41 +308,6 @@ export const HeatMapConfigurator = memo(({ indicators, onGenerate }) => {
                 )}
               </div>
             </div>
-
-            {remainingParams.length > 0 && (
-              <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
-                <div className={cx("text-[11px] font-medium text-[#d9d9d9] mb-3")}>
-                  Fixed Parameters
-                </div>
-                <div className={cx("text-[10px]", ui.textMuted, "mb-2")}>
-                  Select values for parameters not used in X/Y axes
-                </div>
-                <div className="space-y-2">
-                  {remainingParams.map(param => {
-                    const possibleValues = getParamValues(param);
-                    return (
-                      <div key={param.compositeKey}>
-                        <label className={cx("block mb-1 text-[10px]", ui.textMuted)}>
-                          {param.label}
-                        </label>
-                        <select
-                          value={fixedParams[param.compositeKey] ?? param.default}
-                          onChange={(e) => setFixedParams(prev => ({
-                            ...prev,
-                            [param.compositeKey]: parseFloat(e.target.value)
-                          }))}
-                          className={cx(ui.input, "h-8 text-[11px]")}
-                        >
-                          {possibleValues.map(val => (
-                            <option key={val} value={val}>{val}</option>
-                          ))}
-                        </select>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
 
             <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
               <div className={cx("text-[11px] font-medium text-[#d9d9d9] mb-3")}>Filters</div>

@@ -976,7 +976,7 @@ const TableBasedEditor = memo(({ rules, onChange, groupedVars }) => {
 
 /* ====================== Formula Editor ====================== */
 
-const FormulaEditor = memo(({ value, onChange, indicators }) => {
+const FormulaEditor = memo(({ value, onChange, indicators, mode = "signal" }) => {
   const editorRef = useRef(null);
   const monacoRef = useRef(null);
   const [editorMode, setEditorMode] = useState('python'); // 'python' | 'table'
@@ -1311,9 +1311,14 @@ const FormulaEditor = memo(({ value, onChange, indicators }) => {
   }, []);
   
   // Generate Python code for Freqtrade from table rules
-  const generatePythonSignalCode = useCallback((rules) => {
+  // mode: "signal" | "entry" — для Entry оставляем старый шаблон populate_entry_trend
+  const generatePythonSignalCode = useCallback((rules, mode = "signal") => {
+    const isEntryMode = mode === "entry";
+
     if (!rules || rules.length === 0) {
-      return `def populate_entry_trend(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
+      if (isEntryMode) {
+        // Старый шаблон для Entry formulas
+        return `def populate_entry_trend(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
     """
     Populate entry trend signals.
     Add your signal conditions here.
@@ -1323,13 +1328,42 @@ const FormulaEditor = memo(({ value, onChange, indicators }) => {
     
     return dataframe
 `;
+      }
+
+      // Новый шаблон для Signal
+      return `def populate_indicators(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
+    """
+    Populate signals.
+    Based on the following conditions:
+    - Rule 1: Close > Close
+    """
+    # Initialize signal column
+    dataframe.loc[:, 'signal'] = False
+    
+    # Rule 1
+    condition1 = (dataframe['Close'] > dataframe['Close'])
+    dataframe.loc[condition1, 'signal'] = True
+
+    return dataframe
+`;
     }
     
-    let code = `def populate_entry_trend(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
+    let code;
+    if (isEntryMode) {
+      // Старый заголовок для Entry
+      code = `def populate_entry_trend(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
     """
     Populate entry trend signals.
     Based on the following conditions:
 `;
+    } else {
+      // Новый заголовок для Signal
+      code = `def populate_indicators(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
+    """
+    Populate signals.
+    Based on the following conditions:
+`;
+    }
     
     // Add rule descriptions
     rules.forEach((rule, index) => {
@@ -1441,13 +1475,13 @@ const FormulaEditor = memo(({ value, onChange, indicators }) => {
   // Generate Python code when table rules change
   useEffect(() => {
     if (tableRules.length > 0) {
-      const pythonCode = generatePythonSignalCode(tableRules);
+      const pythonCode = generatePythonSignalCode(tableRules, mode);
       setGeneratedPythonCode(pythonCode);
       if (!pythonCodeManuallyEdited) {
         onChange(pythonCode);
       }
     }
-  }, [tableRules, generatePythonSignalCode, pythonCodeManuallyEdited, onChange]);
+  }, [tableRules, generatePythonSignalCode, pythonCodeManuallyEdited, onChange, mode]);
   
   // Handle mode switch
   const handleModeSwitch = useCallback((newMode) => {
@@ -1456,13 +1490,13 @@ const FormulaEditor = memo(({ value, onChange, indicators }) => {
       // (no conversion needed, table rules are source of truth)
     } else if (newMode === 'python' && editorMode === 'table') {
       // Switching from Table to Python - generate Python code from table rules
-      const pythonCode = generatePythonSignalCode(tableRules);
+      const pythonCode = generatePythonSignalCode(tableRules, mode);
       setGeneratedPythonCode(pythonCode);
       setPythonCodeManuallyEdited(false);
       onChange(pythonCode);
     }
     setEditorMode(newMode);
-  }, [editorMode, tableRules, generatePythonSignalCode, onChange]);
+  }, [editorMode, tableRules, generatePythonSignalCode, onChange, mode]);
   
   // Handle table rules update
   const handleTableRulesChange = useCallback((newRules) => {
@@ -1486,13 +1520,8 @@ const FormulaEditor = memo(({ value, onChange, indicators }) => {
     <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
       <div className={cx("flex items-center justify-between px-3 py-2", ui.panelMuted, "border-0 border-b", ui.divider)}>
         <div className="flex-1">
-          <div className="text-[12px] font-medium text-[#d9d9d9]">Signal Formulas</div>
-          <div className={cx("text-[10px]", ui.textMuted)}>
-            {editorMode === 'python' ? (
-              <>Python code for Freqtrade • {tableRules.length} rules defined • {pythonCodeManuallyEdited ? '⚠️ Manually edited' : 'Auto-generated'}</>
-            ) : (
-              <>Visual rule builder • {tableRules.length} rules defined</>
-            )}
+          <div className="text-[12px] font-medium text-[#d9d9d9]">
+            {mode === "entry" ? "Entry formulas" : "Signal Formulas"}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -1616,6 +1645,7 @@ const FormulaEditor = memo(({ value, onChange, indicators }) => {
 
 const BuilderStepper = memo(function BuilderStepper({
   activeStage,
+  onStageChange,
   pairs,
   onPairsChange,
   timeRange,
@@ -1625,8 +1655,12 @@ const BuilderStepper = memo(function BuilderStepper({
   timeFrameEnd,
   onTimeFrameEndChange,
 }) {
-  // Indicators state
-  const [indicators, setIndicators] = useState([]);
+  // Indicators state (separate for Signal and Entry)
+  const [signalIndicators, setSignalIndicators] = useState([]);
+  const [entryIndicators, setEntryIndicators] = useState([]);
+  const isEntryStage = activeStage === 2;
+  const indicators = isEntryStage ? entryIndicators : signalIndicators;
+  const setIndicators = isEntryStage ? setEntryIndicators : setSignalIndicators;
   const [editingIndicator, setEditingIndicator] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [addModalType, setAddModalType] = useState("RSI");
@@ -1648,16 +1682,39 @@ const BuilderStepper = memo(function BuilderStepper({
   const [isRunningOptimization, setIsRunningOptimization] = useState(false);
   const [optimizationProgress, setOptimizationProgress] = useState(0);
   // Technical params (Market / Technical blocks)
-  const [tEndTrunc, setTEndTrunc] = useState("");
-  const [foldSize, setFoldSize] = useState("12");
-  const [maxPossibleStd, setMaxPossibleStd] = useState("");
-  const [unknowTimeRangeStart, setUnknowTimeRangeStart] = useState("");
-  const [unknowTimeRangeEnd, setUnknowTimeRangeEnd] = useState("");
-  const [hyperoptType, setHyperoptType] = useState("BIAS");
+  const [signalMaxPossibleStd, setSignalMaxPossibleStd] = useState("");
+  const [entryMaxPossibleStd, setEntryMaxPossibleStd] = useState("");
+  const [signalUnknowTimeRangeStart, setSignalUnknowTimeRangeStart] = useState("");
+  const [signalUnknowTimeRangeEnd, setSignalUnknowTimeRangeEnd] = useState("");
+  const [entryUnknowTimeRangeStart, setEntryUnknowTimeRangeStart] = useState("");
+  const [entryUnknowTimeRangeEnd, setEntryUnknowTimeRangeEnd] = useState("");
+  const [signalHyperoptType, setSignalHyperoptType] = useState("BIAS");
+  const [entryHyperoptType, setEntryHyperoptType] = useState("BIAS");
+  const maxPossibleStd = isEntryStage ? entryMaxPossibleStd : signalMaxPossibleStd;
+  const setMaxPossibleStd = isEntryStage ? setEntryMaxPossibleStd : setSignalMaxPossibleStd;
+  const unknowTimeRangeStart = isEntryStage ? entryUnknowTimeRangeStart : signalUnknowTimeRangeStart;
+  const setUnknowTimeRangeStart = isEntryStage ? setEntryUnknowTimeRangeStart : setSignalUnknowTimeRangeStart;
+  const unknowTimeRangeEnd = isEntryStage ? entryUnknowTimeRangeEnd : signalUnknowTimeRangeEnd;
+  const setUnknowTimeRangeEnd = isEntryStage ? setEntryUnknowTimeRangeEnd : setSignalUnknowTimeRangeEnd;
+  const hyperoptType = isEntryStage ? entryHyperoptType : signalHyperoptType;
+  const setHyperoptType = isEntryStage ? setEntryHyperoptType : setSignalHyperoptType;
+  // Best results are tracked only for Signal stage
+  const [signalBestResults, setSignalBestResults] = useState([]);
+  const [selectedBestResult, setSelectedBestResult] = useState(null);
+  const [showBestResultDetailsModal, setShowBestResultDetailsModal] = useState(false);
+  const [showAddBestResultModal, setShowAddBestResultModal] = useState(false);
+  const [manualBestResultSelectionKey, setManualBestResultSelectionKey] = useState("");
+  const [signalBestCandidates, setSignalBestCandidates] = useState([]);
   
   // Normalization formulas: Intermediate + Final (tables shown after dropdown selection)
-  const [intermediateScoreFormula, setIntermediateScoreFormula] = useState("Formula 1");
-  const [finalScoreFormula, setFinalScoreFormula] = useState("Formula 1");
+  const [signalIntermediateScoreFormula, setSignalIntermediateScoreFormula] = useState("Formula 1");
+  const [signalFinalScoreFormula, setSignalFinalScoreFormula] = useState("Formula 1");
+  const [entryIntermediateScoreFormula, setEntryIntermediateScoreFormula] = useState("Formula 1");
+  const [entryFinalScoreFormula, setEntryFinalScoreFormula] = useState("Formula 1");
+  const intermediateScoreFormula = isEntryStage ? entryIntermediateScoreFormula : signalIntermediateScoreFormula;
+  const setIntermediateScoreFormula = isEntryStage ? setEntryIntermediateScoreFormula : setSignalIntermediateScoreFormula;
+  const finalScoreFormula = isEntryStage ? entryFinalScoreFormula : signalFinalScoreFormula;
+  const setFinalScoreFormula = isEntryStage ? setEntryFinalScoreFormula : setSignalFinalScoreFormula;
   const setWeightCapped = useCallback((setter, value, othersSum) => {
     const n = Math.max(0, Math.min(100, Number(value)));
     setter(Math.min(n, 100 - othersSum));
@@ -1671,42 +1728,220 @@ const BuilderStepper = memo(function BuilderStepper({
   const DEFAULT_HITRATE_FORMULA = "1/(1+EXP(-1*(HitRate - MEDIAN(HitRate)) / (QUARTILE.INC(HitRate,3) - QUARTILE.INC(HitRate,1))))";
   const FORMULA_VARIABLES = ["median", "MFE", "MAE", "AIR", "exp", "k"];
   // Intermediate metrics table (after user selects Normalization global formula)
-  const [intMfeFormula, setIntMfeFormula] = useState("Formula 1");
-  const [intMaeFormula, setIntMaeFormula] = useState("Formula 1");
-  const [intAirFormula, setIntAirFormula] = useState("Formula 1");
-  const [intHitRateFormula, setIntHitRateFormula] = useState("Formula 1");
-  const [intMfeFormulaCode, setIntMfeFormulaCode] = useState(DEFAULT_FORMULA_CODE);
-  const [intMaeFormulaCode, setIntMaeFormulaCode] = useState(DEFAULT_FORMULA_CODE);
-  const [intAirFormulaCode, setIntAirFormulaCode] = useState(DEFAULT_FORMULA_CODE);
-  const [intHitRateFormulaCode, setIntHitRateFormulaCode] = useState(DEFAULT_FORMULA_CODE);
-  const [intMfeWeight, setIntMfeWeight] = useState(0);
-  const [intMaeWeight, setIntMaeWeight] = useState(0);
-  const [intAirWeight, setIntAirWeight] = useState(0);
-  const [intHitRateWeight, setIntHitRateWeight] = useState(0);
+  const [signalIntMfeFormula, setSignalIntMfeFormula] = useState("Formula 1");
+  const [signalIntMaeFormula, setSignalIntMaeFormula] = useState("Formula 1");
+  const [signalIntAirFormula, setSignalIntAirFormula] = useState("Formula 1");
+  const [signalIntHitRateFormula, setSignalIntHitRateFormula] = useState("Formula 1");
+  const [signalIntMfeFormulaCode, setSignalIntMfeFormulaCode] = useState(DEFAULT_FORMULA_CODE);
+  const [signalIntMaeFormulaCode, setSignalIntMaeFormulaCode] = useState(DEFAULT_FORMULA_CODE);
+  const [signalIntAirFormulaCode, setSignalIntAirFormulaCode] = useState(DEFAULT_FORMULA_CODE);
+  const [signalIntHitRateFormulaCode, setSignalIntHitRateFormulaCode] = useState(DEFAULT_FORMULA_CODE);
+  const [signalIntMfeWeight, setSignalIntMfeWeight] = useState(0);
+  const [signalIntMaeWeight, setSignalIntMaeWeight] = useState(0);
+  const [signalIntAirWeight, setSignalIntAirWeight] = useState(0);
+  const [signalIntHitRateWeight, setSignalIntHitRateWeight] = useState(0);
+
+  const [entryIntMfeFormula, setEntryIntMfeFormula] = useState("Formula 1");
+  const [entryIntMaeFormula, setEntryIntMaeFormula] = useState("Formula 1");
+  const [entryIntAirFormula, setEntryIntAirFormula] = useState("Formula 1");
+  const [entryIntHitRateFormula, setEntryIntHitRateFormula] = useState("Formula 1");
+  const [entryIntMfeFormulaCode, setEntryIntMfeFormulaCode] = useState(DEFAULT_FORMULA_CODE);
+  const [entryIntMaeFormulaCode, setEntryIntMaeFormulaCode] = useState(DEFAULT_FORMULA_CODE);
+  const [entryIntAirFormulaCode, setEntryIntAirFormulaCode] = useState(DEFAULT_FORMULA_CODE);
+  const [entryIntHitRateFormulaCode, setEntryIntHitRateFormulaCode] = useState(DEFAULT_FORMULA_CODE);
+  const [entryIntMfeWeight, setEntryIntMfeWeight] = useState(0);
+  const [entryIntMaeWeight, setEntryIntMaeWeight] = useState(0);
+  const [entryIntAirWeight, setEntryIntAirWeight] = useState(0);
+  const [entryIntHitRateWeight, setEntryIntHitRateWeight] = useState(0);
+
+  const intMfeFormula = isEntryStage ? entryIntMfeFormula : signalIntMfeFormula;
+  const setIntMfeFormula = isEntryStage ? setEntryIntMfeFormula : setSignalIntMfeFormula;
+  const intMaeFormula = isEntryStage ? entryIntMaeFormula : signalIntMaeFormula;
+  const setIntMaeFormula = isEntryStage ? setEntryIntMaeFormula : setSignalIntMaeFormula;
+  const intAirFormula = isEntryStage ? entryIntAirFormula : signalIntAirFormula;
+  const setIntAirFormula = isEntryStage ? setEntryIntAirFormula : setSignalIntAirFormula;
+  const intHitRateFormula = isEntryStage ? entryIntHitRateFormula : signalIntHitRateFormula;
+  const setIntHitRateFormula = isEntryStage ? setEntryIntHitRateFormula : setSignalIntHitRateFormula;
+  const intMfeFormulaCode = isEntryStage ? entryIntMfeFormulaCode : signalIntMfeFormulaCode;
+  const setIntMfeFormulaCode = isEntryStage ? setEntryIntMfeFormulaCode : setSignalIntMfeFormulaCode;
+  const intMaeFormulaCode = isEntryStage ? entryIntMaeFormulaCode : signalIntMaeFormulaCode;
+  const setIntMaeFormulaCode = isEntryStage ? setEntryIntMaeFormulaCode : setSignalIntMaeFormulaCode;
+  const intAirFormulaCode = isEntryStage ? entryIntAirFormulaCode : signalIntAirFormulaCode;
+  const setIntAirFormulaCode = isEntryStage ? setEntryIntAirFormulaCode : setSignalIntAirFormulaCode;
+  const intHitRateFormulaCode = isEntryStage ? entryIntHitRateFormulaCode : signalIntHitRateFormulaCode;
+  const setIntHitRateFormulaCode = isEntryStage ? setEntryIntHitRateFormulaCode : setSignalIntHitRateFormulaCode;
+  const intMfeWeight = isEntryStage ? entryIntMfeWeight : signalIntMfeWeight;
+  const setIntMfeWeight = isEntryStage ? setEntryIntMfeWeight : setSignalIntMfeWeight;
+  const intMaeWeight = isEntryStage ? entryIntMaeWeight : signalIntMaeWeight;
+  const setIntMaeWeight = isEntryStage ? setEntryIntMaeWeight : setSignalIntMaeWeight;
+  const intAirWeight = isEntryStage ? entryIntAirWeight : signalIntAirWeight;
+  const setIntAirWeight = isEntryStage ? setEntryIntAirWeight : setSignalIntAirWeight;
+  const intHitRateWeight = isEntryStage ? entryIntHitRateWeight : signalIntHitRateWeight;
+  const setIntHitRateWeight = isEntryStage ? setEntryIntHitRateWeight : setSignalIntHitRateWeight;
   const intWeightsSum = intMfeWeight + intMaeWeight + intAirWeight + intHitRateWeight;
   // Final metrics table (after user selects Final Score Formula): 5 rows, Stability row has 4 sub-weights
-  const [finStabilityFormula, setFinStabilityFormula] = useState("Formula 1");
-  const [finMfeFormula, setFinMfeFormula] = useState("Formula 1");
-  const [finMaeFormula, setFinMaeFormula] = useState("Formula 1");
-  const [finAirFormula, setFinAirFormula] = useState("Formula 1");
-  const [finHitRateFormula, setFinHitRateFormula] = useState("Formula 1");
-  const [finFinalFormulaCode, setFinFinalFormulaCode] = useState(DEFAULT_FINAL_SCORE_FORMULA);
-  const [finStabilityFormulaCode, setFinStabilityFormulaCode] = useState(DEFAULT_STABILITY_FORMULA);
-  const [finMfeFormulaCode, setFinMfeFormulaCode] = useState(DEFAULT_MFE_FORMULA);
-  const [finMaeFormulaCode, setFinMaeFormulaCode] = useState(DEFAULT_MAE_FORMULA);
-  const [finAirFormulaCode, setFinAirFormulaCode] = useState(DEFAULT_AIR_FORMULA);
-  const [finHitRateFormulaCode, setFinHitRateFormulaCode] = useState(DEFAULT_HITRATE_FORMULA);
-  const [finStabMfeWeight, setFinStabMfeWeight] = useState(0);
-  const [finStabMaeWeight, setFinStabMaeWeight] = useState(0);
-  const [finStabAirWeight, setFinStabAirWeight] = useState(0);
-  const [finStabHitRateWeight, setFinStabHitRateWeight] = useState(0);
-  const [finStabilityWeight, setFinStabilityWeight] = useState(0);
-  const [finMfeWeight, setFinMfeWeight] = useState(0);
-  const [finMaeWeight, setFinMaeWeight] = useState(0);
-  const [finAirWeight, setFinAirWeight] = useState(0);
-  const [finHitRateWeight, setFinHitRateWeight] = useState(0);
+  const [signalFinStabilityFormula, setSignalFinStabilityFormula] = useState("Formula 1");
+  const [signalFinMfeFormula, setSignalFinMfeFormula] = useState("Formula 1");
+  const [signalFinMaeFormula, setSignalFinMaeFormula] = useState("Formula 1");
+  const [signalFinAirFormula, setSignalFinAirFormula] = useState("Formula 1");
+  const [signalFinHitRateFormula, setSignalFinHitRateFormula] = useState("Formula 1");
+  const [signalFinFinalFormulaCode, setSignalFinFinalFormulaCode] = useState(DEFAULT_FINAL_SCORE_FORMULA);
+  const [signalFinStabilityFormulaCode, setSignalFinStabilityFormulaCode] = useState(DEFAULT_STABILITY_FORMULA);
+  const [signalFinMfeFormulaCode, setSignalFinMfeFormulaCode] = useState(DEFAULT_MFE_FORMULA);
+  const [signalFinMaeFormulaCode, setSignalFinMaeFormulaCode] = useState(DEFAULT_MAE_FORMULA);
+  const [signalFinAirFormulaCode, setSignalFinAirFormulaCode] = useState(DEFAULT_AIR_FORMULA);
+  const [signalFinHitRateFormulaCode, setSignalFinHitRateFormulaCode] = useState(DEFAULT_HITRATE_FORMULA);
+  const [signalFinStabMfeWeight, setSignalFinStabMfeWeight] = useState(0);
+  const [signalFinStabMaeWeight, setSignalFinStabMaeWeight] = useState(0);
+  const [signalFinStabAirWeight, setSignalFinStabAirWeight] = useState(0);
+  const [signalFinStabHitRateWeight, setSignalFinStabHitRateWeight] = useState(0);
+  const [signalFinStabilityWeight, setSignalFinStabilityWeight] = useState(0);
+  const [signalFinMfeWeight, setSignalFinMfeWeight] = useState(0);
+  const [signalFinMaeWeight, setSignalFinMaeWeight] = useState(0);
+  const [signalFinAirWeight, setSignalFinAirWeight] = useState(0);
+  const [signalFinHitRateWeight, setSignalFinHitRateWeight] = useState(0);
+
+  const [entryFinStabilityFormula, setEntryFinStabilityFormula] = useState("Formula 1");
+  const [entryFinMfeFormula, setEntryFinMfeFormula] = useState("Formula 1");
+  const [entryFinMaeFormula, setEntryFinMaeFormula] = useState("Formula 1");
+  const [entryFinAirFormula, setEntryFinAirFormula] = useState("Formula 1");
+  const [entryFinHitRateFormula, setEntryFinHitRateFormula] = useState("Formula 1");
+  const [entryFinFinalFormulaCode, setEntryFinFinalFormulaCode] = useState(DEFAULT_FINAL_SCORE_FORMULA);
+  const [entryFinStabilityFormulaCode, setEntryFinStabilityFormulaCode] = useState(DEFAULT_STABILITY_FORMULA);
+  const [entryFinMfeFormulaCode, setEntryFinMfeFormulaCode] = useState(DEFAULT_MFE_FORMULA);
+  const [entryFinMaeFormulaCode, setEntryFinMaeFormulaCode] = useState(DEFAULT_MAE_FORMULA);
+  const [entryFinAirFormulaCode, setEntryFinAirFormulaCode] = useState(DEFAULT_AIR_FORMULA);
+  const [entryFinHitRateFormulaCode, setEntryFinHitRateFormulaCode] = useState(DEFAULT_HITRATE_FORMULA);
+  const [entryFinStabMfeWeight, setEntryFinStabMfeWeight] = useState(0);
+  const [entryFinStabMaeWeight, setEntryFinStabMaeWeight] = useState(0);
+  const [entryFinStabAirWeight, setEntryFinStabAirWeight] = useState(0);
+  const [entryFinStabHitRateWeight, setEntryFinStabHitRateWeight] = useState(0);
+  const [entryFinStabilityWeight, setEntryFinStabilityWeight] = useState(0);
+  const [entryFinMfeWeight, setEntryFinMfeWeight] = useState(0);
+  const [entryFinMaeWeight, setEntryFinMaeWeight] = useState(0);
+  const [entryFinAirWeight, setEntryFinAirWeight] = useState(0);
+  const [entryFinHitRateWeight, setEntryFinHitRateWeight] = useState(0);
+
+  const finStabilityFormula = isEntryStage ? entryFinStabilityFormula : signalFinStabilityFormula;
+  const setFinStabilityFormula = isEntryStage ? setEntryFinStabilityFormula : setSignalFinStabilityFormula;
+  const finMfeFormula = isEntryStage ? entryFinMfeFormula : signalFinMfeFormula;
+  const setFinMfeFormula = isEntryStage ? setEntryFinMfeFormula : setSignalFinMfeFormula;
+  const finMaeFormula = isEntryStage ? entryFinMaeFormula : signalFinMaeFormula;
+  const setFinMaeFormula = isEntryStage ? setEntryFinMaeFormula : setSignalFinMaeFormula;
+  const finAirFormula = isEntryStage ? entryFinAirFormula : signalFinAirFormula;
+  const setFinAirFormula = isEntryStage ? setEntryFinAirFormula : setSignalFinAirFormula;
+  const finHitRateFormula = isEntryStage ? entryFinHitRateFormula : signalFinHitRateFormula;
+  const setFinHitRateFormula = isEntryStage ? setEntryFinHitRateFormula : setSignalFinHitRateFormula;
+  const finFinalFormulaCode = isEntryStage ? entryFinFinalFormulaCode : signalFinFinalFormulaCode;
+  const setFinFinalFormulaCode = isEntryStage ? setEntryFinFinalFormulaCode : setSignalFinFinalFormulaCode;
+  const finStabilityFormulaCode = isEntryStage ? entryFinStabilityFormulaCode : signalFinStabilityFormulaCode;
+  const setFinStabilityFormulaCode = isEntryStage ? setEntryFinStabilityFormulaCode : setSignalFinStabilityFormulaCode;
+  const finMfeFormulaCode = isEntryStage ? entryFinMfeFormulaCode : signalFinMfeFormulaCode;
+  const setFinMfeFormulaCode = isEntryStage ? setEntryFinMfeFormulaCode : setSignalFinMfeFormulaCode;
+  const finMaeFormulaCode = isEntryStage ? entryFinMaeFormulaCode : signalFinMaeFormulaCode;
+  const setFinMaeFormulaCode = isEntryStage ? setEntryFinMaeFormulaCode : setSignalFinMaeFormulaCode;
+  const finAirFormulaCode = isEntryStage ? entryFinAirFormulaCode : signalFinAirFormulaCode;
+  const setFinAirFormulaCode = isEntryStage ? setEntryFinAirFormulaCode : setSignalFinAirFormulaCode;
+  const finHitRateFormulaCode = isEntryStage ? entryFinHitRateFormulaCode : signalFinHitRateFormulaCode;
+  const setFinHitRateFormulaCode = isEntryStage ? setEntryFinHitRateFormulaCode : setSignalFinHitRateFormulaCode;
+  const finStabMfeWeight = isEntryStage ? entryFinStabMfeWeight : signalFinStabMfeWeight;
+  const setFinStabMfeWeight = isEntryStage ? setEntryFinStabMfeWeight : setSignalFinStabMfeWeight;
+  const finStabMaeWeight = isEntryStage ? entryFinStabMaeWeight : signalFinStabMaeWeight;
+  const setFinStabMaeWeight = isEntryStage ? setEntryFinStabMaeWeight : setSignalFinStabMaeWeight;
+  const finStabAirWeight = isEntryStage ? entryFinStabAirWeight : signalFinStabAirWeight;
+  const setFinStabAirWeight = isEntryStage ? setEntryFinStabAirWeight : setSignalFinStabAirWeight;
+  const finStabHitRateWeight = isEntryStage ? entryFinStabHitRateWeight : signalFinStabHitRateWeight;
+  const setFinStabHitRateWeight = isEntryStage ? setEntryFinStabHitRateWeight : setSignalFinStabHitRateWeight;
+  const finStabilityWeight = isEntryStage ? entryFinStabilityWeight : signalFinStabilityWeight;
+  const setFinStabilityWeight = isEntryStage ? setEntryFinStabilityWeight : setSignalFinStabilityWeight;
+  const finMfeWeight = isEntryStage ? entryFinMfeWeight : signalFinMfeWeight;
+  const setFinMfeWeight = isEntryStage ? setEntryFinMfeWeight : setSignalFinMfeWeight;
+  const finMaeWeight = isEntryStage ? entryFinMaeWeight : signalFinMaeWeight;
+  const setFinMaeWeight = isEntryStage ? setEntryFinMaeWeight : setSignalFinMaeWeight;
+  const finAirWeight = isEntryStage ? entryFinAirWeight : signalFinAirWeight;
+  const setFinAirWeight = isEntryStage ? setEntryFinAirWeight : setSignalFinAirWeight;
+  const finHitRateWeight = isEntryStage ? entryFinHitRateWeight : signalFinHitRateWeight;
+  const setFinHitRateWeight = isEntryStage ? setEntryFinHitRateWeight : setSignalFinHitRateWeight;
   const finStabWeightsSum = finStabMfeWeight + finStabMaeWeight + finStabAirWeight + finStabHitRateWeight;
   const finWeightsSum = finStabilityWeight + finMfeWeight + finMaeWeight + finAirWeight + finHitRateWeight;
+
+  // When Entry uses the same Hyperopt type as Signal, keep Entry normalization formulas in sync and read-only
+  useEffect(() => {
+    if (signalHyperoptType !== entryHyperoptType) return;
+    // Sync Entry intermediate formulas from Signal
+    setEntryIntermediateScoreFormula(signalIntermediateScoreFormula);
+    setEntryFinalScoreFormula(signalFinalScoreFormula);
+    setEntryIntMfeFormula(signalIntMfeFormula);
+    setEntryIntMaeFormula(signalIntMaeFormula);
+    setEntryIntAirFormula(signalIntAirFormula);
+    setEntryIntHitRateFormula(signalIntHitRateFormula);
+    setEntryIntMfeFormulaCode(signalIntMfeFormulaCode);
+    setEntryIntMaeFormulaCode(signalIntMaeFormulaCode);
+    setEntryIntAirFormulaCode(signalIntAirFormulaCode);
+    setEntryIntHitRateFormulaCode(signalIntHitRateFormulaCode);
+    setEntryIntMfeWeight(signalIntMfeWeight);
+    setEntryIntMaeWeight(signalIntMaeWeight);
+    setEntryIntAirWeight(signalIntAirWeight);
+    setEntryIntHitRateWeight(signalIntHitRateWeight);
+    // Sync Entry final formulas from Signal
+    setEntryFinStabilityFormula(signalFinStabilityFormula);
+    setEntryFinMfeFormula(signalFinMfeFormula);
+    setEntryFinMaeFormula(signalFinMaeFormula);
+    setEntryFinAirFormula(signalFinAirFormula);
+    setEntryFinHitRateFormula(signalFinHitRateFormula);
+    setEntryFinFinalFormulaCode(signalFinFinalFormulaCode);
+    setEntryFinStabilityFormulaCode(signalFinStabilityFormulaCode);
+    setEntryFinMfeFormulaCode(signalFinMfeFormulaCode);
+    setEntryFinMaeFormulaCode(signalFinMaeFormulaCode);
+    setEntryFinAirFormulaCode(signalFinAirFormulaCode);
+    setEntryFinHitRateFormulaCode(signalFinHitRateFormulaCode);
+    setEntryFinStabMfeWeight(signalFinStabMfeWeight);
+    setEntryFinStabMaeWeight(signalFinStabMaeWeight);
+    setEntryFinStabAirWeight(signalFinStabAirWeight);
+    setEntryFinStabHitRateWeight(signalFinStabHitRateWeight);
+    setEntryFinStabilityWeight(signalFinStabilityWeight);
+    setEntryFinMfeWeight(signalFinMfeWeight);
+    setEntryFinMaeWeight(signalFinMaeWeight);
+    setEntryFinAirWeight(signalFinAirWeight);
+    setEntryFinHitRateWeight(signalFinHitRateWeight);
+  }, [
+    signalHyperoptType,
+    entryHyperoptType,
+    signalIntermediateScoreFormula,
+    signalFinalScoreFormula,
+    signalIntMfeFormula,
+    signalIntMaeFormula,
+    signalIntAirFormula,
+    signalIntHitRateFormula,
+    signalIntMfeFormulaCode,
+    signalIntMaeFormulaCode,
+    signalIntAirFormulaCode,
+    signalIntHitRateFormulaCode,
+    signalIntMfeWeight,
+    signalIntMaeWeight,
+    signalIntAirWeight,
+    signalIntHitRateWeight,
+    signalFinStabilityFormula,
+    signalFinMfeFormula,
+    signalFinMaeFormula,
+    signalFinAirFormula,
+    signalFinHitRateFormula,
+    signalFinFinalFormulaCode,
+    signalFinStabilityFormulaCode,
+    signalFinMfeFormulaCode,
+    signalFinMaeFormulaCode,
+    signalFinAirFormulaCode,
+    signalFinHitRateFormulaCode,
+    signalFinStabMfeWeight,
+    signalFinStabMaeWeight,
+    signalFinStabAirWeight,
+    signalFinStabHitRateWeight,
+    signalFinStabilityWeight,
+    signalFinMfeWeight,
+    signalFinMaeWeight,
+    signalFinAirWeight,
+    signalFinHitRateWeight,
+  ]);
 
   // Formula Editor helpers (for Score formula)
   const FORMULA_EDITOR_VARIABLES = [
@@ -1850,18 +2085,29 @@ const BuilderStepper = memo(function BuilderStepper({
     }
   }, []);
 
-  // Formula state (unified)
-  const [signalFormula, setSignalFormula] = useState(`# Define your trading signals
+  // Formula state (separate for Signal / Entry)
+  const [signalFormula, setSignalFormula] = useState(`def populate_indicators(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
+    """
+    Populate signals.
+    Based on the following conditions:
+    - Rule 1: Close > Close
+    """
+    # Initialize signal column
+    dataframe.loc[:, 'signal'] = False
+    
+    # Rule 1
+    condition1 = (dataframe['Close'] > dataframe['Close'])
+    dataframe.loc[condition1, 'signal'] = True
+
+    return dataframe
+`);
+  const [entryFormula, setEntryFormula] = useState(`# Define your entry validation signals
 # Example:
-IF RSI < 30 AND Close > EMA THEN BUY
-IF RSI > 70 OR Close < EMA THEN SELL
+IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
 
 # You can use:
-# - Indicators: RSI, EMA, MACD, BB, CG_DW
-# - Price data: Close, Open, High, Low, Volume
-# - Operators: <, >, <=, >=, ==, !=
-# - Logic: AND, OR, NOT
-# - Actions: BUY, SELL`);
+# - Normalized metrics: FinalScore, Stability, median_MFE, median_MAE, median_AIR
+# - Logic: AND, OR, NOT`);
   
   // HeatMap state
   const [showHeatMapConfig, setShowHeatMapConfig] = useState(false);
@@ -1976,9 +2222,9 @@ IF RSI > 70 OR Close < EMA THEN SELL
   }, []);
   
   const handleAddIndicator = useCallback((indicator) => {
-    setIndicators(prev => [...prev, { ...indicator, id: Date.now() + Math.random(), enabled: true }]);
+    setIndicators((prev) => [...prev, { ...indicator, id: Date.now() + Math.random(), enabled: true }]);
     setShowAddModal(false);
-  }, []);
+  }, [setIndicators]);
   
   const handleEditIndicator = useCallback((updated) => {
     setIndicators(prev => prev.map(ind => ind.id === updated.id ? updated : ind));
@@ -2027,17 +2273,71 @@ IF RSI > 70 OR Close < EMA THEN SELL
     }
   }, []);
 
-  const handleHeatMapCellClick = useCallback((cell, runId) => {
-    setGeneratedHeatMap((prev) => {
-      if (!prev || prev.runId !== runId || !prev.config) return prev;
-      if (!cell.count || !cell.zoomRanges || !Object.keys(cell.zoomRanges).length) return prev;
-      const label = `Zoom: cell (${cell.xi + 1}, ${cell.yi + 1}) • n=${cell.count}`;
-      return {
-        ...prev,
-        zoomStack: [...prev.zoomStack, { label, zoomRanges: cell.zoomRanges }],
-      };
-    });
-  }, []);
+  const handleHeatMapCellClick = useCallback(
+    (cell, runId) => {
+      if (!cell || !cell.count) return;
+      // For leaf cells (n=1) add candidate(s) for Save as Best instead of drilldown
+      if (!isEntryStage && cell.count === 1 && Array.isArray(cell.results) && cell.results.length === 1) {
+        const result = cell.results[0];
+        const rawParams = result.params || {};
+        const params = {};
+        Object.entries(rawParams).forEach(([key]) => {
+          const parts = String(key).split("_");
+          const simpleKey = parts[parts.length - 1];
+          const indicatorIdPart = parts[0];
+          let indicatorPrefix = "";
+          const indicatorsFromConfig = generatedHeatMap?.config?.indicators || [];
+          const ind = indicatorsFromConfig.find((i) => String(i.id) === indicatorIdPart);
+          if (ind) {
+            indicatorPrefix =
+              ind.shortName || ind.displayName || ind.name || ind.type || "";
+          }
+          const friendlyKey = indicatorPrefix
+            ? `${indicatorPrefix}.${simpleKey}`
+            : simpleKey;
+          let v = 1 + Math.random() * 9;
+          if (Math.random() < 0.4) {
+            v = Math.round(v);
+          } else {
+            v = parseFloat(v.toFixed(2));
+          }
+          params[friendlyKey] = v;
+        });
+        const zoomLevel = generatedHeatMap?.zoomStack?.length || 0;
+        const candidateKey = `${runId}:${zoomLevel}:${cell.xi}:${cell.yi}`;
+        setSignalBestCandidates((prev) => {
+          if (prev.some((c) => c.key === candidateKey)) return prev;
+          const score = typeof result.score === "number" ? result.score : cell.avgScore ?? null;
+          const candidate = {
+            id: `cand-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            key: candidateKey,
+            score,
+            params,
+            meta: {
+              runId,
+              zoomLevel,
+              xi: cell.xi,
+              yi: cell.yi,
+              count: cell.count,
+            },
+          };
+          return [...prev, candidate];
+        });
+        return;
+      }
+      // For aggregated cells (n>1) keep drilldown behaviour
+      setGeneratedHeatMap((prev) => {
+        if (!prev || prev.runId !== runId || !prev.config) return prev;
+        if (!cell.count || !cell.zoomRanges || !Object.keys(cell.zoomRanges).length) return prev;
+        const label = `Zoom: cell (${cell.xi + 1}, ${cell.yi + 1}) • n=${cell.count}`;
+        return {
+          ...prev,
+          zoomStack: [...prev.zoomStack, { label, zoomRanges: cell.zoomRanges }],
+        };
+      });
+    },
+    [generatedHeatMap?.zoomStack, isEntryStage],
+  );
 
   const handleHeatMapZoomOut = useCallback((runId) => {
     setGeneratedHeatMap((prev) => {
@@ -2062,6 +2362,186 @@ IF RSI > 70 OR Close < EMA THEN SELL
     if (!generatedHeatMap?.fullResults || !generatedHeatMap?.config) return null;
     return buildHeatMap(generatedHeatMap.fullResults, generatedHeatMap.config, heatMapZoomRanges);
   }, [generatedHeatMap?.fullResults, generatedHeatMap?.config, heatMapZoomRanges]);
+  // Helper: build indicator snapshot for Best result (Signal only)
+  const buildIndicatorSnapshot = useCallback(
+    (indicator) => {
+      const paramsSnapshot = {};
+      if (Array.isArray(indicator.params)) {
+        indicator.params.forEach((param) => {
+          const key = param.key || param.name || param.label;
+          if (!key) return;
+          let value = null;
+          if (param.value !== undefined) {
+            value = param.value;
+          } else if (Array.isArray(param.values) && param.values.length > 0) {
+            // Pick random from available values (mock behaviour)
+            const idx = Math.floor(Math.random() * param.values.length);
+            value = param.values[idx];
+          } else if (param.min !== undefined && param.max !== undefined) {
+            // Random within numeric range if provided
+            const min = Number(param.min);
+            const max = Number(param.max);
+            if (Number.isFinite(min) && Number.isFinite(max) && max > min) {
+              value = min + Math.random() * (max - min);
+            }
+          }
+          if (value === null && param.defaultValue !== undefined) {
+            value = param.defaultValue;
+          }
+          paramsSnapshot[key] = value;
+        });
+      }
+      return {
+        id: indicator.id,
+        type: indicator.type,
+        displayName: indicator.displayName || indicator.name || String(indicator.type || ""),
+        paramsSnapshot,
+      };
+    },
+    [],
+  );
+
+  const buildSignalBestResult = useCallback(
+    ({ label, source, scores, meta }) => {
+      const indicatorSnapshots = signalIndicators.map((ind) => buildIndicatorSnapshot(ind));
+      const indicatorsRaw = signalIndicators.map((ind) => ({ ...ind }));
+      // For mock: use random values within available ranges for params and metrics
+      const numericScoreBase =
+        scores && scores.avg != null ? Number(scores.avg) : scores && scores.max != null ? Number(scores.max) : 0.5;
+      const randomAround = (base, spread = 0.15) => {
+        const v = base + (Math.random() * 2 - 1) * spread;
+        return Math.max(-1, Math.min(1, v));
+      };
+      const score = randomAround(Number.isFinite(numericScoreBase) ? numericScoreBase : 0.5, 0.1);
+      const mfe = randomAround(score, 0.2);
+      const mae = randomAround(-Math.abs(score), 0.2);
+      const air = randomAround(score, 0.25);
+      const stability = randomAround(0.5, 0.3);
+      const result = {
+        id: `signal-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        source,
+        label,
+        timestamp: new Date().toISOString(),
+        score,
+        mfe,
+        mae,
+        air,
+        stability,
+        indicators: indicatorSnapshots,
+        indicatorsRaw,
+        pairs,
+        timeRange,
+        hyperoptType: signalHyperoptType,
+        meta,
+      };
+      return result;
+    },
+    [signalIndicators, buildIndicatorSnapshot, pairs, timeRange, signalHyperoptType],
+  );
+
+  const handleSaveSignalBestResultFromDetail = useCallback(
+    ({ row, sub, detail, source }) => {
+      if (isEntryStage) return;
+      if (!detail) return;
+      const scores = detail.scores || null;
+      setSignalBestResults((prev) => {
+        const label =
+          `Result #${prev.length + 1} • ${row.pairs || pairs || ""} • ${row.timeFrame || ""} • ${detail.label || ""}`.trim();
+        const best = buildSignalBestResult({
+          label,
+          source,
+          scores,
+          meta: {
+            rowId: row.id,
+            subId: sub.id,
+            detailId: detail.id,
+            detailLabel: detail.label,
+            date: sub.date || row.date,
+          },
+        });
+        return [...prev, best];
+      });
+    },
+    [isEntryStage, setSignalBestResults, buildSignalBestResult, pairs],
+  );
+  const handleSaveSignalBestResultFromHeatMap = useCallback(() => {
+    if (!heatMapViewModalId) return;
+    if (isEntryStage) return;
+    const id = String(heatMapViewModalId);
+    const prefix = "hyperopt-";
+    if (!id.startsWith(prefix)) return;
+    const rest = id.slice(prefix.length);
+    const dashIndex = rest.indexOf("-");
+    if (dashIndex === -1) return;
+    const rowId = rest.slice(0, dashIndex);
+    const subId = rest.slice(dashIndex + 1);
+    let foundRow = null;
+    let foundSub = null;
+    for (const row of hyperoptResultsRows) {
+      if (row.id !== rowId) continue;
+      for (const sub of row.children || []) {
+        if (sub.id !== subId) continue;
+        foundRow = row;
+        foundSub = sub;
+        break;
+      }
+      if (foundRow) break;
+    }
+    if (!foundRow || !foundSub) return;
+    const detail = {
+      id: `${foundSub.id}-full`,
+      label: "Full data (from HeatMap)",
+      scores: {
+        min: foundSub.minScore,
+        avg: foundSub.avgScore,
+        max: foundSub.maxScore,
+      },
+    };
+    handleSaveSignalBestResultFromDetail({
+      row: foundRow,
+      sub: foundSub,
+      detail,
+      source: "heatmap",
+    });
+  }, [heatMapViewModalId, isEntryStage, hyperoptResultsRows, handleSaveSignalBestResultFromDetail]);
+
+  const handleSaveSignalBestCandidates = useCallback(() => {
+    if (isEntryStage || signalBestCandidates.length === 0) return;
+    setSignalBestResults((prev) => {
+      const startIndex = prev.length;
+      const added = signalBestCandidates.map((cand, idx) =>
+        buildSignalBestResult({
+          label: `Heatmap cell #${startIndex + idx + 1}`,
+          source: "heatmap",
+          scores: { avg: cand.score },
+          meta: {
+            ...cand.meta,
+            heatmapParams: cand.params,
+          },
+        }),
+      );
+      return [...prev, ...added];
+    });
+    setSignalBestCandidates([]);
+  }, [isEntryStage, signalBestCandidates, buildSignalBestResult, setSignalBestResults]);
+
+  const handleRemoveSignalBestCandidate = useCallback((id) => {
+    setSignalBestCandidates((prev) => prev.filter((c) => c.id !== id));
+  }, []);
+
+  const handleLoadBestResultIntoSignal = useCallback(
+    (best) => {
+      if (!best || !Array.isArray(best.indicatorsRaw)) return;
+      if (isEntryStage) return;
+      setSignalIndicators(
+        best.indicatorsRaw.map((ind) => ({
+          ...ind,
+          id: Date.now() + Math.random(),
+        })),
+      );
+    },
+    [isEntryStage, setSignalIndicators],
+  );
   const stages = useMemo(
     () => [
       {
@@ -2085,7 +2565,7 @@ IF RSI > 70 OR Close < EMA THEN SELL
         id: 2,
         label: "Entry",
         title: "STAGE 2: ENTRY VALIDATION",
-        locked: true,
+        locked: false,
         icon: (
           <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
             <path d="M4 12h10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -2150,7 +2630,6 @@ IF RSI > 70 OR Close < EMA THEN SELL
           </StageIcon>
           <div>
             <div className="text-[12px] font-medium text-[#d9d9d9]">Strategy Builder</div>
-            <div className={cx("text-[11px]", ui.textMuted)}>Stages are read-only (only Stage 1 has fields).</div>
           </div>
         </div>
         <span className="rounded-md border border-[#303030] bg-[#0f0f0f] px-2 py-0.5 text-[10px] text-[#8c8c8c]">mock</span>
@@ -2161,15 +2640,21 @@ IF RSI > 70 OR Close < EMA THEN SELL
         <div className="grid grid-cols-5 gap-2">
           {stages.map((s) => {
             const isActive = s.id === activeStage;
+            const isLocked = s.locked;
             return (
               <div
                 key={s.id}
                 className={cx(
                   "rounded-lg border px-2 py-2 flex items-center gap-2",
                   isActive ? "border-emerald-500/40 bg-emerald-500/10" : "border-[#303030] bg-[#0f0f0f]",
-                  s.locked && "opacity-80"
+                  isLocked && "opacity-80 cursor-not-allowed"
                 )}
                 title={s.title}
+                onClick={() => {
+                  if (!isLocked && typeof onStageChange === "function") {
+                    onStageChange(s.id);
+                  }
+                }}
               >
                 <span
                   className={cx(
@@ -2183,7 +2668,7 @@ IF RSI > 70 OR Close < EMA THEN SELL
                   <div className={cx("text-[12px] font-medium truncate", isActive ? "text-emerald-100" : "text-[#d9d9d9]")}>
                     {s.label}
                   </div>
-                  <div className={cx("text-[10px] truncate", ui.textMuted)}>{s.locked ? "locked" : "active"}</div>
+                  <div className={cx("text-[10px] truncate", ui.textMuted)}>{isLocked ? "locked" : "active"}</div>
                 </div>
               </div>
             );
@@ -2193,9 +2678,7 @@ IF RSI > 70 OR Close < EMA THEN SELL
 
       {/* Stage content */}
       <div className="p-3">
-        {active.id !== 1 ? (
-          <div className={cx(ui.radius, ui.panelMuted, "px-4 py-3 text-[12px]", ui.textSubtle)}>{active.title} — coming soon.</div>
-        ) : (
+        {active.id === 1 || active.id === 2 ? (
           <div className="space-y-4">
             {/* 1. INDICATORS */}
             <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
@@ -2205,8 +2688,12 @@ IF RSI > 70 OR Close < EMA THEN SELL
                 className={cx("w-full px-3 py-2 flex items-center justify-between gap-2 text-left", ui.panelMuted, "border-0 border-b", ui.divider, "hover:bg-[#1a1a1a] transition-colors")}
               >
                 <div>
-                  <div className="text-[12px] font-medium text-[#d9d9d9]">1. Indicators</div>
-                  <div className={cx("text-[11px]", ui.textMuted)}>Indicator Library and Selected Indicators</div>
+                  <div className="text-[12px] font-medium text-[#d9d9d9]">
+                    1. Indicators {isEntryStage ? "(Entry)" : "(Signal)"}
+                  </div>
+                  <div className={cx("text-[11px]", ui.textMuted)}>
+                    Indicator Library and Selected Indicators
+                  </div>
                 </div>
                 <span className="text-[#8c8c8c] text-[10px]">
                   {collapsedSections.has(1) ? "▶" : "▼"}
@@ -2290,7 +2777,7 @@ IF RSI > 70 OR Close < EMA THEN SELL
               )}
             </div>
 
-            {/* 2. SIGNAL FORMULAS */}
+            {/* 2. FORMULAS (Signal / Entry) */}
             <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
               <button
                 type="button"
@@ -2298,19 +2785,25 @@ IF RSI > 70 OR Close < EMA THEN SELL
                 className={cx("w-full px-3 py-2 flex items-center justify-between gap-2 text-left", ui.panelMuted, "border-0 border-b", ui.divider, "hover:bg-[#1a1a1a] transition-colors")}
               >
                 <div>
-                  <div className="text-[12px] font-medium text-[#d9d9d9]">2. Signal Formulas</div>
-                  <div className={cx("text-[11px]", ui.textMuted)}>Define trading signals using python formula or builder</div>
+                  <div className="text-[12px] font-medium text-[#d9d9d9]">
+                    {isEntryStage ? "2. Entry formulas" : "2. Signal Formulas"}
+                  </div>
+                  <div className={cx("text-[11px]", ui.textMuted)}>
+                    Define {isEntryStage ? "entry validation" : "trading"} signals using python formula or builder
+                  </div>
                 </div>
                 <span className="text-[#8c8c8c] text-[10px]">{collapsedSections.has(2) ? "▶" : "▼"}</span>
               </button>
               {!collapsedSections.has(2) && (
-              <div className="p-3">
-                <FormulaEditor 
-                  value={signalFormula}
-                  onChange={setSignalFormula}
-                  indicators={indicators}
-                />
-              </div>
+                <div className="p-3">
+                  <FormulaEditor
+                    key={isEntryStage ? "entry-formulas" : "signal-formulas"}
+                    value={isEntryStage ? entryFormula : signalFormula}
+                    onChange={isEntryStage ? setEntryFormula : setSignalFormula}
+                    indicators={indicators}
+                    mode={isEntryStage ? "entry" : "signal"}
+                  />
+                </div>
               )}
             </div>
 
@@ -2400,8 +2893,14 @@ IF RSI > 70 OR Close < EMA THEN SELL
                 </div>
 
                 <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
-                  <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">Hyperopt type</div>
-                  <select value={hyperoptType} onChange={(e) => setHyperoptType(e.target.value)} className={cx(ui.input, "h-9 text-[12px] w-full max-w-[200px]")}>
+                  <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">
+                    Hyperopt type {isEntryStage ? "(Entry)" : "(Signal)"}
+                  </div>
+                  <select
+                    value={hyperoptType}
+                    onChange={(e) => setHyperoptType(e.target.value)}
+                    className={cx(ui.input, "h-9 text-[12px] w-full max-w-[200px]")}
+                  >
                     <option value="BIAS">BIAS</option>
                     <option value="Brute Force">Brute Force</option>
                   </select>
@@ -2410,16 +2909,34 @@ IF RSI > 70 OR Close < EMA THEN SELL
                 {/* Normalization formulas — shown only when Hyperopt type is not Brute Force */}
                 {hyperoptType !== "Brute Force" && (
                 <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
-                  <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">Normalization formulas</div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="text-[12px] font-medium text-[#d9d9d9]">
+                      Normalization formulas {isEntryStage ? "(Entry)" : "(Signal)"}
+                    </div>
+                    {isEntryStage && signalHyperoptType === entryHyperoptType && (
+                      <div className="text-[10px] text-emerald-400">
+                        In sync with Signal (read-only)
+                      </div>
+                    )}
+                  </div>
                   <div className="p-3 pt-0 space-y-3 border-t border-[#303030]">
                           <div className="space-y-1.5">
                           <div className="text-[11px] font-medium text-[#d9d9d9]">Score formula</div>
                             <div className="flex flex-wrap items-center gap-3 gap-y-2">
-                              <select value={finalScoreFormula} onChange={(e) => setFinalScoreFormula(e.target.value)} className={cx(ui.input, "h-9 text-[12px] w-full max-w-[200px]")}>
+                              <select
+                                value={finalScoreFormula}
+                                onChange={(e) => setFinalScoreFormula(e.target.value)}
+                                disabled={isEntryStage && signalHyperoptType === entryHyperoptType}
+                                className={cx(
+                                  ui.input,
+                                  "h-9 text-[12px] w-full max-w-[200px]",
+                                  isEntryStage && signalHyperoptType === entryHyperoptType && "opacity-60 cursor-not-allowed",
+                                )}
+                              >
                                 {FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
                               </select>
                               <div className="min-w-[200px] flex-1 max-w-[400px]">
-                                <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-9 overflow-hidden">
+                                  <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-9 overflow-hidden">
                                   <div data-formula-mirror className="absolute left-0 top-0 bottom-0 right-8 pl-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
                                     <span className="inline-block min-w-full">{finFinalFormulaCode ? renderFormulaWithVariables(finFinalFormulaCode) : <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>}</span>
                                   </div>
@@ -2432,16 +2949,27 @@ IF RSI > 70 OR Close < EMA THEN SELL
                                       if (m) m.scrollLeft = e.target.scrollLeft;
                                     }}
                                     placeholder="Formula code"
-                                    className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 pl-3 pr-8 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset"
+                                    disabled={isEntryStage && signalHyperoptType === entryHyperoptType}
+                                    className={cx(
+                                      "relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 pl-3 pr-8 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset",
+                                      isEntryStage && signalHyperoptType === entryHyperoptType && "cursor-not-allowed",
+                                    )}
                                   />
                                   <button
                                     type="button"
                                     onClick={() => openFormulaEditor(finFinalFormulaCode, setFinFinalFormulaCode)}
-                                    className="absolute right-0 top-0 bottom-0 z-20 flex items-center justify-center w-8 h-full bg-emerald-600 text-white hover:bg-emerald-500 active:bg-emerald-700 rounded-r-md"
+                                    disabled={isEntryStage && signalHyperoptType === entryHyperoptType}
+                                    className={cx(
+                                      "absolute right-0 top-0 bottom-0 z-20 flex items-center justify-center w-8 h-full bg-emerald-600 text-white hover:bg-emerald-500 active:bg-emerald-700 rounded-r-md",
+                                      isEntryStage && signalHyperoptType === entryHyperoptType && "opacity-60 cursor-not-allowed",
+                                    )}
                                     title="Формула"
                                   >
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                                      <path fillRule="nonzero" d="M5 4.5C5 3.672 5.672 3 6.5 3h11c.828 0 1.5.672 1.5 1.5V5c0 .552-.448 1-1 1s-1-.448-1-1V5H7v.54l6.562 5.625c.512.44.512 1.232 0 1.671L7 18.46V19h10c.552 0 1 .448 1 1s-.448 1-1 1H6.5C5.672 21 5 20.328 5 19.5v-1.27c0-.438.191-.854.524-1.139l5.94-4.091L5.524 6.909C5.191 6.624 5 6.208 5 5.77V4.5z" />
+                                      <path
+                                        fillRule="nonzero"
+                                        d="M5 4.5C5 3.672 5.672 3 6.5 3h11c.828 0 1.5.672 1.5 1.5V5c0 .552-.448 1-1 1s-1-.448-1-1V5H7v.54l6.562 5.625c.512.44.512 1.232 0 1.671L7 18.46V19h10c.552 0 1 .448 1 1s-.448 1-1 1H6.5C5.672 21 5 20.328 5 19.5v-1.27c0-.438.191-.854.524-1.139l5.94-4.091L5.524 6.909C5.191 6.624 5 6.208 5 5.77V4.5z"
+                                      />
                                     </svg>
                                   </button>
                                 </div>
@@ -2469,7 +2997,16 @@ IF RSI > 70 OR Close < EMA THEN SELL
                                   <tr key={row.metric} className="border-b border-[#303030]">
                                     <td className="px-3 py-2 text-[#a6a6a6] align-top">{row.metric}</td>
                                     <td className="px-3 py-2 w-32 align-top">
-                                      <select value={row.formula} onChange={(e) => row.setFormula(e.target.value)} className={cx(ui.input, "h-8 text-[11px] w-full min-w-0")}>
+                                      <select
+                                        value={row.formula}
+                                        onChange={(e) => row.setFormula(e.target.value)}
+                                        disabled={isEntryStage && signalHyperoptType === entryHyperoptType}
+                                        className={cx(
+                                          ui.input,
+                                          "h-8 text-[11px] w-full min-w-0",
+                                          isEntryStage && signalHyperoptType === entryHyperoptType && "opacity-60 cursor-not-allowed",
+                                        )}
+                                      >
                                         {FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
                                       </select>
                                     </td>
@@ -2495,23 +3032,46 @@ IF RSI > 70 OR Close < EMA THEN SELL
                                             const m = e.target.parentElement?.querySelector("[data-formula-mirror]");
                                             if (m) m.scrollLeft = e.target.scrollLeft;
                                           }}
-                                          className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 pl-3 pr-8 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset"
+                                          disabled={isEntryStage && signalHyperoptType === entryHyperoptType}
+                                          className={cx(
+                                            "relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 pl-3 pr-8 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset",
+                                            isEntryStage && signalHyperoptType === entryHyperoptType && "cursor-not-allowed",
+                                          )}
                                         />
                                         <button
                                           type="button"
                                           onClick={() => openFormulaEditor(row.formulaCode, row.setFormulaCode)}
-                                          className="absolute right-0 top-0 bottom-0 z-20 flex items-center justify-center w-8 h-full bg-emerald-600 text-white hover:bg-emerald-500 active:bg-emerald-700 rounded-r-md"
+                                          disabled={isEntryStage && signalHyperoptType === entryHyperoptType}
+                                          className={cx(
+                                            "absolute right-0 top-0 bottom-0 z-20 flex items-center justify-center w-8 h-full bg-emerald-600 text-white hover:bg-emerald-500 active:bg-emerald-700 rounded-r-md",
+                                            isEntryStage && signalHyperoptType === entryHyperoptType && "opacity-60 cursor-not-allowed",
+                                          )}
                                           title="Формула"
                                         >
                                           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                                            <path fillRule="nonzero" d="M5 4.5C5 3.672 5.672 3 6.5 3h11c.828 0 1.5.672 1.5 1.5V5c0 .552-.448 1-1 1s-1-.448-1-1V5H7v.54l6.562 5.625c.512.44.512 1.232 0 1.671L7 18.46V19h10c.552 0 1 .448 1 1s-.448 1-1 1H6.5C5.672 21 5 20.328 5 19.5v-1.27c0-.438.191-.854.524-1.139l5.94-4.091L5.524 6.909C5.191 6.624 5 6.208 5 5.77V4.5z" />
+                                            <path
+                                              fillRule="nonzero"
+                                              d="M5 4.5C5 3.672 5.672 3 6.5 3h11c.828 0 1.5.672 1.5 1.5V5c0 .552-.448 1-1 1s-1-.448-1-1V5H7v.54l6.562 5.625c.512.44.512 1.232 0 1.671L7 18.46V19h10c.552 0 1 .448 1 1s-.448 1-1 1H6.5C5.672 21 5 20.328 5 19.5v-1.27c0-.438.191-.854.524-1.139л5.94-4.091L5.524 6.909C5.191 6.624 5 6.208 5 5.77V4.5з"
+                                            />
                                           </svg>
                                         </button>
                                       </div>
                                     </td>
                                     <td className="px-3 py-2 align-top">
                                       <div className="flex items-center gap-2">
-                                        <input type="range" min={0} max={100} step={1} value={row.weight} onChange={(e) => setWeightCapped(row.setWeight, e.target.value, row.others)} className="flex-1 max-w-[120px] h-2 accent-emerald-500" />
+                                        <input
+                                          type="range"
+                                          min={0}
+                                          max={100}
+                                          step={1}
+                                          value={row.weight}
+                                          onChange={(e) => setWeightCapped(row.setWeight, e.target.value, row.others)}
+                                          disabled={isEntryStage && signalHyperoptType === entryHyperoptType}
+                                          className={cx(
+                                            "flex-1 max-w-[120px] h-2 accent-emerald-500",
+                                            isEntryStage && signalHyperoptType === entryHyperoptType && "opacity-60 cursor-not-allowed",
+                                          )}
+                                        />
                                         <span className="text-[#8c8c8c] w-7">{row.weight}%</span>
                                       </div>
                                     </td>
@@ -2675,7 +3235,8 @@ IF RSI > 70 OR Close < EMA THEN SELL
                                             const level3Items = sub.heatmapsAndReports || [];
                                             const isLevel3Expanded = hyperoptLevel3Expanded.has(sub.id);
                                             const hasTruncData = !!sub.truncScores;
-                                            const isDetailsExpanded = normalizationDetailsExpanded.has(sub.id);
+                                            const normKey = `${row.id}::${sub.id}`;
+                                            const isDetailsExpanded = normalizationDetailsExpanded.has(normKey);
 
                                             return (
                                               <React.Fragment key={sub.id}>
@@ -2683,7 +3244,7 @@ IF RSI > 70 OR Close < EMA THEN SELL
                                                   <td className="px-2 py-2 align-middle">
                                                     <button
                                                       type="button"
-                                                      onClick={() => toggleNormalizationDetails(sub.id)}
+                                                        onClick={() => toggleNormalizationDetails(normKey)}
                                                       className="text-[#8c8c8c] hover:text-[#d9d9d9] p-0.5 rounded"
                                                       aria-label={isDetailsExpanded ? "Collapse" : "Expand"}
                                                     >
@@ -2747,21 +3308,24 @@ IF RSI > 70 OR Close < EMA THEN SELL
                                                                 },
                                                               ]
                                                                 .filter(Boolean)
-                                                                .map((detail) => (
-                                                                  <React.Fragment key={detail.id}>
-                                                                    <tr className="border-b border-[#303030]/50 hover:bg-[#1a1a1a]">
-                                                                      <td className="px-2 py-2 align-middle">
-                                                                        {level3Items.length > 0 && (
-                                                                          <button
-                                                                            type="button"
-                                                                            onClick={() => toggleHyperoptLevel3(sub.id)}
-                                                                            className="text-[#8c8c8c] hover:text-[#d9d9d9] p-0.5 rounded"
-                                                                            aria-label={isLevel3Expanded ? "Collapse" : "Expand"}
-                                                                          >
-                                                                            {isLevel3Expanded ? "▼" : "▶"}
-                                                                          </button>
-                                                                        )}
-                                                                      </td>
+                                                                .map((detail) => {
+                                                                  const level3Key = `${sub.id}::${detail.id}`;
+                                                                  const isLevel3ExpandedForRow = hyperoptLevel3Expanded.has(level3Key);
+                                                                  return (
+                                                                    <React.Fragment key={detail.id}>
+                                                                      <tr className="border-b border-[#303030]/50 hover:bg-[#1a1a1a]">
+                                                                        <td className="px-2 py-2 align-middle">
+                                                                          {level3Items.length > 0 && (
+                                                                            <button
+                                                                              type="button"
+                                                                              onClick={() => toggleHyperoptLevel3(level3Key)}
+                                                                              className="text-[#8c8c8c] hover:text-[#d9d9d9] p-0.5 rounded"
+                                                                              aria-label={isLevel3ExpandedForRow ? "Collapse" : "Expand"}
+                                                                            >
+                                                                              {isLevel3ExpandedForRow ? "▼" : "▶"}
+                                                                            </button>
+                                                                          )}
+                                                                        </td>
                                                                       <td className="px-3 py-2 text-[#a6a6a6]">{sub.date}</td>
                                                                       <td className="px-3 py-2">{detail.label}</td>
                                                                       <td className="px-3 py-2">{detail.scores?.min ?? "-"}</td>
@@ -2788,10 +3352,10 @@ IF RSI > 70 OR Close < EMA THEN SELL
                                                                           </button>
                                                                         </div>
                                                                       </td>
-                                                                    </tr>
-                                                                    {isLevel3Expanded && level3Items.length > 0 && (
-                                                                      <tr>
-                                                                        <td colSpan={8} className="p-0 align-top bg-[#0a0a0a]">
+                                                                      </tr>
+                                                                      {isLevel3ExpandedForRow && level3Items.length > 0 && (
+                                                                        <tr>
+                                                                          <td colSpan={8} className="p-0 align-top bg-[#0a0a0a]">
                                                                           {/* Block 3: HeatMaps & Reports (child of Normalization details) */}
                                                                           <div className="ml-4 mt-2 mb-2 rounded-lg border border-[#303030] overflow-hidden border-l-4 border-l-amber-500">
                                                                             <div className="px-3 py-1.5 font-medium border-b border-[#303030] bg-amber-500/10 text-amber-200 text-[11px]">
@@ -2847,11 +3411,12 @@ IF RSI > 70 OR Close < EMA THEN SELL
                                                                               </table>
                                                                             </div>
                                                                           </div>
-                                                                        </td>
-                                                                      </tr>
-                                                                    )}
-                                                                  </React.Fragment>
-                                                                ))}
+                                                                          </td>
+                                                                        </tr>
+                                                                      )}
+                                                                    </React.Fragment>
+                                                                  );
+                                                                })}
                                                             </tbody>
                                                           </table>
                                                         </div>
@@ -2879,6 +3444,171 @@ IF RSI > 70 OR Close < EMA THEN SELL
               )}
             </div>
 
+            {/* 5. BEST RESULTS (Signal only) */}
+            {!isEntryStage && (
+              <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
+                <button
+                  type="button"
+                  onClick={() => toggleSection(5)}
+                  className={cx(
+                    "w-full px-3 py-2 flex items-center justify-between gap-2 text-left",
+                    ui.panelMuted,
+                    "border-0 border-b",
+                    ui.divider,
+                    "hover:bg-[#1a1a1a] transition-colors",
+                  )}
+                >
+                  <div>
+                    <div className="text-[12px] font-medium text-[#d9d9d9]">5. Best results</div>
+                    <div className={cx("text-[11px]", ui.textMuted)}>
+                      Store and manage your best Signal configurations
+                    </div>
+                  </div>
+                  <span className="flex items-center gap-2">
+                    <span className="rounded-md border border-[#303030] bg-[#0f0f0f] px-2 py-0.5 text-[10px] text-[#8c8c8c]">
+                      {signalBestResults.length} saved
+                    </span>
+                    <span className="text-[#8c8c8c] text-[10px]">{collapsedSections.has(5) ? "▶" : "▼"}</span>
+                  </span>
+                </button>
+                {!collapsedSections.has(5) && (
+                  <div className="p-3 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className={cx("text-[11px]", ui.textMuted)}>
+                        Save promising Signal configurations from Hyperopt results and manage them here.
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowAddBestResultModal(true)}
+                        className={cx(ui.btnPrimary, "h-7 px-3 text-[11px] whitespace-nowrap")}
+                      >
+                        + Add Best result
+                      </button>
+                    </div>
+                    {signalBestResults.length === 0 ? (
+                      <div className={cx(ui.radius, ui.panelMuted, "p-3 text-[11px]", ui.textMuted)}>
+                        No Best results yet. Use "☆ Save as Best" in Hyperopt Results or add manually.
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto border border-[#303030] rounded-lg">
+                        <table className="w-full text-[11px] border-collapse">
+                          <thead className="bg-[#1a1a1a] text-[#8c8c8c]">
+                            <tr>
+                              <th className="px-3 py-2 text-left font-medium border-b border-[#303030] w-6"></th>
+                              <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Label</th>
+                              <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Score</th>
+                              <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">MFE</th>
+                              <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">MAE</th>
+                              <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">AIR</th>
+                              <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Stability</th>
+                              <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Indicators</th>
+                              <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Source</th>
+                              <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="text-[#d9d9d9]">
+                            {signalBestResults.map((best) => (
+                              <tr key={best.id} className="border-b border-[#303030]/60 hover:bg-[#141414]">
+                                <td className="px-3 py-2 align-middle">
+                                  <span title={best.timestamp} className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
+                                </td>
+                                <td className="px-3 py-2">
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="font-medium text-[11px] text-[#f5f5f5]">
+                                      {best.label || "Best result"}
+                                    </span>
+                                    <span className={cx("text-[10px]", ui.textMuted)}>
+                                      {best.pairs || pairs || "-"} · {best.timeRange || timeRange || "-"}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2">{best.score != null ? best.score.toFixed(3) : "-"}</td>
+                                <td className="px-3 py-2">{best.mfe != null ? best.mfe.toFixed(3) : "-"}</td>
+                                <td className="px-3 py-2">{best.mae != null ? best.mae.toFixed(3) : "-"}</td>
+                                <td className="px-3 py-2">{best.air != null ? best.air.toFixed(3) : "-"}</td>
+                                <td className="px-3 py-2">
+                                  {best.stability != null ? best.stability.toFixed(3) : "-"}
+                                </td>
+                                <td className="px-3 py-2">
+                                  <div className="flex flex-wrap gap-1">
+                                    {(best.indicators || []).map((ind) => {
+                                      const params =
+                                        ind.paramsSnapshot &&
+                                        Object.entries(ind.paramsSnapshot)
+                                          .map(([k, v]) => `${k}=${v}`)
+                                          .join(", ");
+                                      return (
+                                        <span
+                                          key={ind.id}
+                                          className="inline-flex items-center gap-1 rounded-full bg-[#1a1a1a] border border-[#303030] px-2 py-0.5"
+                                        >
+                                          <span className="text-[10px] text-[#f5f5f5]">
+                                            {ind.type || ind.displayName}
+                                          </span>
+                                          {params && (
+                                            <span className="text-[9px] text-[#a6a6a6] truncate max-w-[160px]">
+                                              ({params})
+                                            </span>
+                                          )}
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2 capitalize text-[#a6a6a6]">
+                                  {best.source === "heatmap" ? "HeatMap" : best.source || "Manual"}
+                                </td>
+                                <td className="px-3 py-2">
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedBestResult(best);
+                                        setShowBestResultDetailsModal(true);
+                                      }}
+                                      className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
+                                    >
+                                      View
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleLoadBestResultIntoSignal(best)}
+                                      className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
+                                    >
+                                      Load
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (!confirm("Remove this Best result?")) return;
+                                        setSignalBestResults((prev) =>
+                                          prev.filter((item) => item.id !== best.id),
+                                        );
+                                      }}
+                                      className={cx(
+                                        ui.btn,
+                                        "h-7 px-2 text-[10px] whitespace-nowrap text-red-400 border-red-500/60 hover:bg-red-500/10",
+                                      )}
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+          </div>
+        ) : (
+          <div className={cx(ui.radius, ui.panelMuted, "px-4 py-3 text-[12px]", ui.textSubtle)}>
+            {active.title} — coming soon.
           </div>
         )}
       </div>
@@ -3052,7 +3782,9 @@ IF RSI > 70 OR Close < EMA THEN SELL
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={() => setShowNormalizationModal(false)}>
           <div className={cx(ui.radius, "bg-[#141414] border border-[#303030] max-w-[720px] w-full max-h-[90vh] overflow-hidden flex flex-col shadow-xl")} onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-[#303030]">
-              <span className="text-[14px] font-medium text-[#d9d9d9]">Run normalization</span>
+              <span className="text-[14px] font-medium text-[#d9d9d9]">
+                Run normalization {isEntryStage ? "(Entry)" : "(Signal)"}
+              </span>
               <button type="button" onClick={() => setShowNormalizationModal(false)} className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1">✕</button>
             </div>
             <div className="overflow-auto p-4">
@@ -3327,6 +4059,142 @@ IF RSI > 70 OR Close < EMA THEN SELL
           </div>
         </div>
       )}
+      {/* Add Best result manually (Signal only) */}
+      {!isEntryStage && showAddBestResultModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
+          onClick={() => {
+            setShowAddBestResultModal(false);
+            setManualBestResultSelectionKey("");
+          }}
+        >
+          <div
+            className={cx(
+              ui.radius,
+              "bg-[#141414] border border-[#303030] max-w-[520px] w-full max-h-[90vh] overflow-hidden flex flex-col shadow-xl",
+            )}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#303030]">
+              <span className="text-[14px] font-medium text-[#d9d9d9]">Add Best result (Signal)</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddBestResultModal(false);
+                  setManualBestResultSelectionKey("");
+                }}
+                className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="overflow-auto p-4 space-y-4">
+              <div className={cx(ui.radius, ui.panelMuted, "p-3 space-y-3")}>
+                <div className="text-[12px] font-medium text-[#d9d9d9]">Select normalization result</div>
+                <p className={cx("text-[11px]", ui.textMuted)}>
+                  Choose a normalization result (full or trunc data). Metrics will be taken from the selected row and the
+                  current Signal indicators will be captured as a snapshot.
+                </p>
+                <select
+                  value={manualBestResultSelectionKey}
+                  onChange={(e) => setManualBestResultSelectionKey(e.target.value)}
+                  className={cx(ui.input, "h-9 text-[12px] w-full")}
+                >
+                  <option value="">Select normalization result…</option>
+                  {hyperoptResultsRows.flatMap((row) =>
+                    (row.children || []).flatMap((sub) => {
+                      const entries = [
+                        {
+                          id: `${row.id}|${sub.id}|full`,
+                          label: "Full data",
+                          scores: {
+                            min: sub.minScore,
+                            avg: sub.avgScore,
+                            max: sub.maxScore,
+                          },
+                        },
+                        sub.truncScores && {
+                          id: `${row.id}|${sub.id}|trunc`,
+                          label: "Trunc data",
+                          scores: sub.truncScores,
+                        },
+                      ].filter(Boolean);
+                      return entries.map((detail) => (
+                        <option key={detail.id} value={detail.id}>
+                          {row.pairs || pairs} · {row.timeFrame} · {sub.date} · {detail.label} · score{" "}
+                          {detail.scores?.avg ?? detail.scores?.max ?? "-"}
+                        </option>
+                      ));
+                    }),
+                  )}
+                </select>
+              </div>
+            </div>
+            <div className="px-4 py-3 border-t border-[#303030] flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddBestResultModal(false);
+                  setManualBestResultSelectionKey("");
+                }}
+                className={cx(ui.btn, "h-8 px-3 text-[11px]")}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!manualBestResultSelectionKey) return;
+                  const [rowId, subId, detailKey] = manualBestResultSelectionKey.split("|");
+                  let foundRow = null;
+                  let foundSub = null;
+                  let detail = null;
+                  for (const row of hyperoptResultsRows) {
+                    if (row.id !== rowId) continue;
+                    for (const sub of row.children || []) {
+                      if (sub.id !== subId) continue;
+                      foundRow = row;
+                      foundSub = sub;
+                      if (detailKey === "full") {
+                        detail = {
+                          id: `${sub.id}-full`,
+                          label: "Full data",
+                          scores: {
+                            min: sub.minScore,
+                            avg: sub.avgScore,
+                            max: sub.maxScore,
+                          },
+                        };
+                      } else if (detailKey === "trunc" && sub.truncScores) {
+                        detail = {
+                          id: `${sub.id}-trunc`,
+                          label: "Trunc data",
+                          scores: sub.truncScores,
+                        };
+                      }
+                      break;
+                    }
+                    if (foundRow) break;
+                  }
+                  if (foundRow && foundSub && detail) {
+                    handleSaveSignalBestResultFromDetail({
+                      row: foundRow,
+                      sub: foundSub,
+                      detail,
+                      source: "manual",
+                    });
+                    setShowAddBestResultModal(false);
+                    setManualBestResultSelectionKey("");
+                  }
+                }}
+                className={cx(ui.btnPrimary, "h-8 px-3 text-[11px]")}
+              >
+                Save Best result
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Formulas info modal (read-only) — opens when Details ⓘ is clicked */}
       {showHyperoptDetailsModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={() => setShowHyperoptDetailsModal(false)}>
@@ -3431,6 +4299,136 @@ IF RSI > 70 OR Close < EMA THEN SELL
           </div>
         </div>
       )}
+      {/* Best result details modal */}
+      {showBestResultDetailsModal && selectedBestResult && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
+          onClick={() => {
+            setShowBestResultDetailsModal(false);
+            setSelectedBestResult(null);
+          }}
+        >
+          <div
+            className={cx(
+              ui.radius,
+              "bg-[#141414] border border-[#303030] max-w-[720px] w-full max-h-[90vh] overflow-hidden flex flex-col shadow-xl",
+            )}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#303030]">
+              <div className="flex flex-col">
+                <span className="text-[14px] font-medium text-[#d9d9d9]">
+                  Best result — {selectedBestResult.label || "Signal configuration"}
+                </span>
+                <span className={cx("text-[11px]", ui.textMuted)}>
+                  {selectedBestResult.pairs || pairs || "-"} · {selectedBestResult.timeRange || timeRange || "-"} ·{" "}
+                  {selectedBestResult.hyperoptType || signalHyperoptType}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowBestResultDetailsModal(false);
+                  setSelectedBestResult(null);
+                }}
+                className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="overflow-auto p-4 space-y-4">
+              <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
+                <div className="text-[12px] font-medium text-[#d9d9d9] mb-2">Metrics</div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-[11px]">
+                  <div>
+                    <div className={cx("text-[10px]", ui.textMuted)}>Score</div>
+                    <div>{selectedBestResult.score != null ? selectedBestResult.score.toFixed(3) : "-"}</div>
+                  </div>
+                  <div>
+                    <div className={cx("text-[10px]", ui.textMuted)}>MFE</div>
+                    <div>{selectedBestResult.mfe != null ? selectedBestResult.mfe.toFixed(3) : "-"}</div>
+                  </div>
+                  <div>
+                    <div className={cx("text-[10px]", ui.textMuted)}>MAE</div>
+                    <div>{selectedBestResult.mae != null ? selectedBestResult.mae.toFixed(3) : "-"}</div>
+                  </div>
+                  <div>
+                    <div className={cx("text-[10px]", ui.textMuted)}>AIR</div>
+                    <div>{selectedBestResult.air != null ? selectedBestResult.air.toFixed(3) : "-"}</div>
+                  </div>
+                  <div>
+                    <div className={cx("text-[10px]", ui.textMuted)}>Stability</div>
+                    <div>{selectedBestResult.stability != null ? selectedBestResult.stability.toFixed(3) : "-"}</div>
+                  </div>
+                  <div>
+                    <div className={cx("text-[10px]", ui.textMuted)}>Source</div>
+                    <div className="capitalize">
+                      {selectedBestResult.source === "heatmap" ? "HeatMap" : selectedBestResult.source || "Manual"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
+                <div className="text-[12px] font-medium text-[#d9d9d9] mb-2">Indicators snapshot</div>
+                {(!selectedBestResult.indicators || selectedBestResult.indicators.length === 0) ? (
+                  <div className={cx("text-[11px]", ui.textMuted)}>No indicators captured for this Best result.</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-[11px] border-collapse">
+                      <thead className="bg-[#1a1a1a] text-[#8c8c8c]">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Type</th>
+                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Display name</th>
+                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Params</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-[#d9d9d9]">
+                        {selectedBestResult.indicators.map((ind) => {
+                          const params =
+                            ind.paramsSnapshot &&
+                            Object.entries(ind.paramsSnapshot)
+                              .map(([k, v]) => {
+                                if (typeof v === "number" && Number.isFinite(v)) {
+                                  return `${k}: ${v.toFixed(2)}`;
+                                }
+                                return `${k}: ${v}`;
+                              })
+                              .join(", ");
+                          return (
+                            <tr key={ind.id} className="border-b border-[#303030]/60">
+                              <td className="px-3 py-2 align-top">{ind.type || "-"}</td>
+                              <td className="px-3 py-2 align-top">
+                                {ind.displayName || ind.type || "-"}
+                              </td>
+                              <td className="px-3 py-2 align-top">
+                                <code className="text-[10px] bg-[#0f0f0f] px-2 py-1 rounded block overflow-x-auto">
+                                  {params || "{}"}
+                                </code>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="px-4 py-3 border-t border-[#303030] flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowBestResultDetailsModal(false);
+                  setSelectedBestResult(null);
+                }}
+                className={cx(ui.btnPrimary, "h-8 px-3 text-[11px]")}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* HeatMap configurator modal — opens when Configure HeatMap is clicked */}
       {heatMapConfigModalId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={() => setHeatMapConfigModalId(null)}>
@@ -3475,6 +4473,15 @@ IF RSI > 70 OR Close < EMA THEN SELL
                   canReset={generatedHeatMap.zoomStack.length > 0}
                   zoomLevel={generatedHeatMap.zoomStack.length}
                   zoomLevelLabel={generatedHeatMap.zoomStack.length > 0 ? generatedHeatMap.zoomStack[generatedHeatMap.zoomStack.length - 1].label : "Full heatmap"}
+                  onSaveBest={
+                    !isEntryStage
+                      ? signalBestCandidates.length > 0
+                        ? handleSaveSignalBestCandidates
+                        : handleSaveSignalBestResultFromHeatMap
+                      : null
+                  }
+                  bestCandidates={!isEntryStage ? signalBestCandidates : []}
+                  onRemoveCandidate={!isEntryStage ? handleRemoveSignalBestCandidate : null}
                 />
               ) : (
                 <div className="py-8 text-center text-[#8c8c8c] text-[13px]">
@@ -3786,7 +4793,7 @@ export default function App() {
   const [actionsDropdownOpen, setActionsDropdownOpen] = useState(false);
 
   // Builder fields (mock)
-  const [builderStage] = useState(1);
+  const [builderStage, setBuilderStage] = useState(1);
   const [builderPairs, setBuilderPairs] = useState(["BTC/USDT"]);
   const [builderTimeRange, setBuilderTimeRange] = useState("15m");
   const [builderTimeFrameStart, setBuilderTimeFrameStart] = useState("2020-01-01");
@@ -4390,6 +5397,7 @@ export default function App() {
               <div className="space-y-4">
                 <BuilderStepper
                   activeStage={builderStage}
+                  onStageChange={setBuilderStage}
                   pairs={builderPairs}
                   onPairsChange={setBuilderPairs}
                   timeRange={builderTimeRange}
