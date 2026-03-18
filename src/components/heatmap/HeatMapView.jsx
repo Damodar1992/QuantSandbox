@@ -19,6 +19,7 @@ export const HeatMapView = memo(function HeatMapView({
   onRemoveCandidate = null,
 }) {
   const [hoveredCell, setHoveredCell] = useState(null);
+  const [tooltipPos, setTooltipPos] = useState(null);
 
   if (error) {
     return (
@@ -92,6 +93,120 @@ export const HeatMapView = memo(function HeatMapView({
     const g = Math.round(lerp(from.g, to.g, localT));
     const b = Math.round(lerp(from.b, to.b, localT));
     return `rgb(${r}, ${g}, ${b})`;
+  };
+
+  const formatParamValue = (v) => {
+    if (v == null) return "-";
+    if (typeof v === "number" && Number.isFinite(v)) {
+      return v % 1 === 0 ? v.toFixed(0) : v.toFixed(2);
+    }
+    return String(v);
+  };
+
+  const getIndicatorPrefixById = (indicatorId) => {
+    const list = Array.isArray(config?.indicators) ? config.indicators : [];
+    const ind = list.find((i) => String(i?.id) === String(indicatorId));
+    return ind?.shortName || ind?.displayName || ind?.name || ind?.type || "";
+  };
+
+  const prettifyParamName = (raw) => {
+    const s = String(raw || "").trim();
+    if (!s) return "";
+    const lower = s.toLowerCase();
+    const m = lower.match(/^(fast|slow|signal)(?:_|-)?period$/);
+    if (m) return `${m[1][0].toUpperCase()}${m[1].slice(1)}Period`;
+    if (lower === "stddev" || lower === "std_dev" || lower === "std-dev") return "StdDev";
+    if (lower === "timeframe" || lower === "time_frame" || lower === "time-frame") return "TimeFrame";
+
+    // Fallback: split by _ or -, TitleCase each chunk
+    const chunks = s.split(/[_-]+/g).filter(Boolean);
+    const title = (w) => (w ? `${w[0].toUpperCase()}${w.slice(1)}` : w);
+    const out = chunks.map((c) => title(String(c))).join("");
+    return out || s;
+  };
+
+  const friendlyParamKey = (rawKey) => {
+    const key = String(rawKey || "");
+    const parts = key.split("_");
+    if (parts.length >= 2 && /^\d+(\.\d+)?$/.test(parts[0])) {
+      const indicatorId = parts[0];
+      const paramRaw = parts.slice(1).join("_");
+      const prefix = getIndicatorPrefixById(indicatorId);
+      const name = prettifyParamName(paramRaw) || paramRaw;
+      return prefix ? `${prefix}.${name}` : name;
+    }
+    if (key.includes(".")) return key;
+    return prettifyParamName(key) || key;
+  };
+
+  const getCellParamLines = (cell) => {
+    const results = Array.isArray(cell?.results) ? cell.results : [];
+    if (!results.length) return [];
+
+    const byKey = new Map();
+    for (const r of results) {
+      const p = r?.params;
+      if (!p || typeof p !== "object") continue;
+      for (const [rawK, rawV] of Object.entries(p)) {
+        const k = friendlyParamKey(rawK);
+        if (!k) continue;
+        if (!byKey.has(k)) byKey.set(k, []);
+        byKey.get(k).push(rawV);
+      }
+    }
+    const sortedKeys = [...byKey.keys()].sort((a, b) => String(a).localeCompare(String(b)));
+
+    const lines = [];
+    for (const k of sortedKeys) {
+      const vals = (byKey.get(k) || []).filter((v) => v != null);
+      if (!vals.length) continue;
+
+      const allNumeric = vals.every((v) => typeof v === "number" && Number.isFinite(v));
+      if (allNumeric) {
+        const min = Math.min(...vals);
+        const max = Math.max(...vals);
+        const value =
+          cell.count > 1 ? `${formatParamValue(min)}–${formatParamValue(max)}` : formatParamValue(vals[0]);
+        lines.push({ key: k, value });
+        continue;
+      }
+
+      const uniq = [...new Set(vals.map((v) => String(v)))];
+      const value = cell.count > 1 ? uniq.slice(0, 4).join(", ") : uniq[0];
+      lines.push({ key: k, value });
+    }
+    return lines;
+  };
+
+  const hoveredCellParamLines = hoveredCell ? getCellParamLines(hoveredCell) : [];
+
+  const computeTooltipPosFromRect = (rect) => {
+    const pad = 10;
+    const tooltipW = 320;
+    const tooltipH = 220;
+    const vw = typeof window !== "undefined" ? window.innerWidth : 1000;
+    const vh = typeof window !== "undefined" ? window.innerHeight : 800;
+
+    let left = rect.right + pad;
+    let top = rect.top;
+
+    if (left + tooltipW > vw - pad) left = Math.max(pad, rect.left - tooltipW - pad);
+    if (top + tooltipH > vh - pad) top = Math.max(pad, vh - tooltipH - pad);
+    if (top < pad) top = pad;
+
+    return { left, top };
+  };
+
+  const handleCellEnter = (cell, e) => {
+    if (!cell || cell.count === 0) return;
+    setHoveredCell(cell);
+    const rect = e?.currentTarget?.getBoundingClientRect?.();
+    if (rect) setTooltipPos(computeTooltipPosFromRect(rect));
+  };
+
+  const handleCellLeave = () => {
+    setHoveredCell(null);
+    setTooltipPos(null);
   };
 
   return (
@@ -168,8 +283,8 @@ export const HeatMapView = memo(function HeatMapView({
                             backgroundColor: getCellColor(cell.avgScore),
                           }
                     }
-                    onMouseEnter={() => !empty && setHoveredCell(cell)}
-                    onMouseLeave={() => setHoveredCell(null)}
+                    onMouseEnter={(e) => !empty && handleCellEnter(cell, e)}
+                    onMouseLeave={handleCellLeave}
                     onClick={() => !empty && onCellClick && onCellClick(cell)}
                   >
                     {!empty && (
@@ -198,7 +313,7 @@ export const HeatMapView = memo(function HeatMapView({
               !onSaveBest && "opacity-50 cursor-not-allowed",
             )}
           >
-            ☆ Save as Best
+            Select for Stage 2
           </button>
           {Array.isArray(bestCandidates) && bestCandidates.length > 0 && (
             <div className="mt-2 w-full max-w-xs border border-[#303030] rounded bg-[#141414] p-2 space-y-1">
@@ -258,8 +373,14 @@ export const HeatMapView = memo(function HeatMapView({
           )}
         </div>
 
-        {hoveredCell && (
-          <div className="mt-4 text-left text-[11px] text-[#d9d9d9] space-y-1">
+      </div>
+
+      {hoveredCell && tooltipPos && (
+        <div
+          className="fixed z-[60] text-left text-[11px] text-[#d9d9d9]"
+          style={{ left: tooltipPos.left, top: tooltipPos.top, width: 320 }}
+        >
+          <div className="rounded-lg border border-[#303030] bg-[#141414] shadow-xl p-3 space-y-1">
             <div className="font-medium text-[#f0f0f0]">Cell details</div>
             <div>
               avgScore:{" "}
@@ -277,9 +398,24 @@ export const HeatMapView = memo(function HeatMapView({
             <div>
               count: <span className="text-emerald-400">{hoveredCell.count}</span>
             </div>
+            <div className="pt-1">
+              <div className="text-[10px] text-[#8c8c8c] mb-1">Indicator params</div>
+              {hoveredCellParamLines.length === 0 ? (
+                <div className="text-[10px] text-[#8c8c8c]">No params in this cell.</div>
+              ) : (
+                <div className="max-h-40 overflow-y-auto border border-[#303030] rounded bg-[#111111] p-2 space-y-1">
+                  {hoveredCellParamLines.map((line) => (
+                    <div key={line.key} className="flex items-start justify-between gap-2">
+                      <span className="font-mono text-[#d9d9d9] break-all">{line.key}</span>
+                      <span className="font-mono text-emerald-300 whitespace-nowrap">{line.value}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       <p className="mt-2 text-[10px] text-[#8c8c8c]">
         Mock HeatMap view; click cell to drill down (when wired).

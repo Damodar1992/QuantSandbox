@@ -377,6 +377,55 @@ const getDefaultDisplayName = (type) => {
   return nameMap[type] || type.toLowerCase();
 };
 
+const prettifyIndicatorParamName = (raw) => {
+  const s = String(raw || "").trim();
+  if (!s) return "";
+  const lower = s.toLowerCase();
+  const m = lower.match(/^(fast|slow|signal)(?:_|-)?period$/);
+  if (m) return `${m[1][0].toUpperCase()}${m[1].slice(1)}Period`;
+  if (lower === "stddev" || lower === "std_dev" || lower === "std-dev") return "StdDev";
+  if (lower === "timeframe" || lower === "time_frame" || lower === "time-frame") return "TimeFrame";
+  if (lower === "gc_mult" || lower === "gc-mult") return "Mult";
+  const chunks = s.split(/[_-]+/g).filter(Boolean);
+  const title = (w) => (w ? `${w[0].toUpperCase()}${w.slice(1)}` : w);
+  const out = chunks.map((c) => title(String(c))).join("");
+  return out || s;
+};
+
+const formatIndicatorParamValue = (key, v) => {
+  if (v == null) return "-";
+  if (typeof v !== "number" || !Number.isFinite(v)) return String(v);
+  const k = String(key || "").toLowerCase();
+  // Params that are typically integer-like
+  const wantsInt =
+    k.includes("period") ||
+    k === "length" ||
+    k === "poles" ||
+    k.endsWith(".length") ||
+    k.endsWith(".poles") ||
+    k.endsWith(".fastperiod") ||
+    k.endsWith(".slowperiod") ||
+    k.endsWith(".signalperiod");
+  if (wantsInt) return String(Math.round(v));
+  // Multipliers / coefficients look better as decimals
+  if (k.includes("mult") || k.includes("std") || k.includes("dev")) return v.toFixed(2);
+  // Default: keep short
+  return Math.abs(v) >= 10 ? String(Math.round(v)) : v.toFixed(2);
+};
+
+const formatIndicatorSnapshot = (ind) => {
+  const prefix = ind?.displayName || getDefaultDisplayName(ind?.type || "");
+  const snap = ind?.paramsSnapshot && typeof ind.paramsSnapshot === "object" ? ind.paramsSnapshot : null;
+  if (!snap) return "";
+  return Object.entries(snap)
+    .map(([k, v]) => {
+      const name = prettifyIndicatorParamName(k) || String(k);
+      const fullKey = `${prefix}.${name}`;
+      return `${fullKey}=${formatIndicatorParamValue(fullKey, v)}`;
+    })
+    .join(", ");
+};
+
 const AddIndicatorModal = memo(({ onClose, onAdd, initialType = "RSI" }) => {
   const [selectedType, setSelectedType] = useState(initialType);
   const [displayName, setDisplayName] = useState(() => {
@@ -2281,27 +2330,30 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
         const result = cell.results[0];
         const rawParams = result.params || {};
         const params = {};
-        Object.entries(rawParams).forEach(([key]) => {
+        const indicatorsFromConfig = generatedHeatMap?.config?.indicators || [];
+        const prettifyParamName = (raw) => {
+          const s = String(raw || "").trim();
+          if (!s) return "";
+          const lower = s.toLowerCase();
+          const m = lower.match(/^(fast|slow|signal)(?:_|-)?period$/);
+          if (m) return `${m[1][0].toUpperCase()}${m[1].slice(1)}Period`;
+          if (lower === "stddev" || lower === "std_dev" || lower === "std-dev") return "StdDev";
+          if (lower === "timeframe" || lower === "time_frame" || lower === "time-frame") return "TimeFrame";
+          const chunks = s.split(/[_-]+/g).filter(Boolean);
+          const title = (w) => (w ? `${w[0].toUpperCase()}${w.slice(1)}` : w);
+          const out = chunks.map((c) => title(String(c))).join("");
+          return out || s;
+        };
+
+        Object.entries(rawParams).forEach(([key, value]) => {
           const parts = String(key).split("_");
-          const simpleKey = parts[parts.length - 1];
           const indicatorIdPart = parts[0];
-          let indicatorPrefix = "";
-          const indicatorsFromConfig = generatedHeatMap?.config?.indicators || [];
-          const ind = indicatorsFromConfig.find((i) => String(i.id) === indicatorIdPart);
-          if (ind) {
-            indicatorPrefix =
-              ind.shortName || ind.displayName || ind.name || ind.type || "";
-          }
-          const friendlyKey = indicatorPrefix
-            ? `${indicatorPrefix}.${simpleKey}`
-            : simpleKey;
-          let v = 1 + Math.random() * 9;
-          if (Math.random() < 0.4) {
-            v = Math.round(v);
-          } else {
-            v = parseFloat(v.toFixed(2));
-          }
-          params[friendlyKey] = v;
+          const paramRaw = parts.length >= 2 ? parts.slice(1).join("_") : parts[0];
+          const ind = indicatorsFromConfig.find((i) => String(i.id) === String(indicatorIdPart));
+          const indicatorPrefix = ind ? ind.shortName || ind.displayName || ind.name || ind.type || "" : "";
+          const paramName = prettifyParamName(paramRaw) || paramRaw;
+          const friendlyKey = indicatorPrefix ? `${indicatorPrefix}.${paramName}` : paramName;
+          params[friendlyKey] = value;
         });
         const zoomLevel = generatedHeatMap?.zoomStack?.length || 0;
         const candidateKey = `${runId}:${zoomLevel}:${cell.xi}:${cell.yi}`;
@@ -3152,7 +3204,9 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
               >
                 <div>
                   <div className="text-[12px] font-medium text-[#d9d9d9]">4. Hyperopt Results</div>
-                  <div className={cx("text-[11px]", ui.textMuted)}>Two-level table: runs and scores</div>
+                  <div className={cx("text-[11px]", ui.textMuted)}>
+                    Analyze hyperoptimization results, normalize scores by formula, and generate heatmaps and reports.
+                  </div>
                 </div>
                 <span className="flex items-center gap-2">
                   <span className="rounded-md border border-[#303030] bg-[#0f0f0f] px-2 py-0.5 text-[10px] text-[#8c8c8c]">
@@ -3459,9 +3513,9 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                   )}
                 >
                   <div>
-                    <div className="text-[12px] font-medium text-[#d9d9d9]">5. Best results</div>
+                    <div className="text-[12px] font-medium text-[#d9d9d9]">5. Best scores for Stage 2</div>
                     <div className={cx("text-[11px]", ui.textMuted)}>
-                      Store and manage your best Signal configurations
+                      Select scores from the heatmap or enter manually for Stage 2
                     </div>
                   </div>
                   <span className="flex items-center gap-2">
@@ -3475,19 +3529,19 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                   <div className="p-3 space-y-3">
                     <div className="flex items-center justify-between gap-2">
                       <div className={cx("text-[11px]", ui.textMuted)}>
-                        Save promising Signal configurations from Hyperopt results and manage them here.
+                        Choose the best values from the heatmap to apply in Stage 2 (Entry).
                       </div>
                       <button
                         type="button"
                         onClick={() => setShowAddBestResultModal(true)}
                         className={cx(ui.btnPrimary, "h-7 px-3 text-[11px] whitespace-nowrap")}
                       >
-                        + Add Best result
+                        Select best score
                       </button>
                     </div>
                     {signalBestResults.length === 0 ? (
                       <div className={cx(ui.radius, ui.panelMuted, "p-3 text-[11px]", ui.textMuted)}>
-                        No Best results yet. Use "☆ Save as Best" in Hyperopt Results or add manually.
+                        No best scores for Stage 2 yet. Use "☆ Save as Best" in Hyperopt Results or add manually.
                       </div>
                     ) : (
                       <div className="overflow-x-auto border border-[#303030] rounded-lg">
@@ -3532,22 +3586,18 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                                 <td className="px-3 py-2">
                                   <div className="flex flex-wrap gap-1">
                                     {(best.indicators || []).map((ind) => {
-                                      const params =
-                                        ind.paramsSnapshot &&
-                                        Object.entries(ind.paramsSnapshot)
-                                          .map(([k, v]) => `${k}=${v}`)
-                                          .join(", ");
+                                      const params = formatIndicatorSnapshot(ind);
                                       return (
                                         <span
                                           key={ind.id}
                                           className="inline-flex items-center gap-1 rounded-full bg-[#1a1a1a] border border-[#303030] px-2 py-0.5"
                                         >
                                           <span className="text-[10px] text-[#f5f5f5]">
-                                            {ind.type || ind.displayName}
+                                            {ind.displayName || getDefaultDisplayName(ind.type || "")}
                                           </span>
                                           {params && (
                                             <span className="text-[9px] text-[#a6a6a6] truncate max-w-[160px]">
-                                              ({params})
+                                              {params}
                                             </span>
                                           )}
                                         </span>
@@ -3569,13 +3619,6 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                                       className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
                                     >
                                       View
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleLoadBestResultIntoSignal(best)}
-                                      className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
-                                    >
-                                      Load
                                     </button>
                                     <button
                                       type="button"
