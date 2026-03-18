@@ -6,7 +6,7 @@ import { cx, ui } from "./constants/ui";
 import { SECTIONS, DISABLED_SECTIONS, PAIR_OPTIONS, TIME_RANGES, INITIAL_STRATEGIES } from "./constants/app";
 import { SOURCE_OPTIONS, MA_TYPES, INDICATOR_GROUPS, BASE_INDICATORS } from "./constants/indicators";
 import { HEATMAP_FILTER_KEYS, FILTER_OPERATIONS } from "./constants/heatmap";
-import { FORMULA_OPTIONS, HYPEROPT_DETAILS_TOOLTIP_TEXT } from "./constants/formulas";
+import { FINAL_SCORE_FORMULA_OPTIONS, METRIC_FORMULA_OPTIONS, HYPEROPT_DETAILS_TOOLTIP_TEXT } from "./constants/formulas";
 import { clamp, lerp, quantile, computeRanges, normalizeParam, buildHeatMap, formatScore, heatmapScoreToColor, HEATMAP_LEGEND_STOPS, HEATMAP_CELL_PX, HEATMAP_GAP_PX, EMPTY_CELL_BG } from "./utils/heatmap";
 import { getParamValuesFromDef, getParamDefForCompositeKey, getParamLabel, getReportParamLabel, getIndicatorTemplate } from "./utils/indicators";
 import { generatePythonCode } from "./utils/pythonCode";
@@ -1756,10 +1756,10 @@ const BuilderStepper = memo(function BuilderStepper({
   const [signalBestCandidates, setSignalBestCandidates] = useState([]);
   
   // Normalization formulas: Intermediate + Final (tables shown after dropdown selection)
-  const [signalIntermediateScoreFormula, setSignalIntermediateScoreFormula] = useState("Formula 1");
-  const [signalFinalScoreFormula, setSignalFinalScoreFormula] = useState("Formula 1");
-  const [entryIntermediateScoreFormula, setEntryIntermediateScoreFormula] = useState("Formula 1");
-  const [entryFinalScoreFormula, setEntryFinalScoreFormula] = useState("Formula 1");
+  const [signalIntermediateScoreFormula, setSignalIntermediateScoreFormula] = useState("Base formula");
+  const [signalFinalScoreFormula, setSignalFinalScoreFormula] = useState("Base formula");
+  const [entryIntermediateScoreFormula, setEntryIntermediateScoreFormula] = useState("Base formula");
+  const [entryFinalScoreFormula, setEntryFinalScoreFormula] = useState("Base formula");
   const intermediateScoreFormula = isEntryStage ? entryIntermediateScoreFormula : signalIntermediateScoreFormula;
   const setIntermediateScoreFormula = isEntryStage ? setEntryIntermediateScoreFormula : setSignalIntermediateScoreFormula;
   const finalScoreFormula = isEntryStage ? entryFinalScoreFormula : signalFinalScoreFormula;
@@ -1768,14 +1768,30 @@ const BuilderStepper = memo(function BuilderStepper({
     const n = Math.max(0, Math.min(100, Number(value)));
     setter(Math.min(n, 100 - othersSum));
   }, []);
-  const DEFAULT_FORMULA_CODE = "1 / (1 + exp( -k * ( (MFE - median(MFE)) / median(|MFE - median(MFE)|) ) ))";
+  const DEFAULT_FORMULA_CODE = "1 / (1 + exp( -k * ( (medMFE - median(medMFE)) / median(|medMFE - median(medMFE)|) ) ))";
   const DEFAULT_FINAL_SCORE_FORMULA = "weightMFE * normMFE - weightMAE * normMAE + weightAIR * normAIR + weightHitRate * normHitRate";
   const DEFAULT_STABILITY_FORMULA = "1/(1+EXP(-1*(Stability - MEDIAN(Stability)) / (QUARTILE.INC(Stability,3) - QUARTILE.INC(Stability,1))))";
-  const DEFAULT_MFE_FORMULA = "1/(1+EXP(-1*(MFE - MEDIAN(MFE)) / (QUARTILE.INC(MFE,3) - QUARTILE.INC(MFE,1))))";
-  const DEFAULT_MAE_FORMULA = "1/(1+EXP(1*(MAE - MEDIAN(MAE)) / (QUARTILE.INC(MAE,3) - QUARTILE.INC(MAE,1))))";
-  const DEFAULT_AIR_FORMULA = "1/(1+EXP(-1*(AIR - MEDIAN(AIR)) / (QUARTILE.INC(AIR,3) - QUARTILE.INC(AIR,1))))";
-  const DEFAULT_HITRATE_FORMULA = "1/(1+EXP(-1*(HitRate - MEDIAN(HitRate)) / (QUARTILE.INC(HitRate,3) - QUARTILE.INC(HitRate,1))))";
-  const FORMULA_VARIABLES = ["median", "MFE", "MAE", "AIR", "exp", "k"];
+  const DEFAULT_MFE_FORMULA = "min(max((medMFE - medMFELow) / (medMFEHigh - medMFELow), 0), 1)";
+  const DEFAULT_MAE_FORMULA = "min(max((medMAE - medMAELow) / (medMAEHigh - medMAELow), 0), 1)";
+  const DEFAULT_AIR_FORMULA = "min(max((medAIR - medAIRLow) / (medAIRHigh - medAIRLow), 0), 1)";
+  const DEFAULT_HITRATE_FORMULA = "min(max((medHitRate - medHitRateLow) / (medHitRateHigh - medHitRateLow), 0), 1)";
+  const FORMULA_VARIABLES = [
+    "median",
+    "medMFE",
+    "medMAE",
+    "medAIR",
+    "medHitRate",
+    "medMFELow",
+    "medMFEHigh",
+    "medMAELow",
+    "medMAEHigh",
+    "medAIRLow",
+    "medAIRHigh",
+    "medHitRateLow",
+    "medHitRateHigh",
+    "exp",
+    "k",
+  ];
   // Intermediate metrics table (after user selects Normalization global formula)
   const [signalIntMfeFormula, setSignalIntMfeFormula] = useState("Formula 1");
   const [signalIntMaeFormula, setSignalIntMaeFormula] = useState("Formula 1");
@@ -1855,6 +1871,32 @@ const BuilderStepper = memo(function BuilderStepper({
   const [entryFinMaeFormula, setEntryFinMaeFormula] = useState("Formula 1");
   const [entryFinAirFormula, setEntryFinAirFormula] = useState("Formula 1");
   const [entryFinHitRateFormula, setEntryFinHitRateFormula] = useState("Formula 1");
+
+  const FINAL_SCORE_CODE_BY_TEMPLATE = useMemo(
+    () => ({
+      "Base formula": "weightMFE * normMFE - weightMAE * normMAE + weightAIR * normAIR + weightHitRate * normHitRate",
+      "AIR punishment":
+        "weightMFE * normMFE - weightMAE * normMAE + weightAIR * IF(medMFE >= medMAE ;normAIR ;-1*normAIR) + weightHitRate * normHitRate",
+    }),
+    [],
+  );
+  const METRIC_FORMULA_CODE_BY_TEMPLATE = useMemo(
+    () => ({
+      normMFE: {
+        "Formula 1": "min(max((medMFE - medMFELow) / (medMFEHigh - medMFELow), 0), 1)",
+      },
+      normMAE: {
+        "Formula 1": "min(max((medMAE - medMAELow) / (medMAEHigh - medMAELow), 0), 1)",
+      },
+      normAIR: {
+        "Formula 1": "min(max((medAIR - medAIRLow) / (medAIRHigh - medAIRLow), 0), 1)",
+      },
+      normHitRate: {
+        "Formula 1": "min(max((medHitRate - medHitRateLow) / (medHitRateHigh - medHitRateLow), 0), 1)",
+      },
+    }),
+    [],
+  );
   const [entryFinFinalFormulaCode, setEntryFinFinalFormulaCode] = useState(DEFAULT_FINAL_SCORE_FORMULA);
   const [entryFinStabilityFormulaCode, setEntryFinStabilityFormulaCode] = useState(DEFAULT_STABILITY_FORMULA);
   const [entryFinMfeFormulaCode, setEntryFinMfeFormulaCode] = useState(DEFAULT_MFE_FORMULA);
@@ -1994,10 +2036,18 @@ const BuilderStepper = memo(function BuilderStepper({
 
   // Formula Editor helpers (for Score formula)
   const FORMULA_EDITOR_VARIABLES = [
-    "MFE",
-    "MAE",
-    "AIR",
-    "HitRate",
+    "medMFE",
+    "medMAE",
+    "medAIR",
+    "medHitRate",
+    "medMFELow",
+    "medMFEHigh",
+    "medMAELow",
+    "medMAEHigh",
+    "medAIRLow",
+    "medAIRHigh",
+    "medHitRateLow",
+    "medHitRateHigh",
     "Stability",
     "weightMFE",
     "normMFE",
@@ -2963,7 +3013,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                 <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
                   <div className="flex items-center justify-between mb-3">
                     <div className="text-[12px] font-medium text-[#d9d9d9]">
-                      Normalization formulas {isEntryStage ? "(Entry)" : "(Signal)"}
+                      Intermediate formula (Score and normalization metrics)
                     </div>
                     {isEntryStage && signalHyperoptType === entryHyperoptType && (
                       <div className="text-[10px] text-emerald-400">
@@ -2977,7 +3027,12 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                             <div className="flex flex-wrap items-center gap-3 gap-y-2">
                               <select
                                 value={finalScoreFormula}
-                                onChange={(e) => setFinalScoreFormula(e.target.value)}
+                                onChange={(e) => {
+                                  const next = e.target.value;
+                                  setFinalScoreFormula(next);
+                                  const code = FINAL_SCORE_CODE_BY_TEMPLATE[next];
+                                  if (code) setFinFinalFormulaCode(code);
+                                }}
                                 disabled={isEntryStage && signalHyperoptType === entryHyperoptType}
                                 className={cx(
                                   ui.input,
@@ -2985,7 +3040,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                                   isEntryStage && signalHyperoptType === entryHyperoptType && "opacity-60 cursor-not-allowed",
                                 )}
                               >
-                                {FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
+                                {FINAL_SCORE_FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
                               </select>
                               <div className="min-w-[200px] flex-1 max-w-[400px]">
                                   <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-9 overflow-hidden">
@@ -3041,17 +3096,23 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                               </thead>
                               <tbody className="text-[#d9d9d9]">
                                 {[
-                                  { metric: "MFE", formula: finMfeFormula, setFormula: setFinMfeFormula, formulaCode: finMfeFormulaCode, setFormulaCode: setFinMfeFormulaCode, weight: finMfeWeight, setWeight: setFinMfeWeight, others: finMaeWeight + finAirWeight + finHitRateWeight },
-                                  { metric: "MAE", formula: finMaeFormula, setFormula: setFinMaeFormula, formulaCode: finMaeFormulaCode, setFormulaCode: setFinMaeFormulaCode, weight: finMaeWeight, setWeight: setFinMaeWeight, others: finMfeWeight + finAirWeight + finHitRateWeight },
-                                  { metric: "AIR", formula: finAirFormula, setFormula: setFinAirFormula, formulaCode: finAirFormulaCode, setFormulaCode: setFinAirFormulaCode, weight: finAirWeight, setWeight: setFinAirWeight, others: finMfeWeight + finMaeWeight + finHitRateWeight },
-                                  { metric: "Hit rate", formula: finHitRateFormula, setFormula: setFinHitRateFormula, formulaCode: finHitRateFormulaCode, setFormulaCode: setFinHitRateFormulaCode, weight: finHitRateWeight, setWeight: setFinHitRateWeight, others: finMfeWeight + finMaeWeight + finAirWeight },
+                                  { metric: "normMFE", formula: finMfeFormula, setFormula: setFinMfeFormula, formulaCode: finMfeFormulaCode, setFormulaCode: setFinMfeFormulaCode, weight: finMfeWeight, setWeight: setFinMfeWeight, others: finMaeWeight + finAirWeight + finHitRateWeight },
+                                  { metric: "normMAE", formula: finMaeFormula, setFormula: setFinMaeFormula, formulaCode: finMaeFormulaCode, setFormulaCode: setFinMaeFormulaCode, weight: finMaeWeight, setWeight: setFinMaeWeight, others: finMfeWeight + finAirWeight + finHitRateWeight },
+                                  { metric: "normAIR", formula: finAirFormula, setFormula: setFinAirFormula, formulaCode: finAirFormulaCode, setFormulaCode: setFinAirFormulaCode, weight: finAirWeight, setWeight: setFinAirWeight, others: finMfeWeight + finMaeWeight + finHitRateWeight },
+                                  { metric: "normHitRate", formula: finHitRateFormula, setFormula: setFinHitRateFormula, formulaCode: finHitRateFormulaCode, setFormulaCode: setFinHitRateFormulaCode, weight: finHitRateWeight, setWeight: setFinHitRateWeight, others: finMfeWeight + finMaeWeight + finAirWeight },
                                 ].map((row) => (
                                   <tr key={row.metric} className="border-b border-[#303030]">
                                     <td className="px-3 py-2 text-[#a6a6a6] align-top">{row.metric}</td>
                                     <td className="px-3 py-2 w-32 align-top">
                                       <select
                                         value={row.formula}
-                                        onChange={(e) => row.setFormula(e.target.value)}
+                                        onChange={(e) => {
+                                          const next = e.target.value;
+                                          row.setFormula(next);
+                                          const byTemplate = METRIC_FORMULA_CODE_BY_TEMPLATE[row.metric];
+                                          const code = byTemplate && byTemplate[next];
+                                          if (code) row.setFormulaCode(code);
+                                        }}
                                         disabled={isEntryStage && signalHyperoptType === entryHyperoptType}
                                         className={cx(
                                           ui.input,
@@ -3059,7 +3120,8 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                                           isEntryStage && signalHyperoptType === entryHyperoptType && "opacity-60 cursor-not-allowed",
                                         )}
                                       >
-                                        {FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
+                                        <option value="Formula 1">{row.metric}</option>
+                                        <option value="Formula 2">Fake formula</option>
                                       </select>
                                     </td>
                                     <td className="px-3 py-2 align-top min-w-[200px]">
@@ -3837,8 +3899,17 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                   <div className="space-y-1.5">
                     <div className="text-[11px] font-medium text-[#d9d9d9]">Score formula</div>
                     <div className="flex flex-wrap items-center gap-3 gap-y-2">
-                      <select value={finalScoreFormula} onChange={(e) => setFinalScoreFormula(e.target.value)} className={cx(ui.input, "h-9 text-[12px] w-full max-w-[200px]")}>
-                        {FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
+                      <select
+                        value={finalScoreFormula}
+                        onChange={(e) => {
+                          const next = e.target.value;
+                          setFinalScoreFormula(next);
+                          const code = FINAL_SCORE_CODE_BY_TEMPLATE[next];
+                          if (code) setFinFinalFormulaCode(code);
+                        }}
+                        className={cx(ui.input, "h-9 text-[12px] w-full max-w-[200px]")}
+                      >
+                        {FINAL_SCORE_FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
                       </select>
                       <div className="min-w-[200px] flex-1 max-w-[400px]">
                         <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-9 overflow-hidden">
@@ -3874,7 +3945,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                     <div className="text-[11px] font-medium text-[#d9d9d9]">Stability Formula</div>
                     <div className="flex flex-wrap items-center gap-3 gap-y-2">
                       <select value={finStabilityFormula} onChange={(e) => setFinStabilityFormula(e.target.value)} className={cx(ui.input, "h-9 text-[12px] w-full max-w-[200px]")}>
-                        {FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
+                        {METRIC_FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
                       </select>
                       <div className="min-w-[200px] flex-1 max-w-[400px]">
                         <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-9 overflow-hidden">
@@ -3925,7 +3996,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                           <td className="px-3 py-2 text-[#a6a6a6] align-top">Stability</td>
                           <td className="px-3 py-2 w-32 align-top">
                             <select value={finStabilityFormula} onChange={(e) => setFinStabilityFormula(e.target.value)} className={cx(ui.input, "h-8 text-[11px] w-full min-w-0")}>
-                              {FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
+                              {METRIC_FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
                             </select>
                           </td>
                           <td className="px-3 py-2 align-top min-w-[200px]">
@@ -3949,16 +4020,27 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                           </td>
                         </tr>
                         {[
-                          { metric: "MFE", formula: finMfeFormula, setFormula: setFinMfeFormula, formulaCode: finMfeFormulaCode, setFormulaCode: setFinMfeFormulaCode, weight: finMfeWeight, setWeight: setFinMfeWeight, others: finStabilityWeight + finMaeWeight + finAirWeight + finHitRateWeight },
-                          { metric: "MAE", formula: finMaeFormula, setFormula: setFinMaeFormula, formulaCode: finMaeFormulaCode, setFormulaCode: setFinMaeFormulaCode, weight: finMaeWeight, setWeight: setFinMaeWeight, others: finStabilityWeight + finMfeWeight + finAirWeight + finHitRateWeight },
-                          { metric: "AIR", formula: finAirFormula, setFormula: setFinAirFormula, formulaCode: finAirFormulaCode, setFormulaCode: setFinAirFormulaCode, weight: finAirWeight, setWeight: setFinAirWeight, others: finStabilityWeight + finMfeWeight + finMaeWeight + finHitRateWeight },
-                          { metric: "Hit rate", formula: finHitRateFormula, setFormula: setFinHitRateFormula, formulaCode: finHitRateFormulaCode, setFormulaCode: setFinHitRateFormulaCode, weight: finHitRateWeight, setWeight: setFinHitRateWeight, others: finStabilityWeight + finMfeWeight + finMaeWeight + finAirWeight },
+                          { metric: "normMFE", formula: finMfeFormula, setFormula: setFinMfeFormula, formulaCode: finMfeFormulaCode, setFormulaCode: setFinMfeFormulaCode, weight: finMfeWeight, setWeight: setFinMfeWeight, others: finStabilityWeight + finMaeWeight + finAirWeight + finHitRateWeight },
+                          { metric: "normMAE", formula: finMaeFormula, setFormula: setFinMaeFormula, formulaCode: finMaeFormulaCode, setFormulaCode: setFinMaeFormulaCode, weight: finMaeWeight, setWeight: setFinMaeWeight, others: finStabilityWeight + finMfeWeight + finAirWeight + finHitRateWeight },
+                          { metric: "normAIR", formula: finAirFormula, setFormula: setFinAirFormula, formulaCode: finAirFormulaCode, setFormulaCode: setFinAirFormulaCode, weight: finAirWeight, setWeight: setFinAirWeight, others: finStabilityWeight + finMfeWeight + finMaeWeight + finHitRateWeight },
+                          { metric: "normHitRate", formula: finHitRateFormula, setFormula: setFinHitRateFormula, formulaCode: finHitRateFormulaCode, setFormulaCode: setFinHitRateFormulaCode, weight: finHitRateWeight, setWeight: setFinHitRateWeight, others: finStabilityWeight + finMfeWeight + finMaeWeight + finAirWeight },
                         ].map((row) => (
                           <tr key={row.metric} className="border-b border-[#303030]">
                             <td className="px-3 py-2 text-[#a6a6a6] align-top">{row.metric}</td>
                             <td className="px-3 py-2 w-32 align-top">
-                              <select value={row.formula} onChange={(e) => row.setFormula(e.target.value)} className={cx(ui.input, "h-8 text-[11px] w-full min-w-0")}>
-                                {FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
+                              <select
+                                value={row.formula}
+                                onChange={(e) => {
+                                  const next = e.target.value;
+                                  row.setFormula(next);
+                                  const byTemplate = METRIC_FORMULA_CODE_BY_TEMPLATE[row.metric];
+                                  const code = byTemplate && byTemplate[next];
+                                  if (code) row.setFormulaCode(code);
+                                }}
+                                className={cx(ui.input, "h-8 text-[11px] w-full min-w-0")}
+                              >
+                                <option value="Formula 1">{row.metric}</option>
+                                <option value="Formula 2">Fake formula</option>
                               </select>
                             </td>
                             <td className="px-3 py-2 align-top min-w-[200px]">
@@ -4308,10 +4390,10 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                           <td className="px-3 py-2 align-top">{finStabilityWeight}%</td>
                         </tr>
                         {[
-                          { metric: "MFE", formula: finMfeFormula, formulaCode: finMfeFormulaCode, weight: finMfeWeight },
-                          { metric: "MAE", formula: finMaeFormula, formulaCode: finMaeFormulaCode, weight: finMaeWeight },
-                          { metric: "AIR", formula: finAirFormula, formulaCode: finAirFormulaCode, weight: finAirWeight },
-                          { metric: "Hit rate", formula: finHitRateFormula, formulaCode: finHitRateFormulaCode, weight: finHitRateWeight },
+                          { metric: "normMFE", formula: finMfeFormula, formulaCode: finMfeFormulaCode, weight: finMfeWeight },
+                          { metric: "normMAE", formula: finMaeFormula, formulaCode: finMaeFormulaCode, weight: finMaeWeight },
+                          { metric: "normAIR", formula: finAirFormula, formulaCode: finAirFormulaCode, weight: finAirWeight },
+                          { metric: "normHitRate", formula: finHitRateFormula, formulaCode: finHitRateFormulaCode, weight: finHitRateWeight },
                         ].map((row) => (
                           <tr key={row.metric} className="border-b border-[#303030]">
                             <td className="px-3 py-2 text-[#a6a6a6] align-top">{row.metric}</td>
@@ -4915,7 +4997,19 @@ export default function App() {
   const FORMULA_TYPES = ["Score", "Metric", "Stability"];
   const FORMULA_SUBTYPES = ["Intermediate score", "Final score", "Stability", "MFE", "MAE", "AIR", "HitRate"];
   const FORMULA_MODAL_VARIABLES = [
-    "MFE", "MAE", "AIR", "HitRate", "Stability",
+    "medMFE",
+    "medMAE",
+    "medAIR",
+    "medHitRate",
+    "medMFELow",
+    "medMFEHigh",
+    "medMAELow",
+    "medMAEHigh",
+    "medAIRLow",
+    "medAIRHigh",
+    "medHitRateLow",
+    "medHitRateHigh",
+    "Stability",
     "weightMFE", "normMFE", "weightMAE", "normMAE", "weightAIR", "normAIR", "weightHitRate", "normHitRate",
     "midMFE", "midMAE", "midAIR", "midHitRate",
   ];
