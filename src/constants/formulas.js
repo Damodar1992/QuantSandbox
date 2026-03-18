@@ -1,4 +1,6 @@
-export const FORMULA_OPTIONS = ["Formula 1", "Formula 2"];
+export const FINAL_SCORE_FORMULA_OPTIONS = ["Base formula", "AIR punishment"];
+
+export const METRIC_FORMULA_OPTIONS = ["Formula 1", "Formula 2"];
 
 export const HYPEROPT_DETAILS_TOOLTIP_TEXT = `StabilityFormula = formula
 StabilityWeight (weightMFE | weightMAE | weightAIR | weightHitRate | ABC) 0-100 GLOBAL >= 100%
