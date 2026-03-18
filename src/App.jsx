@@ -1774,7 +1774,7 @@ const BuilderStepper = memo(function BuilderStepper({
   const DEFAULT_MFE_FORMULA = "min(max((medMFE - medMFELow) / (medMFEHigh - medMFELow), 0), 1)";
   const DEFAULT_MAE_FORMULA = "min(max((medMAE - medMAELow) / (medMAEHigh - medMAELow), 0), 1)";
   const DEFAULT_AIR_FORMULA = "min(max((medAIR - medAIRLow) / (medAIRHigh - medAIRLow), 0), 1)";
-  const DEFAULT_HITRATE_FORMULA = "min(max((medHitRate - medHitRateLow) / (medHitRateHigh - medHitRateLow), 0), 1)";
+  const DEFAULT_HITRATE_FORMULA = "min(max((valHitRate - valHitRateLow) / (valHitRateHigh - valHitRateLow), 0), 1)";
   const FORMULA_VARIABLES = [
     "median",
     "medMFE",
@@ -1789,6 +1789,9 @@ const BuilderStepper = memo(function BuilderStepper({
     "medAIRHigh",
     "medHitRateLow",
     "medHitRateHigh",
+    "valHitRate",
+    "valHitRateLow",
+    "valHitRateHigh",
     "exp",
     "k",
   ];
@@ -1892,7 +1895,7 @@ const BuilderStepper = memo(function BuilderStepper({
         "Formula 1": "min(max((medAIR - medAIRLow) / (medAIRHigh - medAIRLow), 0), 1)",
       },
       normHitRate: {
-        "Formula 1": "min(max((medHitRate - medHitRateLow) / (medHitRateHigh - medHitRateLow), 0), 1)",
+        "Formula 1": "min(max((valHitRate - valHitRateLow) / (valHitRateHigh - valHitRateLow), 0), 1)",
       },
     }),
     [],
@@ -2048,6 +2051,9 @@ const BuilderStepper = memo(function BuilderStepper({
     "medAIRHigh",
     "medHitRateLow",
     "medHitRateHigh",
+    "valHitRate",
+    "valHitRateLow",
+    "valHitRateHigh",
     "Stability",
     "weightMFE",
     "normMFE",
@@ -2100,7 +2106,7 @@ const BuilderStepper = memo(function BuilderStepper({
       const parts = text.split(formulaEditorVariableRegex);
       return parts.map((part, i) =>
         FORMULA_EDITOR_VARIABLES.includes(part) ? (
-          <span key={i} className="rounded bg-emerald-500/25 px-0.5 text-emerald-400">
+          <span key={i} className="text-emerald-400">
             {part}
           </span>
         ) : (
@@ -2304,7 +2310,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
       const parts = code.split(formulaDisplayVariableRegex);
       return parts.map((part, i) =>
         FORMULA_EDITOR_VARIABLES.includes(part) ? (
-          <span key={i} className="rounded bg-emerald-500/25 px-0.5 text-emerald-400">
+          <span key={i} className="text-emerald-400">
             {part}
           </span>
         ) : (
@@ -3042,7 +3048,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                               >
                                 {FINAL_SCORE_FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
                               </select>
-                              <div className="min-w-[200px] flex-1 max-w-[400px]">
+                              <div className="min-w-[200px] flex-1 max-w-[800px]">
                                   <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-9 overflow-hidden">
                                   <div data-formula-mirror className="absolute left-0 top-0 bottom-0 right-8 pl-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
                                     <span className="inline-block min-w-full">{finFinalFormulaCode ? renderFormulaWithVariables(finFinalFormulaCode) : <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>}</span>
@@ -3911,7 +3917,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                       >
                         {FINAL_SCORE_FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
                       </select>
-                      <div className="min-w-[200px] flex-1 max-w-[400px]">
+                      <div className="min-w-[200px] flex-1 max-w-[800px]">
                         <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-9 overflow-hidden">
                           <div data-formula-mirror className="absolute left-0 top-0 bottom-0 right-8 pl-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
                             <span className="inline-block min-w-full">{finFinalFormulaCode ? renderFormulaWithVariables(finFinalFormulaCode) : <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>}</span>
@@ -4336,7 +4342,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                     <div className="text-[11px] font-medium text-[#d9d9d9]">Score formula</div>
                     <div className="flex flex-wrap items-center gap-3 gap-y-2">
                       <span className="text-[11px] text-[#a6a6a6]">{finalScoreFormula}</span>
-                      <div className="min-w-[200px] flex-1 max-w-[400px] rounded-md border border-[#303030] bg-[#0f0f0f] px-3 py-2 text-[11px] font-mono text-[#d9d9d9]">
+                      <div className="min-w-[200px] flex-1 max-w-[800px] rounded-md border border-[#303030] bg-[#0f0f0f] px-3 py-2 text-[11px] font-mono text-[#d9d9d9]">
                         {finFinalFormulaCode ? renderFormulaWithVariables(finFinalFormulaCode) : <span className="text-[#595959]">—</span>}
                       </div>
                     </div>
@@ -4345,7 +4351,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                     <div className="text-[11px] font-medium text-[#d9d9d9]">Stability Formula</div>
                     <div className="flex flex-wrap items-center gap-3 gap-y-2">
                       <span className="text-[11px] text-[#a6a6a6]">{finStabilityFormula}</span>
-                      <div className="min-w-[200px] flex-1 max-w-[400px] rounded-md border border-[#303030] bg-[#0f0f0f] px-3 py-2 text-[11px] font-mono text-[#d9d9d9]">
+                      <div className="min-w-[200px] flex-1 max-w-[800px] rounded-md border border-[#303030] bg-[#0f0f0f] px-3 py-2 text-[11px] font-mono text-[#d9d9d9]">
                         {finStabilityFormulaCode ? renderFormulaWithVariables(finStabilityFormulaCode) : <span className="text-[#595959]">—</span>}
                       </div>
                     </div>
@@ -5009,6 +5015,9 @@ export default function App() {
     "medAIRHigh",
     "medHitRateLow",
     "medHitRateHigh",
+    "valHitRate",
+    "valHitRateLow",
+    "valHitRateHigh",
     "Stability",
     "weightMFE", "normMFE", "weightMAE", "normMAE", "weightAIR", "normAIR", "weightHitRate", "normHitRate",
     "midMFE", "midMAE", "midAIR", "midHitRate",
