@@ -5,7 +5,7 @@ export const SECTIONS = ["Strategies", "Users", "Settings"];
 export const DISABLED_SECTIONS = new Set([]);
 
 export const PAIR_OPTIONS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "ADA/USDT"];
-export const TIME_RANGES = ["5m", "10m", "15m", "30m", "1h", "4h", "1d"];
+export const TIME_RANGES = ["15m", "30m", "1h", "4h", "1d"];
 
 export const INITIAL_STRATEGIES = [
   {

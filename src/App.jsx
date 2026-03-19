@@ -550,9 +550,12 @@ const AddIndicatorModal = memo(({ onClose, onAdd, initialType = "RSI" }) => {
                 <div className="grid grid-cols-4 gap-3">
                   <div>
                     <label className={cx("block mb-1 text-[10px]", ui.textMuted)}>Default</label>
-                    <input type="number" value={param.default} 
-                      onChange={(e) => handleParamChange(idx, "default", e.target.value)}
-                      className={cx(ui.input, "h-8 text-[12px]")} />
+                    <input
+                      type="number"
+                      value={param.default}
+                      readOnly
+                      className={cx(ui.input, "h-8 text-[12px] cursor-not-allowed bg-[#181818]")}
+                    />
                   </div>
                   <div>
                     <label className={cx("block mb-1 text-[10px]", ui.textMuted)}>Min</label>
@@ -669,9 +672,12 @@ const EditIndicatorModal = memo(({ indicator, onClose, onSave }) => {
               <div className="grid grid-cols-4 gap-3">
                 <div>
                   <label className={cx("block mb-1 text-[10px]", ui.textMuted)}>Default</label>
-                  <input type="number" value={param.default} 
-                    onChange={(e) => handleParamChange(idx, "default", e.target.value)}
-                    className={cx(ui.input, "h-8 text-[12px]")} />
+                  <input
+                    type="number"
+                    value={param.default}
+                    readOnly
+                    className={cx(ui.input, "h-8 text-[12px] cursor-not-allowed bg-[#181818]")}
+                  />
                 </div>
                 <div>
                   <label className={cx("block mb-1 text-[10px]", ui.textMuted)}>Min</label>
@@ -1770,11 +1776,12 @@ const BuilderStepper = memo(function BuilderStepper({
   }, []);
   const DEFAULT_FORMULA_CODE = "1 / (1 + exp( -k * ( (medMFE - median(medMFE)) / median(|medMFE - median(medMFE)|) ) ))";
   const DEFAULT_FINAL_SCORE_FORMULA = "weightMFE * normMFE - weightMAE * normMAE + weightAIR * normAIR + weightHitRate * normHitRate";
-  const DEFAULT_STABILITY_FORMULA = "1/(1+EXP(-1*(Stability - MEDIAN(Stability)) / (QUARTILE.INC(Stability,3) - QUARTILE.INC(Stability,1))))";
-  const DEFAULT_MFE_FORMULA = "min(max((medMFE - medMFELow) / (medMFEHigh - medMFELow), 0), 1)";
-  const DEFAULT_MAE_FORMULA = "min(max((medMAE - medMAELow) / (medMAEHigh - medMAELow), 0), 1)";
-  const DEFAULT_AIR_FORMULA = "min(max((medAIR - medAIRLow) / (medAIRHigh - medAIRLow), 0), 1)";
-  const DEFAULT_HITRATE_FORMULA = "min(max((valHitRate - valHitRateLow) / (valHitRateHigh - valHitRateLow), 0), 1)";
+  const DEFAULT_FINAL_SCORE_FORMULA_WITH_STABILITY = "weightMFE * normMFE - weightMAE * normMAE + weightAIR * normAIR + weightHitRate * normHitRate - weightStability * normStability";
+  const DEFAULT_STABILITY_FORMULA = "min(max((stabilityScore - stabilityLow) / (stabilityHigh - stabilityLow), 0), 1)";
+  const DEFAULT_MFE_FORMULA = "1 / (1 + EXP(-1 * Z-scoreMedMFE))";
+  const DEFAULT_MAE_FORMULA = "1 / (1 + EXP(1 * Z-scoreMedMAE))";
+  const DEFAULT_AIR_FORMULA = "1 / (1 + EXP(-1 * Z-scoreMedAIR))";
+  const DEFAULT_HITRATE_FORMULA = "1 / (1 + EXP(-1 * Z-scoreValHitRate))";
   const FORMULA_VARIABLES = [
     "median",
     "medMFE",
@@ -1853,7 +1860,7 @@ const BuilderStepper = memo(function BuilderStepper({
   const [signalFinMaeFormula, setSignalFinMaeFormula] = useState("Formula 1");
   const [signalFinAirFormula, setSignalFinAirFormula] = useState("Formula 1");
   const [signalFinHitRateFormula, setSignalFinHitRateFormula] = useState("Formula 1");
-  const [signalFinFinalFormulaCode, setSignalFinFinalFormulaCode] = useState(DEFAULT_FINAL_SCORE_FORMULA);
+  const [signalFinFinalFormulaCode, setSignalFinFinalFormulaCode] = useState(DEFAULT_FINAL_SCORE_FORMULA_WITH_STABILITY);
   const [signalFinStabilityFormulaCode, setSignalFinStabilityFormulaCode] = useState(DEFAULT_STABILITY_FORMULA);
   const [signalFinMfeFormulaCode, setSignalFinMfeFormulaCode] = useState(DEFAULT_MFE_FORMULA);
   const [signalFinMaeFormulaCode, setSignalFinMaeFormulaCode] = useState(DEFAULT_MAE_FORMULA);
@@ -1875,7 +1882,7 @@ const BuilderStepper = memo(function BuilderStepper({
   const [entryFinAirFormula, setEntryFinAirFormula] = useState("Formula 1");
   const [entryFinHitRateFormula, setEntryFinHitRateFormula] = useState("Formula 1");
 
-  const FINAL_SCORE_CODE_BY_TEMPLATE = useMemo(
+  const INTERMEDIATE_SCORE_CODE_BY_TEMPLATE = useMemo(
     () => ({
       "Base formula": "weightMFE * normMFE - weightMAE * normMAE + weightAIR * normAIR + weightHitRate * normHitRate",
       "AIR punishment":
@@ -1883,24 +1890,83 @@ const BuilderStepper = memo(function BuilderStepper({
     }),
     [],
   );
+  const FINAL_SCORE_CODE_BY_TEMPLATE = useMemo(
+    () => ({
+      "Base formula": "weightMFE * normMFE - weightMAE * normMAE + weightAIR * normAIR + weightHitRate * normHitRate - weightStability * normStability",
+      "AIR punishment":
+        "weightMFE * normMFE - weightMAE * normMAE + weightAIR * IF(medMFE >= medMAE ;normAIR ;-1*normAIR) + weightHitRate * normHitRate - weightStability * normStability",
+    }),
+    [],
+  );
+  const INTERMEDIATE_METRIC_FORMULA_CODE_BY_TEMPLATE = useMemo(
+    () => ({
+      normMFE: { "Formula 1": "min(max((medMFE - medMFELow) / (medMFEHigh - medMFELow), 0), 1)" },
+      normMAE: { "Formula 1": "min(max((medMAE - medMAELow) / (medMAEHigh - medMAELow), 0), 1)" },
+      normAIR: { "Formula 1": "min(max((medAIR - medAIRLow) / (medAIRHigh - medAIRLow), 0), 1)" },
+      normHitRate: { "Formula 1": "min(max((medHitRate - medHitRateLow) / (medHitRateHigh - medHitRateLow), 0), 1)" },
+    }),
+    [],
+  );
+  const STABILITY_NORM_DIFF_DEFAULTS = {
+    normDiffMFE: "min(max((abs(diffMFE) - diffMFELow) / (diffMFEHigh - diffMFELow), 0), 1)",
+    normDiffMAE: "min(max((abs(diffMAE) - diffMAELow) / (diffMAEHigh - diffMAELow), 0), 1)",
+    normDiffAIR: "min(max((abs(diffAIR) - diffAIRLow) / (diffAIRHigh - diffAIRLow), 0), 1)",
+    normDiffHitRate: "min(max((abs(diffHitRate) - diffHitRateLow) / (diffHitRateHigh - diffHitRateLow), 0), 1)",
+    normDiffStd: "min(max((abs(diffStd) - diffStdLow) / (diffStdHigh - diffStdLow), 0), 1)",
+  };
+  const STABILITY_NORM_DIFF_FORMULA_CODE_BY_TEMPLATE = useMemo(
+    () => ({
+      normDiffMFE: { "Formula 1": STABILITY_NORM_DIFF_DEFAULTS.normDiffMFE, "Formula 2": "Fake formula" },
+      normDiffMAE: { "Formula 1": STABILITY_NORM_DIFF_DEFAULTS.normDiffMAE, "Formula 2": "Fake formula" },
+      normDiffAIR: { "Formula 1": STABILITY_NORM_DIFF_DEFAULTS.normDiffAIR, "Formula 2": "Fake formula" },
+      normDiffHitRate: { "Formula 1": STABILITY_NORM_DIFF_DEFAULTS.normDiffHitRate, "Formula 2": "Fake formula" },
+      normDiffStd: { "Formula 1": STABILITY_NORM_DIFF_DEFAULTS.normDiffStd, "Formula 2": "Fake formula" },
+    }),
+    [],
+  );
+  const [intermediateBlockScoreFormula, setIntermediateBlockScoreFormula] = useState("Base formula");
+  const [intermediateBlockScoreFormulaCode, setIntermediateBlockScoreFormulaCode] = useState(DEFAULT_FINAL_SCORE_FORMULA);
+  const DEFAULT_INT_NORM_MFE = "min(max((medMFE - medMFELow) / (medMFEHigh - medMFELow), 0), 1)";
+  const DEFAULT_INT_NORM_MAE = "min(max((medMAE - medMAELow) / (medMAEHigh - medMAELow), 0), 1)";
+  const DEFAULT_INT_NORM_AIR = "min(max((medAIR - medAIRLow) / (medAIRHigh - medAIRLow), 0), 1)";
+  const DEFAULT_INT_NORM_HITRATE = "min(max((medHitRate - medHitRateLow) / (medHitRateHigh - medHitRateLow), 0), 1)";
+  const [signalIntNormMfeFormula, setSignalIntNormMfeFormula] = useState("Formula 1");
+  const [signalIntNormMfeFormulaCode, setSignalIntNormMfeFormulaCode] = useState(DEFAULT_INT_NORM_MFE);
+  const [signalIntNormMaeFormula, setSignalIntNormMaeFormula] = useState("Formula 1");
+  const [signalIntNormMaeFormulaCode, setSignalIntNormMaeFormulaCode] = useState(DEFAULT_INT_NORM_MAE);
+  const [signalIntNormAirFormula, setSignalIntNormAirFormula] = useState("Formula 1");
+  const [signalIntNormAirFormulaCode, setSignalIntNormAirFormulaCode] = useState(DEFAULT_INT_NORM_AIR);
+  const [signalIntNormHitRateFormula, setSignalIntNormHitRateFormula] = useState("Formula 1");
+  const [signalIntNormHitRateFormulaCode, setSignalIntNormHitRateFormulaCode] = useState(DEFAULT_INT_NORM_HITRATE);
+  const [entryIntNormMfeFormula, setEntryIntNormMfeFormula] = useState("Formula 1");
+  const [entryIntNormMfeFormulaCode, setEntryIntNormMfeFormulaCode] = useState(DEFAULT_INT_NORM_MFE);
+  const [entryIntNormMaeFormula, setEntryIntNormMaeFormula] = useState("Formula 1");
+  const [entryIntNormMaeFormulaCode, setEntryIntNormMaeFormulaCode] = useState(DEFAULT_INT_NORM_MAE);
+  const [entryIntNormAirFormula, setEntryIntNormAirFormula] = useState("Formula 1");
+  const [entryIntNormAirFormulaCode, setEntryIntNormAirFormulaCode] = useState(DEFAULT_INT_NORM_AIR);
+  const [entryIntNormHitRateFormula, setEntryIntNormHitRateFormula] = useState("Formula 1");
+  const [entryIntNormHitRateFormulaCode, setEntryIntNormHitRateFormulaCode] = useState(DEFAULT_INT_NORM_HITRATE);
   const METRIC_FORMULA_CODE_BY_TEMPLATE = useMemo(
     () => ({
+      normStability: {
+        "Formula 1": "min(max((stabilityScore - stabilityLow) / (stabilityHigh - stabilityLow), 0), 1)",
+      },
       normMFE: {
-        "Formula 1": "min(max((medMFE - medMFELow) / (medMFEHigh - medMFELow), 0), 1)",
+        "Formula 1": "1 / (1 + EXP(-1 * Z-scoreMedMFE))",
       },
       normMAE: {
-        "Formula 1": "min(max((medMAE - medMAELow) / (medMAEHigh - medMAELow), 0), 1)",
+        "Formula 1": "1 / (1 + EXP(1 * Z-scoreMedMAE))",
       },
       normAIR: {
-        "Formula 1": "min(max((medAIR - medAIRLow) / (medAIRHigh - medAIRLow), 0), 1)",
+        "Formula 1": "1 / (1 + EXP(-1 * Z-scoreMedAIR))",
       },
       normHitRate: {
-        "Formula 1": "min(max((valHitRate - valHitRateLow) / (valHitRateHigh - valHitRateLow), 0), 1)",
+        "Formula 1": "1 / (1 + EXP(-1 * Z-scoreValHitRate))",
       },
     }),
     [],
   );
-  const [entryFinFinalFormulaCode, setEntryFinFinalFormulaCode] = useState(DEFAULT_FINAL_SCORE_FORMULA);
+  const [entryFinFinalFormulaCode, setEntryFinFinalFormulaCode] = useState(DEFAULT_FINAL_SCORE_FORMULA_WITH_STABILITY);
   const [entryFinStabilityFormulaCode, setEntryFinStabilityFormulaCode] = useState(DEFAULT_STABILITY_FORMULA);
   const [entryFinMfeFormulaCode, setEntryFinMfeFormulaCode] = useState(DEFAULT_MFE_FORMULA);
   const [entryFinMaeFormulaCode, setEntryFinMaeFormulaCode] = useState(DEFAULT_MAE_FORMULA);
@@ -1915,6 +1981,36 @@ const BuilderStepper = memo(function BuilderStepper({
   const [entryFinMaeWeight, setEntryFinMaeWeight] = useState(0);
   const [entryFinAirWeight, setEntryFinAirWeight] = useState(0);
   const [entryFinHitRateWeight, setEntryFinHitRateWeight] = useState(0);
+  const [signalFinStabDiffMfeFormula, setSignalFinStabDiffMfeFormula] = useState("Formula 1");
+  const [signalFinStabDiffMfeFormulaCode, setSignalFinStabDiffMfeFormulaCode] = useState(STABILITY_NORM_DIFF_DEFAULTS.normDiffMFE);
+  const [signalFinStabDiffMfeWeight, setSignalFinStabDiffMfeWeight] = useState(0);
+  const [signalFinStabDiffMaeFormula, setSignalFinStabDiffMaeFormula] = useState("Formula 1");
+  const [signalFinStabDiffMaeFormulaCode, setSignalFinStabDiffMaeFormulaCode] = useState(STABILITY_NORM_DIFF_DEFAULTS.normDiffMAE);
+  const [signalFinStabDiffMaeWeight, setSignalFinStabDiffMaeWeight] = useState(0);
+  const [signalFinStabDiffAirFormula, setSignalFinStabDiffAirFormula] = useState("Formula 1");
+  const [signalFinStabDiffAirFormulaCode, setSignalFinStabDiffAirFormulaCode] = useState(STABILITY_NORM_DIFF_DEFAULTS.normDiffAIR);
+  const [signalFinStabDiffAirWeight, setSignalFinStabDiffAirWeight] = useState(0);
+  const [signalFinStabDiffHitRateFormula, setSignalFinStabDiffHitRateFormula] = useState("Formula 1");
+  const [signalFinStabDiffHitRateFormulaCode, setSignalFinStabDiffHitRateFormulaCode] = useState(STABILITY_NORM_DIFF_DEFAULTS.normDiffHitRate);
+  const [signalFinStabDiffHitRateWeight, setSignalFinStabDiffHitRateWeight] = useState(0);
+  const [signalFinStabDiffStdFormula, setSignalFinStabDiffStdFormula] = useState("Formula 1");
+  const [signalFinStabDiffStdFormulaCode, setSignalFinStabDiffStdFormulaCode] = useState(STABILITY_NORM_DIFF_DEFAULTS.normDiffStd);
+  const [signalFinStabDiffStdWeight, setSignalFinStabDiffStdWeight] = useState(0);
+  const [entryFinStabDiffMfeFormula, setEntryFinStabDiffMfeFormula] = useState("Formula 1");
+  const [entryFinStabDiffMfeFormulaCode, setEntryFinStabDiffMfeFormulaCode] = useState(STABILITY_NORM_DIFF_DEFAULTS.normDiffMFE);
+  const [entryFinStabDiffMfeWeight, setEntryFinStabDiffMfeWeight] = useState(0);
+  const [entryFinStabDiffMaeFormula, setEntryFinStabDiffMaeFormula] = useState("Formula 1");
+  const [entryFinStabDiffMaeFormulaCode, setEntryFinStabDiffMaeFormulaCode] = useState(STABILITY_NORM_DIFF_DEFAULTS.normDiffMAE);
+  const [entryFinStabDiffMaeWeight, setEntryFinStabDiffMaeWeight] = useState(0);
+  const [entryFinStabDiffAirFormula, setEntryFinStabDiffAirFormula] = useState("Formula 1");
+  const [entryFinStabDiffAirFormulaCode, setEntryFinStabDiffAirFormulaCode] = useState(STABILITY_NORM_DIFF_DEFAULTS.normDiffAIR);
+  const [entryFinStabDiffAirWeight, setEntryFinStabDiffAirWeight] = useState(0);
+  const [entryFinStabDiffHitRateFormula, setEntryFinStabDiffHitRateFormula] = useState("Formula 1");
+  const [entryFinStabDiffHitRateFormulaCode, setEntryFinStabDiffHitRateFormulaCode] = useState(STABILITY_NORM_DIFF_DEFAULTS.normDiffHitRate);
+  const [entryFinStabDiffHitRateWeight, setEntryFinStabDiffHitRateWeight] = useState(0);
+  const [entryFinStabDiffStdFormula, setEntryFinStabDiffStdFormula] = useState("Formula 1");
+  const [entryFinStabDiffStdFormulaCode, setEntryFinStabDiffStdFormulaCode] = useState(STABILITY_NORM_DIFF_DEFAULTS.normDiffStd);
+  const [entryFinStabDiffStdWeight, setEntryFinStabDiffStdWeight] = useState(0);
 
   const finStabilityFormula = isEntryStage ? entryFinStabilityFormula : signalFinStabilityFormula;
   const setFinStabilityFormula = isEntryStage ? setEntryFinStabilityFormula : setSignalFinStabilityFormula;
@@ -1958,6 +2054,54 @@ const BuilderStepper = memo(function BuilderStepper({
   const setFinHitRateWeight = isEntryStage ? setEntryFinHitRateWeight : setSignalFinHitRateWeight;
   const finStabWeightsSum = finStabMfeWeight + finStabMaeWeight + finStabAirWeight + finStabHitRateWeight;
   const finWeightsSum = finStabilityWeight + finMfeWeight + finMaeWeight + finAirWeight + finHitRateWeight;
+  const finStabDiffMfeFormula = isEntryStage ? entryFinStabDiffMfeFormula : signalFinStabDiffMfeFormula;
+  const setFinStabDiffMfeFormula = isEntryStage ? setEntryFinStabDiffMfeFormula : setSignalFinStabDiffMfeFormula;
+  const finStabDiffMfeFormulaCode = isEntryStage ? entryFinStabDiffMfeFormulaCode : signalFinStabDiffMfeFormulaCode;
+  const setFinStabDiffMfeFormulaCode = isEntryStage ? setEntryFinStabDiffMfeFormulaCode : setSignalFinStabDiffMfeFormulaCode;
+  const finStabDiffMfeWeight = isEntryStage ? entryFinStabDiffMfeWeight : signalFinStabDiffMfeWeight;
+  const setFinStabDiffMfeWeight = isEntryStage ? setEntryFinStabDiffMfeWeight : setSignalFinStabDiffMfeWeight;
+  const finStabDiffMaeFormula = isEntryStage ? entryFinStabDiffMaeFormula : signalFinStabDiffMaeFormula;
+  const setFinStabDiffMaeFormula = isEntryStage ? setEntryFinStabDiffMaeFormula : setSignalFinStabDiffMaeFormula;
+  const finStabDiffMaeFormulaCode = isEntryStage ? entryFinStabDiffMaeFormulaCode : signalFinStabDiffMaeFormulaCode;
+  const setFinStabDiffMaeFormulaCode = isEntryStage ? setEntryFinStabDiffMaeFormulaCode : setSignalFinStabDiffMaeFormulaCode;
+  const finStabDiffMaeWeight = isEntryStage ? entryFinStabDiffMaeWeight : signalFinStabDiffMaeWeight;
+  const setFinStabDiffMaeWeight = isEntryStage ? setEntryFinStabDiffMaeWeight : setSignalFinStabDiffMaeWeight;
+  const finStabDiffAirFormula = isEntryStage ? entryFinStabDiffAirFormula : signalFinStabDiffAirFormula;
+  const setFinStabDiffAirFormula = isEntryStage ? setEntryFinStabDiffAirFormula : setSignalFinStabDiffAirFormula;
+  const finStabDiffAirFormulaCode = isEntryStage ? entryFinStabDiffAirFormulaCode : signalFinStabDiffAirFormulaCode;
+  const setFinStabDiffAirFormulaCode = isEntryStage ? setEntryFinStabDiffAirFormulaCode : setSignalFinStabDiffAirFormulaCode;
+  const finStabDiffAirWeight = isEntryStage ? entryFinStabDiffAirWeight : signalFinStabDiffAirWeight;
+  const setFinStabDiffAirWeight = isEntryStage ? setEntryFinStabDiffAirWeight : setSignalFinStabDiffAirWeight;
+  const finStabDiffHitRateFormula = isEntryStage ? entryFinStabDiffHitRateFormula : signalFinStabDiffHitRateFormula;
+  const setFinStabDiffHitRateFormula = isEntryStage ? setEntryFinStabDiffHitRateFormula : setSignalFinStabDiffHitRateFormula;
+  const finStabDiffHitRateFormulaCode = isEntryStage ? entryFinStabDiffHitRateFormulaCode : signalFinStabDiffHitRateFormulaCode;
+  const setFinStabDiffHitRateFormulaCode = isEntryStage ? setEntryFinStabDiffHitRateFormulaCode : setSignalFinStabDiffHitRateFormulaCode;
+  const finStabDiffHitRateWeight = isEntryStage ? entryFinStabDiffHitRateWeight : signalFinStabDiffHitRateWeight;
+  const setFinStabDiffHitRateWeight = isEntryStage ? setEntryFinStabDiffHitRateWeight : setSignalFinStabDiffHitRateWeight;
+  const finStabDiffStdFormula = isEntryStage ? entryFinStabDiffStdFormula : signalFinStabDiffStdFormula;
+  const setFinStabDiffStdFormula = isEntryStage ? setEntryFinStabDiffStdFormula : setSignalFinStabDiffStdFormula;
+  const finStabDiffStdFormulaCode = isEntryStage ? entryFinStabDiffStdFormulaCode : signalFinStabDiffStdFormulaCode;
+  const setFinStabDiffStdFormulaCode = isEntryStage ? setEntryFinStabDiffStdFormulaCode : setSignalFinStabDiffStdFormulaCode;
+  const finStabDiffStdWeight = isEntryStage ? entryFinStabDiffStdWeight : signalFinStabDiffStdWeight;
+  const setFinStabDiffStdWeight = isEntryStage ? setEntryFinStabDiffStdWeight : setSignalFinStabDiffStdWeight;
+  const finStabDiffWeightsSum = finStabDiffMfeWeight + finStabDiffMaeWeight + finStabDiffAirWeight + finStabDiffHitRateWeight + finStabDiffStdWeight;
+
+  const intNormMfeFormula = isEntryStage ? entryIntNormMfeFormula : signalIntNormMfeFormula;
+  const setIntNormMfeFormula = isEntryStage ? setEntryIntNormMfeFormula : setSignalIntNormMfeFormula;
+  const intNormMfeFormulaCode = isEntryStage ? entryIntNormMfeFormulaCode : signalIntNormMfeFormulaCode;
+  const setIntNormMfeFormulaCode = isEntryStage ? setEntryIntNormMfeFormulaCode : setSignalIntNormMfeFormulaCode;
+  const intNormMaeFormula = isEntryStage ? entryIntNormMaeFormula : signalIntNormMaeFormula;
+  const setIntNormMaeFormula = isEntryStage ? setEntryIntNormMaeFormula : setSignalIntNormMaeFormula;
+  const intNormMaeFormulaCode = isEntryStage ? entryIntNormMaeFormulaCode : signalIntNormMaeFormulaCode;
+  const setIntNormMaeFormulaCode = isEntryStage ? setEntryIntNormMaeFormulaCode : setSignalIntNormMaeFormulaCode;
+  const intNormAirFormula = isEntryStage ? entryIntNormAirFormula : signalIntNormAirFormula;
+  const setIntNormAirFormula = isEntryStage ? setEntryIntNormAirFormula : setSignalIntNormAirFormula;
+  const intNormAirFormulaCode = isEntryStage ? entryIntNormAirFormulaCode : signalIntNormAirFormulaCode;
+  const setIntNormAirFormulaCode = isEntryStage ? setEntryIntNormAirFormulaCode : setSignalIntNormAirFormulaCode;
+  const intNormHitRateFormula = isEntryStage ? entryIntNormHitRateFormula : signalIntNormHitRateFormula;
+  const setIntNormHitRateFormula = isEntryStage ? setEntryIntNormHitRateFormula : setSignalIntNormHitRateFormula;
+  const intNormHitRateFormulaCode = isEntryStage ? entryIntNormHitRateFormulaCode : signalIntNormHitRateFormulaCode;
+  const setIntNormHitRateFormulaCode = isEntryStage ? setEntryIntNormHitRateFormulaCode : setSignalIntNormHitRateFormulaCode;
 
   // When Entry uses the same Hyperopt type as Signal, keep Entry normalization formulas in sync and read-only
   useEffect(() => {
@@ -1977,6 +2121,14 @@ const BuilderStepper = memo(function BuilderStepper({
     setEntryIntMaeWeight(signalIntMaeWeight);
     setEntryIntAirWeight(signalIntAirWeight);
     setEntryIntHitRateWeight(signalIntHitRateWeight);
+    setEntryIntNormMfeFormula(signalIntNormMfeFormula);
+    setEntryIntNormMfeFormulaCode(signalIntNormMfeFormulaCode);
+    setEntryIntNormMaeFormula(signalIntNormMaeFormula);
+    setEntryIntNormMaeFormulaCode(signalIntNormMaeFormulaCode);
+    setEntryIntNormAirFormula(signalIntNormAirFormula);
+    setEntryIntNormAirFormulaCode(signalIntNormAirFormulaCode);
+    setEntryIntNormHitRateFormula(signalIntNormHitRateFormula);
+    setEntryIntNormHitRateFormulaCode(signalIntNormHitRateFormulaCode);
     // Sync Entry final formulas from Signal
     setEntryFinStabilityFormula(signalFinStabilityFormula);
     setEntryFinMfeFormula(signalFinMfeFormula);
@@ -1998,6 +2150,21 @@ const BuilderStepper = memo(function BuilderStepper({
     setEntryFinMaeWeight(signalFinMaeWeight);
     setEntryFinAirWeight(signalFinAirWeight);
     setEntryFinHitRateWeight(signalFinHitRateWeight);
+    setEntryFinStabDiffMfeFormula(signalFinStabDiffMfeFormula);
+    setEntryFinStabDiffMfeFormulaCode(signalFinStabDiffMfeFormulaCode);
+    setEntryFinStabDiffMfeWeight(signalFinStabDiffMfeWeight);
+    setEntryFinStabDiffMaeFormula(signalFinStabDiffMaeFormula);
+    setEntryFinStabDiffMaeFormulaCode(signalFinStabDiffMaeFormulaCode);
+    setEntryFinStabDiffMaeWeight(signalFinStabDiffMaeWeight);
+    setEntryFinStabDiffAirFormula(signalFinStabDiffAirFormula);
+    setEntryFinStabDiffAirFormulaCode(signalFinStabDiffAirFormulaCode);
+    setEntryFinStabDiffAirWeight(signalFinStabDiffAirWeight);
+    setEntryFinStabDiffHitRateFormula(signalFinStabDiffHitRateFormula);
+    setEntryFinStabDiffHitRateFormulaCode(signalFinStabDiffHitRateFormulaCode);
+    setEntryFinStabDiffHitRateWeight(signalFinStabDiffHitRateWeight);
+    setEntryFinStabDiffStdFormula(signalFinStabDiffStdFormula);
+    setEntryFinStabDiffStdFormulaCode(signalFinStabDiffStdFormulaCode);
+    setEntryFinStabDiffStdWeight(signalFinStabDiffStdWeight);
   }, [
     signalHyperoptType,
     entryHyperoptType,
@@ -2015,6 +2182,14 @@ const BuilderStepper = memo(function BuilderStepper({
     signalIntMaeWeight,
     signalIntAirWeight,
     signalIntHitRateWeight,
+    signalIntNormMfeFormula,
+    signalIntNormMfeFormulaCode,
+    signalIntNormMaeFormula,
+    signalIntNormMaeFormulaCode,
+    signalIntNormAirFormula,
+    signalIntNormAirFormulaCode,
+    signalIntNormHitRateFormula,
+    signalIntNormHitRateFormulaCode,
     signalFinStabilityFormula,
     signalFinMfeFormula,
     signalFinMaeFormula,
@@ -2035,6 +2210,21 @@ const BuilderStepper = memo(function BuilderStepper({
     signalFinMaeWeight,
     signalFinAirWeight,
     signalFinHitRateWeight,
+    signalFinStabDiffMfeFormula,
+    signalFinStabDiffMfeFormulaCode,
+    signalFinStabDiffMfeWeight,
+    signalFinStabDiffMaeFormula,
+    signalFinStabDiffMaeFormulaCode,
+    signalFinStabDiffMaeWeight,
+    signalFinStabDiffAirFormula,
+    signalFinStabDiffAirFormulaCode,
+    signalFinStabDiffAirWeight,
+    signalFinStabDiffHitRateFormula,
+    signalFinStabDiffHitRateFormulaCode,
+    signalFinStabDiffHitRateWeight,
+    signalFinStabDiffStdFormula,
+    signalFinStabDiffStdFormulaCode,
+    signalFinStabDiffStdWeight,
   ]);
 
   // Formula Editor helpers (for Score formula)
@@ -2063,6 +2253,33 @@ const BuilderStepper = memo(function BuilderStepper({
     "normAIR",
     "weightHitRate",
     "normHitRate",
+    "normDiffMFE",
+    "normDiffMAE",
+    "normDiffAIR",
+    "normDiffHitRate",
+    "normDiffStd",
+    "diffMFE",
+    "diffMFELow",
+    "diffMFEHigh",
+    "diffMAE",
+    "diffMAELow",
+    "diffMAEHigh",
+    "diffAIR",
+    "diffAIRLow",
+    "diffAIRHigh",
+    "diffHitRate",
+    "diffHitRateLow",
+    "diffHitRateHigh",
+    "diffStd",
+    "diffStdLow",
+    "diffStdHigh",
+    "Z-scoreMedMFE",
+    "Z-scoreMedMAE",
+    "Z-scoreMedAIR",
+    "Z-scoreValHitRate",
+    "stabilityScore",
+    "stabilityLow",
+    "stabilityHigh",
   ];
   const FORMULA_EDITOR_FUNCTIONS = [
     { label: "IF", template: "IF(cond; a; b)" },
@@ -2239,6 +2456,15 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
   const [showReportModal, setShowReportModal] = useState(false);
   // Hyperopt Results: Run normalization modal (same content as Normalization formulas block)
   const [showNormalizationModal, setShowNormalizationModal] = useState(false);
+  const [normModalCollapsedSections, setNormModalCollapsedSections] = useState(() => new Set());
+  const toggleNormModalSection = useCallback((key) => {
+    setNormModalCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
   const [showHyperoptDetailsModal, setShowHyperoptDetailsModal] = useState(false);
   // Hyperopt Results: which level-1 rows are expanded (collapse/expand)
   const [hyperoptResultsExpanded, setHyperoptResultsExpanded] = useState(() => new Set(["hr1", "hr2"]));
@@ -2510,7 +2736,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
   );
 
   const buildSignalBestResult = useCallback(
-    ({ label, source, scores, meta }) => {
+    ({ label, source, scores, meta, timeRangeOverride }) => {
       const indicatorSnapshots = signalIndicators.map((ind) => buildIndicatorSnapshot(ind));
       const indicatorsRaw = signalIndicators.map((ind) => ({ ...ind }));
       // For mock: use random values within available ranges for params and metrics
@@ -2538,7 +2764,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
         indicators: indicatorSnapshots,
         indicatorsRaw,
         pairs,
-        timeRange,
+        timeRange: timeRangeOverride != null ? timeRangeOverride : timeRange,
         hyperoptType: signalHyperoptType,
         meta,
       };
@@ -2566,6 +2792,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
             detailLabel: detail.label,
             date: sub.date || row.date,
           },
+          timeRangeOverride: row.timeFrame,
         });
         return [...prev, best];
       });
@@ -2615,6 +2842,25 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
 
   const handleSaveSignalBestCandidates = useCallback(() => {
     if (isEntryStage || signalBestCandidates.length === 0) return;
+    let heatMapTimeFrame = null;
+    if (heatMapViewModalId) {
+      const id = String(heatMapViewModalId);
+      const prefix = "hyperopt-";
+      if (id.startsWith(prefix)) {
+        const rest = id.slice(prefix.length);
+        const dashIndex = rest.indexOf("-");
+        if (dashIndex !== -1) {
+          const rowId = rest.slice(0, dashIndex);
+          const subId = rest.slice(dashIndex + 1);
+          for (const row of hyperoptResultsRows) {
+            if (row.id === rowId) {
+              heatMapTimeFrame = row.timeFrame;
+              break;
+            }
+          }
+        }
+      }
+    }
     setSignalBestResults((prev) => {
       const startIndex = prev.length;
       const added = signalBestCandidates.map((cand, idx) =>
@@ -2626,12 +2872,13 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
             ...cand.meta,
             heatmapParams: cand.params,
           },
+          timeRangeOverride: heatMapTimeFrame,
         }),
       );
       return [...prev, ...added];
     });
     setSignalBestCandidates([]);
-  }, [isEntryStage, signalBestCandidates, buildSignalBestResult, setSignalBestResults]);
+  }, [isEntryStage, signalBestCandidates, buildSignalBestResult, setSignalBestResults, heatMapViewModalId, hyperoptResultsRows]);
 
   const handleRemoveSignalBestCandidate = useCallback((id) => {
     setSignalBestCandidates((prev) => prev.filter((c) => c.id !== id));
@@ -3032,12 +3279,12 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                           <div className="text-[11px] font-medium text-[#d9d9d9]">Score formula</div>
                             <div className="flex flex-wrap items-center gap-3 gap-y-2">
                               <select
-                                value={finalScoreFormula}
+                                value={intermediateBlockScoreFormula}
                                 onChange={(e) => {
                                   const next = e.target.value;
-                                  setFinalScoreFormula(next);
-                                  const code = FINAL_SCORE_CODE_BY_TEMPLATE[next];
-                                  if (code) setFinFinalFormulaCode(code);
+                                  setIntermediateBlockScoreFormula(next);
+                                  const code = INTERMEDIATE_SCORE_CODE_BY_TEMPLATE[next];
+                                  if (code) setIntermediateBlockScoreFormulaCode(code);
                                 }}
                                 disabled={isEntryStage && signalHyperoptType === entryHyperoptType}
                                 className={cx(
@@ -3051,12 +3298,12 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                               <div className="min-w-[200px] flex-1 max-w-[800px]">
                                   <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-9 overflow-hidden">
                                   <div data-formula-mirror className="absolute left-0 top-0 bottom-0 right-8 pl-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
-                                    <span className="inline-block min-w-full">{finFinalFormulaCode ? renderFormulaWithVariables(finFinalFormulaCode) : <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>}</span>
+                                    <span className="inline-block min-w-full">{intermediateBlockScoreFormulaCode ? renderFormulaWithVariables(intermediateBlockScoreFormulaCode) : <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>}</span>
                                   </div>
                                   <input
                                     type="text"
-                                    value={finFinalFormulaCode}
-                                    onChange={(e) => setFinFinalFormulaCode(e.target.value)}
+                                    value={intermediateBlockScoreFormulaCode}
+                                    onChange={(e) => setIntermediateBlockScoreFormulaCode(e.target.value)}
                                     onScroll={(e) => {
                                       const m = e.target.parentElement?.querySelector("[data-formula-mirror]");
                                       if (m) m.scrollLeft = e.target.scrollLeft;
@@ -3070,7 +3317,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                                   />
                                   <button
                                     type="button"
-                                    onClick={() => openFormulaEditor(finFinalFormulaCode, setFinFinalFormulaCode)}
+                                    onClick={() => openFormulaEditor(intermediateBlockScoreFormulaCode, setIntermediateBlockScoreFormulaCode)}
                                     disabled={isEntryStage && signalHyperoptType === entryHyperoptType}
                                     className={cx(
                                       "absolute right-0 top-0 bottom-0 z-20 flex items-center justify-center w-8 h-full bg-emerald-600 text-white hover:bg-emerald-500 active:bg-emerald-700 rounded-r-md",
@@ -3102,10 +3349,10 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                               </thead>
                               <tbody className="text-[#d9d9d9]">
                                 {[
-                                  { metric: "normMFE", formula: finMfeFormula, setFormula: setFinMfeFormula, formulaCode: finMfeFormulaCode, setFormulaCode: setFinMfeFormulaCode, weight: finMfeWeight, setWeight: setFinMfeWeight, others: finMaeWeight + finAirWeight + finHitRateWeight },
-                                  { metric: "normMAE", formula: finMaeFormula, setFormula: setFinMaeFormula, formulaCode: finMaeFormulaCode, setFormulaCode: setFinMaeFormulaCode, weight: finMaeWeight, setWeight: setFinMaeWeight, others: finMfeWeight + finAirWeight + finHitRateWeight },
-                                  { metric: "normAIR", formula: finAirFormula, setFormula: setFinAirFormula, formulaCode: finAirFormulaCode, setFormulaCode: setFinAirFormulaCode, weight: finAirWeight, setWeight: setFinAirWeight, others: finMfeWeight + finMaeWeight + finHitRateWeight },
-                                  { metric: "normHitRate", formula: finHitRateFormula, setFormula: setFinHitRateFormula, formulaCode: finHitRateFormulaCode, setFormulaCode: setFinHitRateFormulaCode, weight: finHitRateWeight, setWeight: setFinHitRateWeight, others: finMfeWeight + finMaeWeight + finAirWeight },
+                                  { metric: "normMFE", formula: intNormMfeFormula, setFormula: setIntNormMfeFormula, formulaCode: intNormMfeFormulaCode, setFormulaCode: setIntNormMfeFormulaCode, weight: finMfeWeight, setWeight: setFinMfeWeight, others: finMaeWeight + finAirWeight + finHitRateWeight },
+                                  { metric: "normMAE", formula: intNormMaeFormula, setFormula: setIntNormMaeFormula, formulaCode: intNormMaeFormulaCode, setFormulaCode: setIntNormMaeFormulaCode, weight: finMaeWeight, setWeight: setFinMaeWeight, others: finMfeWeight + finMaeWeight + finAirWeight + finHitRateWeight },
+                                  { metric: "normAIR", formula: intNormAirFormula, setFormula: setIntNormAirFormula, formulaCode: intNormAirFormulaCode, setFormulaCode: setIntNormAirFormulaCode, weight: finAirWeight, setWeight: setFinAirWeight, others: finMfeWeight + finMaeWeight + finHitRateWeight },
+                                  { metric: "normHitRate", formula: intNormHitRateFormula, setFormula: setIntNormHitRateFormula, formulaCode: intNormHitRateFormulaCode, setFormulaCode: setIntNormHitRateFormulaCode, weight: finHitRateWeight, setWeight: setFinHitRateWeight, others: finMfeWeight + finMaeWeight + finAirWeight },
                                 ].map((row) => (
                                   <tr key={row.metric} className="border-b border-[#303030]">
                                     <td className="px-3 py-2 text-[#a6a6a6] align-top">{row.metric}</td>
@@ -3115,7 +3362,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                                         onChange={(e) => {
                                           const next = e.target.value;
                                           row.setFormula(next);
-                                          const byTemplate = METRIC_FORMULA_CODE_BY_TEMPLATE[row.metric];
+                                          const byTemplate = INTERMEDIATE_METRIC_FORMULA_CODE_BY_TEMPLATE[row.metric];
                                           const code = byTemplate && byTemplate[next];
                                           if (code) row.setFormulaCode(code);
                                         }}
@@ -3622,7 +3869,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                               <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">MFE</th>
                               <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">MAE</th>
                               <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">AIR</th>
-                              <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Stability</th>
+                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">normStability</th>
                               <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Indicators</th>
                               <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Source</th>
                               <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Actions</th>
@@ -3902,11 +4149,130 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
               <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
                 <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">Normalization formulas</div>
                 <div className="p-3 pt-0 space-y-3 border-t border-[#303030]">
-                  <div className="space-y-1.5">
-                    <div className="text-[11px] font-medium text-[#d9d9d9]">Score formula</div>
+                  <>
+                  {/* Block 1: Stability formula (collapsible) */}
+                  <div className="rounded-lg border border-[#303030] overflow-hidden bg-[#0f0f0f]/50">
+                    <button
+                      type="button"
+                      onClick={() => toggleNormModalSection("stability")}
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-[12px] font-medium text-[#d9d9d9] hover:bg-[#1a1a1a] transition-colors"
+                    >
+                      <span className="text-[#8c8c8c] text-[10px]">{normModalCollapsedSections.has("stability") ? "▶" : "▼"}</span>
+                      <span>Stability formula</span>
+                    </button>
+                    {!normModalCollapsedSections.has("stability") && (
+                      <div className="px-3 pb-3 pt-0 space-y-3 border-t border-[#303030]">
+                        <div className="space-y-1.5 pt-3">
+                          <div className="text-[11px] font-medium text-[#d9d9d9]">Stability formula</div>
                     <div className="flex flex-wrap items-center gap-3 gap-y-2">
-                      <select
-                        value={finalScoreFormula}
+                      <select value={finStabilityFormula} onChange={(e) => setFinStabilityFormula(e.target.value)} className={cx(ui.input, "h-9 text-[12px] w-full max-w-[200px]")}>
+                        {METRIC_FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
+                      </select>
+                      <div className="min-w-[200px] flex-1 max-w-[800px]">
+                        <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-9 overflow-hidden">
+                          <div data-formula-mirror className="absolute left-0 top-0 bottom-0 right-8 pl-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
+                            <span className="inline-block min-w-full">{finStabilityFormulaCode ? renderFormulaWithVariables(finStabilityFormulaCode) : <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>}</span>
+                          </div>
+                          <input type="text" value={finStabilityFormulaCode} onChange={(e) => setFinStabilityFormulaCode(e.target.value)} onScroll={(e) => { const m = e.target.parentElement?.querySelector("[data-formula-mirror]"); if (m) m.scrollLeft = e.target.scrollLeft; }} className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 pl-3 pr-8 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset" />
+                          <button type="button" onClick={() => openFormulaEditor(finStabilityFormulaCode, setFinStabilityFormulaCode)} className="absolute right-0 top-0 bottom-0 z-20 flex items-center justify-center w-8 h-full bg-emerald-600 text-white hover:bg-emerald-500 active:bg-emerald-700 rounded-r-md" title="Формула">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                              <path fillRule="nonzero" d="M5 4.5C5 3.672 5.672 3 6.5 3h11c.828 0 1.5.672 1.5 1.5V5c0 .552-.448 1-1 1s-1-.448-1-1V5H7v.54l6.562 5.625c.512.44.512 1.232 0 1.671L7 18.46V19h10c.552 0 1 .448 1 1s-.448 1-1 1H6.5C5.672 21 5 20.328 5 19.5v-1.27c0-.438.191-.854.524-1.139l5.94-4.091L5.524 6.909C5.191 6.624 5 6.208 5 5.77V4.5z" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Normalization stability formulas and weights (normDiff*) */}
+                  <div>
+                    <div className="text-[11px] font-medium text-[#d9d9d9] mb-2">Normalization stability formulas and weights</div>
+                    <div className="overflow-x-auto border border-[#303030] rounded-lg">
+                      <table className="w-full text-[11px] border-collapse">
+                        <thead>
+                          <tr className="bg-[#1a1a1a] text-[#8c8c8c]">
+                            <th className="px-3 py-2 text-left font-medium border-b border-[#303030] w-24">Metrics</th>
+                            <th className="px-3 py-2 text-left font-medium border-b border-[#303030] w-32">Formula</th>
+                            <th className="px-3 py-2 text-left font-medium border-b border-[#303030] min-w-[200px]">Formula Code</th>
+                            <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Weight</th>
+                          </tr>
+                        </thead>
+                        <tbody className="text-[#d9d9d9]">
+                          {[
+                            { metric: "normDiffMFE", formula: finStabDiffMfeFormula, setFormula: setFinStabDiffMfeFormula, formulaCode: finStabDiffMfeFormulaCode, setFormulaCode: setFinStabDiffMfeFormulaCode, weight: finStabDiffMfeWeight, setWeight: setFinStabDiffMfeWeight, others: finStabDiffMaeWeight + finStabDiffAirWeight + finStabDiffHitRateWeight + finStabDiffStdWeight },
+                            { metric: "normDiffMAE", formula: finStabDiffMaeFormula, setFormula: setFinStabDiffMaeFormula, formulaCode: finStabDiffMaeFormulaCode, setFormulaCode: setFinStabDiffMaeFormulaCode, weight: finStabDiffMaeWeight, setWeight: setFinStabDiffMaeWeight, others: finStabDiffMfeWeight + finStabDiffAirWeight + finStabDiffHitRateWeight + finStabDiffStdWeight },
+                            { metric: "normDiffAIR", formula: finStabDiffAirFormula, setFormula: setFinStabDiffAirFormula, formulaCode: finStabDiffAirFormulaCode, setFormulaCode: setFinStabDiffAirFormulaCode, weight: finStabDiffAirWeight, setWeight: setFinStabDiffAirWeight, others: finStabDiffMfeWeight + finStabDiffMaeWeight + finStabDiffHitRateWeight + finStabDiffStdWeight },
+                            { metric: "normDiffHitRate", formula: finStabDiffHitRateFormula, setFormula: setFinStabDiffHitRateFormula, formulaCode: finStabDiffHitRateFormulaCode, setFormulaCode: setFinStabDiffHitRateFormulaCode, weight: finStabDiffHitRateWeight, setWeight: setFinStabDiffHitRateWeight, others: finStabDiffMfeWeight + finStabDiffMaeWeight + finStabDiffAirWeight + finStabDiffStdWeight },
+                            { metric: "normDiffStd", formula: finStabDiffStdFormula, setFormula: setFinStabDiffStdFormula, formulaCode: finStabDiffStdFormulaCode, setFormulaCode: setFinStabDiffStdFormulaCode, weight: finStabDiffStdWeight, setWeight: setFinStabDiffStdWeight, others: finStabDiffMfeWeight + finStabDiffMaeWeight + finStabDiffAirWeight + finStabDiffHitRateWeight },
+                          ].map((row) => (
+                            <tr key={row.metric} className="border-b border-[#303030]">
+                              <td className="px-3 py-2 text-[#a6a6a6] align-top">{row.metric}</td>
+                              <td className="px-3 py-2 w-32 align-top">
+                                <select
+                                  value={row.formula}
+                                  onChange={(e) => {
+                                    const next = e.target.value;
+                                    row.setFormula(next);
+                                    const byTemplate = STABILITY_NORM_DIFF_FORMULA_CODE_BY_TEMPLATE[row.metric];
+                                    const code = byTemplate && byTemplate[next];
+                                    if (code) row.setFormulaCode(code);
+                                  }}
+                                  className={cx(ui.input, "h-8 text-[11px] w-full min-w-0")}
+                                >
+                                  <option value="Formula 1">{row.metric}</option>
+                                  <option value="Formula 2">Fake formula</option>
+                                </select>
+                              </td>
+                              <td className="px-3 py-2 align-top min-w-[200px]">
+                                <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-8 overflow-hidden min-w-[200px]">
+                                  <div data-formula-mirror className="absolute left-0 top-0 bottom-0 right-8 pl-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
+                                    <span className="inline-block min-w-full">{row.formulaCode ? renderFormulaWithVariables(row.formulaCode) : <span className="text-[#595959]">e.g. formula</span>}</span>
+                                  </div>
+                                  <input type="text" value={row.formulaCode} onChange={(e) => row.setFormulaCode(e.target.value)} onScroll={(e) => { const m = e.target.parentElement?.querySelector("[data-formula-mirror]"); if (m) m.scrollLeft = e.target.scrollLeft; }} className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 pl-3 pr-8 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset" />
+                                  <button type="button" onClick={() => openFormulaEditor(row.formulaCode, row.setFormulaCode)} className="absolute right-0 top-0 bottom-0 z-20 flex items-center justify-center w-8 h-full bg-emerald-600 text-white hover:bg-emerald-500 active:bg-emerald-700 rounded-r-md" title="Формула">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                                      <path fillRule="nonzero" d="M5 4.5C5 3.672 5.672 3 6.5 3h11c.828 0 1.5.672 1.5 1.5V5c0 .552-.448 1-1 1s-1-.448-1-1V5H7v.54l6.562 5.625c.512.44.512 1.232 0 1.671L7 18.46V19h10c.552 0 1 .448 1 1s-.448 1-1 1H6.5C5.672 21 5 20.328 5 19.5v-1.27c0-.438.191-.854.524-1.139l5.94-4.091L5.524 6.909C5.191 6.624 5 6.208 5 5.77V4.5z" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </td>
+                              <td className="px-3 py-2 align-top">
+                                <div className="flex items-center gap-2">
+                                  <input type="range" min={0} max={100} step={1} value={row.weight} onChange={(e) => setWeightCapped(row.setWeight, e.target.value, row.others)} className="flex-1 max-w-[120px] h-2 accent-emerald-500" />
+                                  <span className="text-[#8c8c8c] w-7">{row.weight}%</span>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="bg-[#1a1a1a]">
+                            <td colSpan={3} className="px-3 py-2 text-right text-[11px] font-medium text-[#8c8c8c]">Total</td>
+                            <td className={cx("px-3 py-2 text-[11px] font-medium", finStabDiffWeightsSum === 100 ? "text-emerald-500" : finStabDiffWeightsSum > 100 ? "text-amber-500" : "text-[#8c8c8c]")}>{finStabDiffWeightsSum}%</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
+                        </div>
+                    )}
+                  </div>
+                  {/* Block 2: Score formula (collapsible) */}
+                  <div className="rounded-lg border border-[#303030] overflow-hidden bg-[#0f0f0f]/50">
+                    <button
+                      type="button"
+                      onClick={() => toggleNormModalSection("score")}
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-[12px] font-medium text-[#d9d9d9] hover:bg-[#1a1a1a] transition-colors"
+                    >
+                      <span className="text-[#8c8c8c] text-[10px]">{normModalCollapsedSections.has("score") ? "▶" : "▼"}</span>
+                      <span>Score formula</span>
+                    </button>
+                    {!normModalCollapsedSections.has("score") && (
+                      <div className="px-3 pb-3 pt-0 space-y-3 border-t border-[#303030]">
+                        <div className="space-y-1.5 pt-3">
+                          <div className="text-[11px] font-medium text-[#d9d9d9]">Score formula</div>
+                          <div className="flex flex-wrap items-center gap-3 gap-y-2">
+                            <select
+                              value={finalScoreFormula}
                         onChange={(e) => {
                           const next = e.target.value;
                           setFinalScoreFormula(next);
@@ -3945,48 +4311,8 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                           </button>
                         </div>
                       </div>
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <div className="text-[11px] font-medium text-[#d9d9d9]">Stability Formula</div>
-                    <div className="flex flex-wrap items-center gap-3 gap-y-2">
-                      <select value={finStabilityFormula} onChange={(e) => setFinStabilityFormula(e.target.value)} className={cx(ui.input, "h-9 text-[12px] w-full max-w-[200px]")}>
-                        {METRIC_FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
-                      </select>
-                      <div className="min-w-[200px] flex-1 max-w-[400px]">
-                        <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-9 overflow-hidden">
-                          <div data-formula-mirror className="absolute left-0 top-0 bottom-0 right-8 pl-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
-                            <span className="inline-block min-w-full">{finStabilityFormulaCode ? renderFormulaWithVariables(finStabilityFormulaCode) : <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>}</span>
-                          </div>
-                          <input type="text" value={finStabilityFormulaCode} onChange={(e) => setFinStabilityFormulaCode(e.target.value)} onScroll={(e) => { const m = e.target.parentElement?.querySelector("[data-formula-mirror]"); if (m) m.scrollLeft = e.target.scrollLeft; }} className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 pl-3 pr-8 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset" />
-                          <button type="button" onClick={() => openFormulaEditor(finStabilityFormulaCode, setFinStabilityFormulaCode)} className="absolute right-0 top-0 bottom-0 z-20 flex items-center justify-center w-8 h-full bg-emerald-600 text-white hover:bg-emerald-500 active:bg-emerald-700 rounded-r-md" title="Формула">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                              <path fillRule="nonzero" d="M5 4.5C5 3.672 5.672 3 6.5 3h11c.828 0 1.5.672 1.5 1.5V5c0 .552-.448 1-1 1s-1-.448-1-1V5H7v.54l6.562 5.625c.512.44.512 1.232 0 1.671L7 18.46V19h10c.552 0 1 .448 1 1s-.448 1-1 1H6.5C5.672 21 5 20.328 5 19.5v-1.27c0-.438.191-.854.524-1.139l5.94-4.091L5.524 6.909C5.191 6.624 5 6.208 5 5.77V4.5z" />
-                            </svg>
-                          </button>
                         </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="text-[11px] font-medium text-[#d9d9d9]">Stability weights (sum ≤ 100%)</div>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
-                      {[
-                        { label: "StabWeightMFE", val: finStabMfeWeight, set: setFinStabMfeWeight, others: finStabMaeWeight + finStabAirWeight + finStabHitRateWeight },
-                        { label: "StabWeightMAE", val: finStabMaeWeight, set: setFinStabMaeWeight, others: finStabMfeWeight + finStabAirWeight + finStabHitRateWeight },
-                        { label: "StabWeightAIR", val: finStabAirWeight, set: setFinStabAirWeight, others: finStabMfeWeight + finStabMaeWeight + finStabHitRateWeight },
-                        { label: "StabWeightHitRate", val: finStabHitRateWeight, set: setFinStabHitRateWeight, others: finStabMfeWeight + finStabMaeWeight + finStabAirWeight },
-                      ].map((s) => (
-                        <div key={s.label} className="flex items-center gap-2">
-                          <span className="text-[10px] text-[#8c8c8c] shrink-0">{s.label}</span>
-                          <input type="range" min={0} max={100} step={1} value={s.val} onChange={(e) => setWeightCapped(s.set, e.target.value, s.others)} className="flex-1 min-w-0 h-2 accent-emerald-500" />
-                          <span className="text-[#8c8c8c] text-[10px] w-8">{s.val}%</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="text-[10px] text-[#8c8c8c]">Total: {finStabWeightsSum}%</div>
-                  </div>
-                  <div className="text-[11px] font-medium text-[#d9d9d9]">Normalization metrics formulas and weights</div>
+                        <div className="text-[11px] font-medium text-[#d9d9d9]">Normalization metrics formulas and weights</div>
                   <div className="overflow-x-auto border border-[#303030] rounded-lg">
                     <table className="w-full text-[11px] border-collapse">
                       <thead>
@@ -3999,10 +4325,21 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                       </thead>
                       <tbody className="text-[#d9d9d9]">
                         <tr className="border-b border-[#303030]">
-                          <td className="px-3 py-2 text-[#a6a6a6] align-top">Stability</td>
+                          <td className="px-3 py-2 text-[#a6a6a6] align-top">normStability</td>
                           <td className="px-3 py-2 w-32 align-top">
-                            <select value={finStabilityFormula} onChange={(e) => setFinStabilityFormula(e.target.value)} className={cx(ui.input, "h-8 text-[11px] w-full min-w-0")}>
-                              {METRIC_FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
+                            <select
+                              value={finStabilityFormula}
+                              onChange={(e) => {
+                                const next = e.target.value;
+                                setFinStabilityFormula(next);
+                                const byTemplate = METRIC_FORMULA_CODE_BY_TEMPLATE.normStability;
+                                const code = byTemplate && byTemplate[next];
+                                if (code) setFinStabilityFormulaCode(code);
+                              }}
+                              className={cx(ui.input, "h-8 text-[11px] w-full min-w-0")}
+                            >
+                              <option value="Formula 1">normStability</option>
+                              <option value="Formula 2">Fake formula</option>
                             </select>
                           </td>
                           <td className="px-3 py-2 align-top min-w-[200px]">
@@ -4079,6 +4416,11 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                       </tfoot>
                     </table>
                   </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  </>
                 </div>
               </div>
             </div>
@@ -4127,38 +4469,21 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
               <div className="space-y-3">
                 <div className="space-y-1.5">
                   <label className="block text-[11px] font-medium text-[#d9d9d9]">
-                    t_end_trunc
+                    Fold size
                     <input
                       type="number"
-                      value={truncateForm.tEndTrunc}
-                      onChange={(e) =>
-                        setTruncateForm((prev) => ({
-                          ...prev,
-                          tEndTrunc: e.target.value,
-                        }))
-                      }
-                      className={cx(ui.input, "mt-1 h-8 text-[12px]")}
-                      placeholder="Enter t_end_trunc"
-                    />
-                  </label>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] font-medium text-[#d9d9d9]">
-                    Fold size
-                    <select
+                      min={1}
+                      step={1}
+                      inputMode="numeric"
                       value={truncateForm.foldSize}
-                      onChange={(e) =>
-                        setTruncateForm((prev) => ({
-                          ...prev,
-                          foldSize: e.target.value,
-                        }))
-                      }
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === "" || /^\d+$/.test(v))
+                          setTruncateForm((prev) => ({ ...prev, foldSize: v }));
+                      }}
                       className={cx(ui.input, "mt-1 h-8 text-[12px]")}
-                    >
-                      <option value="12">12</option>
-                      <option value="24">24</option>
-                      <option value="48">48</option>
-                    </select>
+                      placeholder="e.g. 12"
+                    />
                   </label>
                 </div>
               </div>
@@ -4470,32 +4795,26 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
             <div className="overflow-auto p-4 space-y-4">
               <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
                 <div className="text-[12px] font-medium text-[#d9d9d9] mb-2">Metrics</div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-[11px]">
-                  <div>
-                    <div className={cx("text-[10px]", ui.textMuted)}>Score</div>
-                    <div>{selectedBestResult.score != null ? selectedBestResult.score.toFixed(3) : "-"}</div>
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-[11px]">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className={cx("text-[10px]", ui.textMuted)}>Score</span>
+                    <span>{selectedBestResult.score != null ? selectedBestResult.score.toFixed(3) : "-"}</span>
                   </div>
-                  <div>
-                    <div className={cx("text-[10px]", ui.textMuted)}>MFE</div>
-                    <div>{selectedBestResult.mfe != null ? selectedBestResult.mfe.toFixed(3) : "-"}</div>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className={cx("text-[10px]", ui.textMuted)}>MFE</span>
+                    <span>{selectedBestResult.mfe != null ? selectedBestResult.mfe.toFixed(3) : "-"}</span>
                   </div>
-                  <div>
-                    <div className={cx("text-[10px]", ui.textMuted)}>MAE</div>
-                    <div>{selectedBestResult.mae != null ? selectedBestResult.mae.toFixed(3) : "-"}</div>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className={cx("text-[10px]", ui.textMuted)}>MAE</span>
+                    <span>{selectedBestResult.mae != null ? selectedBestResult.mae.toFixed(3) : "-"}</span>
                   </div>
-                  <div>
-                    <div className={cx("text-[10px]", ui.textMuted)}>AIR</div>
-                    <div>{selectedBestResult.air != null ? selectedBestResult.air.toFixed(3) : "-"}</div>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className={cx("text-[10px]", ui.textMuted)}>AIR</span>
+                    <span>{selectedBestResult.air != null ? selectedBestResult.air.toFixed(3) : "-"}</span>
                   </div>
-                  <div>
-                    <div className={cx("text-[10px]", ui.textMuted)}>Stability</div>
-                    <div>{selectedBestResult.stability != null ? selectedBestResult.stability.toFixed(3) : "-"}</div>
-                  </div>
-                  <div>
-                    <div className={cx("text-[10px]", ui.textMuted)}>Source</div>
-                    <div className="capitalize">
-                      {selectedBestResult.source === "heatmap" ? "HeatMap" : selectedBestResult.source || "Manual"}
-                    </div>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className={cx("text-[10px]", ui.textMuted)}>normStability</span>
+                    <span>{selectedBestResult.stability != null ? selectedBestResult.stability.toFixed(3) : "-"}</span>
                   </div>
                 </div>
               </div>
@@ -5021,6 +5340,12 @@ export default function App() {
     "Stability",
     "weightMFE", "normMFE", "weightMAE", "normMAE", "weightAIR", "normAIR", "weightHitRate", "normHitRate",
     "midMFE", "midMAE", "midAIR", "midHitRate",
+    "normDiffMFE", "normDiffMAE", "normDiffAIR", "normDiffHitRate", "normDiffStd",
+    "diffMFE", "diffMFELow", "diffMFEHigh", "diffMAE", "diffMAELow", "diffMAEHigh",
+    "diffAIR", "diffAIRLow", "diffAIRHigh", "diffHitRate", "diffHitRateLow", "diffHitRateHigh",
+    "diffStd", "diffStdLow", "diffStdHigh",
+    "Z-scoreMedMFE", "Z-scoreMedMAE", "Z-scoreMedAIR", "Z-scoreValHitRate",
+    "stabilityScore", "stabilityLow", "stabilityHigh",
   ];
   const FORMULA_MODAL_FUNCTIONS = [
     { label: "IF", template: "IF(cond; a; b)" },
