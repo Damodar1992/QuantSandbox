@@ -1778,6 +1778,7 @@ const BuilderStepper = memo(function BuilderStepper({
   const DEFAULT_FINAL_SCORE_FORMULA = "weightMFE * normMFE - weightMAE * normMAE + weightAIR * normAIR + weightHitRate * normHitRate";
   const DEFAULT_FINAL_SCORE_FORMULA_WITH_STABILITY = "weightMFE * normMFE - weightMAE * normMAE + weightAIR * normAIR + weightHitRate * normHitRate - weightStability * normStability";
   const DEFAULT_STABILITY_FORMULA = "min(max((stabilityScore - stabilityLow) / (stabilityHigh - stabilityLow), 0), 1)";
+  const DEFAULT_STABILITY_BLOCK_FORMULA = "weightStabilityMFE * normDiffMFE + weightStabilityMAE * normDiffMAE + weightStabilityAIR * normDiffAIR + weightStabilityHitRate * normDiffHitRate + weightStabilityDiffStd * normDiffStd";
   const DEFAULT_MFE_FORMULA = "1 / (1 + EXP(-1 * Z-scoreMedMFE))";
   const DEFAULT_MAE_FORMULA = "1 / (1 + EXP(1 * Z-scoreMedMAE))";
   const DEFAULT_AIR_FORMULA = "1 / (1 + EXP(-1 * Z-scoreMedAIR))";
@@ -1856,6 +1857,8 @@ const BuilderStepper = memo(function BuilderStepper({
   const intWeightsSum = intMfeWeight + intMaeWeight + intAirWeight + intHitRateWeight;
   // Final metrics table (after user selects Final Score Formula): 5 rows, Stability row has 4 sub-weights
   const [signalFinStabilityFormula, setSignalFinStabilityFormula] = useState("Formula 1");
+  const [signalFinStabilityBlockFormula, setSignalFinStabilityBlockFormula] = useState("Formula 1");
+  const [signalFinStabilityBlockFormulaCode, setSignalFinStabilityBlockFormulaCode] = useState(DEFAULT_STABILITY_BLOCK_FORMULA);
   const [signalFinMfeFormula, setSignalFinMfeFormula] = useState("Formula 1");
   const [signalFinMaeFormula, setSignalFinMaeFormula] = useState("Formula 1");
   const [signalFinAirFormula, setSignalFinAirFormula] = useState("Formula 1");
@@ -1877,6 +1880,8 @@ const BuilderStepper = memo(function BuilderStepper({
   const [signalFinHitRateWeight, setSignalFinHitRateWeight] = useState(0);
 
   const [entryFinStabilityFormula, setEntryFinStabilityFormula] = useState("Formula 1");
+  const [entryFinStabilityBlockFormula, setEntryFinStabilityBlockFormula] = useState("Formula 1");
+  const [entryFinStabilityBlockFormulaCode, setEntryFinStabilityBlockFormulaCode] = useState(DEFAULT_STABILITY_BLOCK_FORMULA);
   const [entryFinMfeFormula, setEntryFinMfeFormula] = useState("Formula 1");
   const [entryFinMaeFormula, setEntryFinMaeFormula] = useState("Formula 1");
   const [entryFinAirFormula, setEntryFinAirFormula] = useState("Formula 1");
@@ -2014,6 +2019,10 @@ const BuilderStepper = memo(function BuilderStepper({
 
   const finStabilityFormula = isEntryStage ? entryFinStabilityFormula : signalFinStabilityFormula;
   const setFinStabilityFormula = isEntryStage ? setEntryFinStabilityFormula : setSignalFinStabilityFormula;
+  const finStabilityBlockFormula = isEntryStage ? entryFinStabilityBlockFormula : signalFinStabilityBlockFormula;
+  const setFinStabilityBlockFormula = isEntryStage ? setEntryFinStabilityBlockFormula : setSignalFinStabilityBlockFormula;
+  const finStabilityBlockFormulaCode = isEntryStage ? entryFinStabilityBlockFormulaCode : signalFinStabilityBlockFormulaCode;
+  const setFinStabilityBlockFormulaCode = isEntryStage ? setEntryFinStabilityBlockFormulaCode : setSignalFinStabilityBlockFormulaCode;
   const finMfeFormula = isEntryStage ? entryFinMfeFormula : signalFinMfeFormula;
   const setFinMfeFormula = isEntryStage ? setEntryFinMfeFormula : setSignalFinMfeFormula;
   const finMaeFormula = isEntryStage ? entryFinMaeFormula : signalFinMaeFormula;
@@ -2131,6 +2140,8 @@ const BuilderStepper = memo(function BuilderStepper({
     setEntryIntNormHitRateFormulaCode(signalIntNormHitRateFormulaCode);
     // Sync Entry final formulas from Signal
     setEntryFinStabilityFormula(signalFinStabilityFormula);
+    setEntryFinStabilityBlockFormula(signalFinStabilityBlockFormula);
+    setEntryFinStabilityBlockFormulaCode(signalFinStabilityBlockFormulaCode);
     setEntryFinMfeFormula(signalFinMfeFormula);
     setEntryFinMaeFormula(signalFinMaeFormula);
     setEntryFinAirFormula(signalFinAirFormula);
@@ -2191,6 +2202,8 @@ const BuilderStepper = memo(function BuilderStepper({
     signalIntNormHitRateFormula,
     signalIntNormHitRateFormulaCode,
     signalFinStabilityFormula,
+    signalFinStabilityBlockFormula,
+    signalFinStabilityBlockFormulaCode,
     signalFinMfeFormula,
     signalFinMaeFormula,
     signalFinAirFormula,
@@ -2280,6 +2293,11 @@ const BuilderStepper = memo(function BuilderStepper({
     "stabilityScore",
     "stabilityLow",
     "stabilityHigh",
+    "weightStabilityMFE",
+    "weightStabilityMAE",
+    "weightStabilityAIR",
+    "weightStabilityHitRate",
+    "weightStabilityDiffStd",
   ];
   const FORMULA_EDITOR_FUNCTIONS = [
     { label: "IF", template: "IF(cond; a; b)" },
@@ -4165,16 +4183,16 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                         <div className="space-y-1.5 pt-3">
                           <div className="text-[11px] font-medium text-[#d9d9d9]">Stability formula</div>
                     <div className="flex flex-wrap items-center gap-3 gap-y-2">
-                      <select value={finStabilityFormula} onChange={(e) => setFinStabilityFormula(e.target.value)} className={cx(ui.input, "h-9 text-[12px] w-full max-w-[200px]")}>
+                      <select value={finStabilityBlockFormula} onChange={(e) => setFinStabilityBlockFormula(e.target.value)} className={cx(ui.input, "h-9 text-[12px] w-full max-w-[200px]")}>
                         {METRIC_FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
                       </select>
                       <div className="min-w-[200px] flex-1 max-w-[800px]">
                         <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-9 overflow-hidden">
                           <div data-formula-mirror className="absolute left-0 top-0 bottom-0 right-8 pl-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
-                            <span className="inline-block min-w-full">{finStabilityFormulaCode ? renderFormulaWithVariables(finStabilityFormulaCode) : <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>}</span>
+                            <span className="inline-block min-w-full">{finStabilityBlockFormulaCode ? renderFormulaWithVariables(finStabilityBlockFormulaCode) : <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>}</span>
                           </div>
-                          <input type="text" value={finStabilityFormulaCode} onChange={(e) => setFinStabilityFormulaCode(e.target.value)} onScroll={(e) => { const m = e.target.parentElement?.querySelector("[data-formula-mirror]"); if (m) m.scrollLeft = e.target.scrollLeft; }} className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 pl-3 pr-8 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset" />
-                          <button type="button" onClick={() => openFormulaEditor(finStabilityFormulaCode, setFinStabilityFormulaCode)} className="absolute right-0 top-0 bottom-0 z-20 flex items-center justify-center w-8 h-full bg-emerald-600 text-white hover:bg-emerald-500 active:bg-emerald-700 rounded-r-md" title="Формула">
+                          <input type="text" value={finStabilityBlockFormulaCode} onChange={(e) => setFinStabilityBlockFormulaCode(e.target.value)} onScroll={(e) => { const m = e.target.parentElement?.querySelector("[data-formula-mirror]"); if (m) m.scrollLeft = e.target.scrollLeft; }} className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 pl-3 pr-8 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset" />
+                          <button type="button" onClick={() => openFormulaEditor(finStabilityBlockFormulaCode, setFinStabilityBlockFormulaCode)} className="absolute right-0 top-0 bottom-0 z-20 flex items-center justify-center w-8 h-full bg-emerald-600 text-white hover:bg-emerald-500 active:bg-emerald-700 rounded-r-md" title="Формула">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
                               <path fillRule="nonzero" d="M5 4.5C5 3.672 5.672 3 6.5 3h11c.828 0 1.5.672 1.5 1.5V5c0 .552-.448 1-1 1s-1-.448-1-1V5H7v.54l6.562 5.625c.512.44.512 1.232 0 1.671L7 18.46V19h10c.552 0 1 .448 1 1s-.448 1-1 1H6.5C5.672 21 5 20.328 5 19.5v-1.27c0-.438.191-.854.524-1.139l5.94-4.091L5.524 6.909C5.191 6.624 5 6.208 5 5.77V4.5z" />
                             </svg>
@@ -5346,6 +5364,7 @@ export default function App() {
     "diffStd", "diffStdLow", "diffStdHigh",
     "Z-scoreMedMFE", "Z-scoreMedMAE", "Z-scoreMedAIR", "Z-scoreValHitRate",
     "stabilityScore", "stabilityLow", "stabilityHigh",
+    "weightStabilityMFE", "weightStabilityMAE", "weightStabilityAIR", "weightStabilityHitRate", "weightStabilityDiffStd",
   ];
   const FORMULA_MODAL_FUNCTIONS = [
     { label: "IF", template: "IF(cond; a; b)" },
