@@ -3,11 +3,45 @@ import Editor from "@monaco-editor/react";
 
 // Import constants from separate files
 import { cx, ui } from "./constants/ui";
-import { SECTIONS, DISABLED_SECTIONS, PAIR_OPTIONS, TIME_RANGES, INITIAL_STRATEGIES } from "./constants/app";
+import { SECTIONS, DISABLED_SECTIONS, PAIR_OPTIONS, TIME_RANGES, INITIAL_STRATEGIES, MOCK_OPTIMIZATION_RUNS } from "./constants/app";
 import { SOURCE_OPTIONS, MA_TYPES, INDICATOR_GROUPS, BASE_INDICATORS } from "./constants/indicators";
 import { HEATMAP_FILTER_KEYS, FILTER_OPERATIONS } from "./constants/heatmap";
-import { FINAL_SCORE_FORMULA_OPTIONS, METRIC_FORMULA_OPTIONS, HYPEROPT_DETAILS_TOOLTIP_TEXT } from "./constants/formulas";
+import {
+  FINAL_SCORE_FORMULA_OPTIONS,
+  METRIC_FORMULA_OPTIONS,
+  HYPEROPT_DETAILS_TOOLTIP_TEXT,
+  DEFAULT_FORMULA_CODE,
+  DEFAULT_FINAL_SCORE_FORMULA,
+  DEFAULT_FINAL_SCORE_FORMULA_WITH_STABILITY,
+  DEFAULT_STABILITY_FORMULA,
+  DEFAULT_STABILITY_BLOCK_FORMULA,
+  DEFAULT_MFE_FORMULA,
+  DEFAULT_MAE_FORMULA,
+  DEFAULT_AIR_FORMULA,
+  DEFAULT_HITRATE_FORMULA,
+  DEFAULT_INT_NORM_MFE,
+  DEFAULT_INT_NORM_MAE,
+  DEFAULT_INT_NORM_AIR,
+  DEFAULT_INT_NORM_HITRATE,
+  STABILITY_NORM_DIFF_DEFAULTS,
+  INTERMEDIATE_SCORE_CODE_BY_TEMPLATE,
+  FINAL_SCORE_CODE_BY_TEMPLATE,
+  INTERMEDIATE_METRIC_FORMULA_CODE_BY_TEMPLATE,
+  STABILITY_NORM_DIFF_FORMULA_CODE_BY_TEMPLATE,
+  METRIC_FORMULA_CODE_BY_TEMPLATE,
+  FORMULA_EDITOR_VARIABLES,
+  FORMULA_EDITOR_FUNCTIONS,
+  FORMULA_EDITOR_OPERATORS,
+  FORMULA_MODAL_VARIABLES,
+  FORMULA_MODAL_FUNCTIONS,
+  FORMULA_MODAL_OPERATORS,
+  FORMULA_HYPEROPT_TYPES,
+  FORMULA_TYPES,
+  FORMULA_SUBTYPES,
+} from "./constants/formulas";
 import { clamp, lerp, quantile, computeRanges, normalizeParam, buildHeatMap, formatScore, heatmapScoreToColor, HEATMAP_LEGEND_STOPS, HEATMAP_CELL_PX, HEATMAP_GAP_PX, EMPTY_CELL_BG } from "./utils/heatmap";
+import { setWeightCapped } from "./utils/weights";
+import { buildIndicatorSnapshot, buildSignalBestResult as buildSignalBestResultFromUtils } from "./utils/builder";
 import { getParamValuesFromDef, getParamDefForCompositeKey, getParamLabel, getReportParamLabel, getIndicatorTemplate } from "./utils/indicators";
 import { generatePythonCode } from "./utils/pythonCode";
 import { generateMockResults } from "./utils/mockResults";
@@ -20,7 +54,19 @@ import { GenerateReportModal } from "./components/report";
 import { HeatMapView, HeatMapConfigurator, PairsDropdown, HeatMapGrid, HyperoptDetailsTooltip } from "./components/heatmap";
 import { FormulaActionsMenu } from "./components/formulas";
 import { UserActionsMenu, CreateUserModal, EditUserModal, ChangePasswordModal, ResetPasswordModal } from "./components/users";
-import { IndicatorActionsMenu } from "./components/indicators";
+import { IndicatorActionsMenu, AddIndicatorPageModal } from "./components/indicators";
+import {
+  StageIcon,
+  IndicatorLibrary,
+  IndicatorItem,
+  AddIndicatorModal,
+  EditIndicatorModal,
+  CollapsibleSelect,
+  TableBasedEditor,
+  FormulaEditor,
+  CodeEditor,
+} from "./features/builder/components";
+import { getDefaultDisplayName, formatIndicatorSnapshot } from "./features/builder/utils/indicatorHelpers";
 
 /**
  * Quant Sandbox CRM Mock — Properly structured React app
@@ -35,1666 +81,6 @@ import { IndicatorActionsMenu } from "./components/indicators";
  * - constants/ - All app constants and configurations
  * - App.jsx - Main application logic and components
  */
-
-const MOCK_OPTIMIZATION_RUNS = [
-  {
-    id: "run-1",
-    date: "2026-01-23 23:00:00",
-    pairs: ["BTC/USDT", "ETH/USDT"],
-    timeRange: "15m",
-    timeFrameStart: "2020-01-23",
-    timeFrameEnd: "2023-01-23",
-    status: "completed",
-    indicators: ["rsi_close", "ema_close", "macd"],
-    profit: "+18.5%",
-    trades: 245,
-    winRate: "64%"
-  },
-  {
-    id: "run-2",
-    date: "2026-01-20 15:30:00",
-    pairs: ["BTC/USDT"],
-    timeRange: "1h",
-    timeFrameStart: "2021-06-01",
-    timeFrameEnd: "2023-12-31",
-    status: "completed",
-    indicators: ["bulinger", "macd", "ema_slope_20", "ema_trend_close_200_close"],
-    profit: "+25.3%",
-    trades: 187,
-    winRate: "71%"
-  }
-];
-
-/* ====================== Builder Stepper ====================== */
-
-const StageIcon = ({ children }) => (
-  <span className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#303030] bg-[#0f0f0f] text-[#a6a6a6]">
-    {children}
-  </span>
-);
-
-/* ====================== Indicator Management ====================== */
-
-const IndicatorLibrary = memo(({ query, onQueryChange, groupFilter, onGroupChange, onAdd }) => {
-  const [favorites, setFavorites] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('favoriteIndicators') || '[]');
-    } catch {
-      return [];
-    }
-  });
-  const [recentlyUsed, setRecentlyUsed] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('recentIndicators') || '[]');
-    } catch {
-      return [];
-    }
-  });
-  const [expandedGroups, setExpandedGroups] = useState(() => {
-    // Start with Favorites and Recently Used expanded
-    return { 'Favorites': true, 'Recently Used': true };
-  });
-  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
-  
-  // Toggle favorite
-  const toggleFavorite = useCallback((key) => {
-    setFavorites(prev => {
-      const newFavorites = prev.includes(key) 
-        ? prev.filter(k => k !== key)
-        : [...prev, key];
-      localStorage.setItem('favoriteIndicators', JSON.stringify(newFavorites));
-      return newFavorites;
-    });
-  }, []);
-  
-  // Add to recently used
-  const handleAdd = useCallback((key) => {
-    setRecentlyUsed(prev => {
-      const newRecent = [key, ...prev.filter(k => k !== key)].slice(0, 10);
-      localStorage.setItem('recentIndicators', JSON.stringify(newRecent));
-      return newRecent;
-    });
-    onAdd(key);
-  }, [onAdd]);
-  
-  // Toggle group expansion
-  const toggleGroup = useCallback((group) => {
-    setExpandedGroups(prev => ({ ...prev, [group]: !prev[group] }));
-  }, []);
-  
-  // Filter indicators
-  const filteredIndicators = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return Object.entries(BASE_INDICATORS).filter(([key, info]) => {
-      const matchesGroup = groupFilter === "All" || info.group === groupFilter;
-      const matchesQuery = q.length === 0 || 
-        `${info.name} ${info.description} ${info.group} ${info.talib}`.toLowerCase().includes(q);
-      const matchesFavorites = !showFavoritesOnly || favorites.includes(key);
-      return matchesGroup && matchesQuery && matchesFavorites;
-    });
-  }, [query, groupFilter, showFavoritesOnly, favorites]);
-  
-  // Group indicators by category
-  const groupedIndicators = useMemo(() => {
-    const groups = {};
-    
-    // Favorites group
-    const favIndicators = filteredIndicators.filter(([key]) => favorites.includes(key));
-    if (favIndicators.length > 0) {
-      groups['Favorites'] = favIndicators;
-    }
-    
-    // Recently Used group
-    const recentIndicators = filteredIndicators.filter(([key]) => 
-      recentlyUsed.includes(key) && !favorites.includes(key)
-    ).sort((a, b) => recentlyUsed.indexOf(a[0]) - recentlyUsed.indexOf(b[0]));
-    if (recentIndicators.length > 0) {
-      groups['Recently Used'] = recentIndicators;
-    }
-    
-    // Other groups
-    INDICATOR_GROUPS.filter(g => g !== "All").forEach(group => {
-      const groupIndicators = filteredIndicators.filter(([key, info]) => 
-        info.group === group && !favorites.includes(key) && !recentlyUsed.includes(key)
-      );
-      if (groupIndicators.length > 0) {
-        groups[group] = groupIndicators;
-      }
-    });
-    
-    return groups;
-  }, [filteredIndicators, favorites, recentlyUsed]);
-  
-  // Render compact indicator item
-  const renderIndicator = useCallback(([key, info]) => {
-    const isFavorite = favorites.includes(key);
-    
-    return (
-      <div key={key} className="flex items-center gap-2 py-1.5 px-2 hover:bg-[#1a1a1a] rounded group">
-        <button
-          onClick={() => toggleFavorite(key)}
-          className={cx(
-            "text-[14px] transition-colors",
-            isFavorite ? "text-amber-400" : "text-[#404040] group-hover:text-[#8c8c8c]"
-          )}
-          title={isFavorite ? "Remove from favorites" : "Add to favorites"}
-        >
-          {isFavorite ? '★' : '☆'}
-        </button>
-        
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-medium text-[#d9d9d9]">{info.name}</span>
-            <span className={cx(
-              "text-[9px] px-1.5 py-0.5 rounded",
-              info.group === "Trend" ? "bg-blue-500/10 text-blue-300" :
-              info.group === "Momentum" ? "bg-purple-500/10 text-purple-300" :
-              info.group === "Volatility" ? "bg-orange-500/10 text-orange-300" :
-              "bg-amber-500/10 text-amber-300"
-            )}>
-              {info.group}
-            </span>
-          </div>
-        </div>
-        
-        <button 
-          onClick={() => handleAdd(key)} 
-          className={cx(ui.btnPrimary, "h-6 px-2 text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity")}
-        >
-          + Add
-        </button>
-      </div>
-    );
-  }, [favorites, toggleFavorite, handleAdd]);
-  
-  return (
-    <div className={cx(ui.radius, ui.panel, "overflow-hidden h-full flex flex-col")}>
-      <div className={cx("px-3 py-2.5", ui.panelMuted, "border-0 border-b", ui.divider)}>
-        <div className="text-[11px] font-medium text-[#d9d9d9] mb-1">Indicator Library</div>
-        <div className={cx("text-[10px]", ui.textMuted, "mb-2")}>
-          {Object.keys(BASE_INDICATORS).length} indicators • {favorites.length} favorites
-        </div>
-        
-        <div className="space-y-2">
-          <div className="relative">
-            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[#595959]">
-              <circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" strokeWidth="2" />
-              <path d="m21 21-4.35-4.35" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-            <input
-              value={query}
-              onChange={(e) => onQueryChange(e.target.value)}
-              className={cx(ui.input, "h-7 pl-8 text-[11px]")}
-              placeholder="Search indicators..."
-            />
-          </div>
-          
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={showFavoritesOnly}
-              onChange={(e) => setShowFavoritesOnly(e.target.checked)}
-              className="w-3.5 h-3.5"
-            />
-            <span className="text-[10px] text-[#d9d9d9]">Show only favorites</span>
-          </label>
-        </div>
-      </div>
-      
-      <div className="flex-1 overflow-auto">
-        {Object.entries(groupedIndicators).length === 0 ? (
-          <div className={cx(ui.panelMuted, "m-3 p-6 text-center text-[11px] rounded", ui.textMuted)}>
-            No indicators found. Try different filters.
-          </div>
-        ) : (
-          <div className="p-2">
-            {Object.entries(groupedIndicators).map(([groupName, indicators]) => {
-              const isExpanded = expandedGroups[groupName];
-              const isSpecialGroup = groupName === 'Favorites' || groupName === 'Recently Used';
-              
-              return (
-                <div key={groupName} className="mb-1">
-                  <button
-                    onClick={() => toggleGroup(groupName)}
-                    className={cx(
-                      "w-full flex items-center justify-between px-2 py-1.5 rounded hover:bg-[#1a1a1a] transition-colors",
-                      isSpecialGroup && "bg-[#1a1a1a]"
-                    )}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-[#8c8c8c]">
-                        {isExpanded ? '▼' : '▶'}
-                      </span>
-                      <span className="text-[11px] font-medium text-[#d9d9d9]">
-                        {groupName === 'Favorites' && '★ '}
-                        {groupName === 'Recently Used' && '⏱ '}
-                        {groupName}
-                      </span>
-                      <span className="text-[9px] text-[#595959]">
-                        ({indicators.length})
-                      </span>
-                    </div>
-                  </button>
-                  
-                  {isExpanded && (
-                    <div className="mt-0.5 space-y-0.5">
-                      {indicators.map(renderIndicator)}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-});
-
-const IndicatorItem = memo(({ indicator, index, total, onEdit, onDelete }) => {
-  const baseInfo = BASE_INDICATORS[indicator.type];
-  const paramsText = indicator.params.map(p => `${p.label}: ${p.default} [${p.min}-${p.max}, step ${p.step}]`).join(", ");
-  
-  // Calculate combinations
-  const combinations = indicator.params.reduce((total, param) => {
-    const count = Math.floor((param.max - param.min) / param.step) + 1;
-    return total * count;
-  }, 1);
-  
-  // Debug: log combinations
-  console.log(`Indicator ${indicator.name}: ${combinations} combinations`, indicator.params);
-  
-  return (
-    <div className={cx(
-      ui.radius, 
-      "border p-3 transition-all",
-      indicator.enabled ? "border-[#303030] bg-[#0f0f0f]" : "border-[#303030] bg-[#0f0f0f]/50 opacity-60"
-    )}>
-      <div className="flex items-start gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <span className="text-[12px] font-medium text-[#d9d9d9]">{indicator.name}</span>
-            {indicator.displayName && (
-              <span className="text-[10px] px-2 py-0.5 rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 font-medium">
-                Display: {indicator.displayName}
-              </span>
-            )}
-            <span className="text-[10px] px-2 py-0.5 rounded border border-[#303030] bg-[#0f0f0f] text-[#8c8c8c]">
-              {indicator.type}
-            </span>
-            {baseInfo && (
-              <span className={cx(
-                "text-[10px] px-2 py-0.5 rounded border",
-                baseInfo.group === "Trend" ? "border-blue-500/40 bg-blue-500/10 text-blue-200" :
-                baseInfo.group === "Momentum" ? "border-purple-500/40 bg-purple-500/10 text-purple-200" :
-                baseInfo.group === "Volatility" ? "border-orange-500/40 bg-orange-500/10 text-orange-200" :
-                "border-amber-500/40 bg-amber-500/10 text-amber-200"
-              )}>
-                {baseInfo.group}
-              </span>
-            )}
-            <span className="text-[10px] px-2 py-0.5 rounded border border-[#303030] bg-[#0f0f0f] text-[#8c8c8c]">
-              Source: {indicator.source}
-            </span>
-            {combinations > 1 && (
-              <span className="text-[10px] px-2 py-0.5 rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 font-medium">
-                {combinations.toLocaleString()} combinations
-              </span>
-            )}
-          </div>
-          <div className={cx("text-[11px]", ui.textMuted)}>{paramsText}</div>
-        </div>
-        
-        {/* Actions */}
-        <div className="flex items-center gap-1">
-          <button onClick={onEdit} className={cx(ui.btn, "h-7 px-2 text-[11px]")} title="Edit">
-            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5">
-              <path d="M16.9 3.7a2.1 2.1 0 0 1 3 3L8.4 18.2 4 19.4l1.2-4.4L16.9 3.7z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-            </svg>
-          </button>
-          
-          <button onClick={onDelete} className={cx(ui.btn, "h-7 px-2 text-[11px] text-red-200 hover:bg-red-500/10")} title="Delete">
-            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5">
-              <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-});
-
-// Helper function to generate default display name (outside component)
-const getDefaultDisplayName = (type) => {
-  const nameMap = {
-    "RSI": "rsi",
-    "EMA": "ema",
-    "MACD": "macd",
-    "BBANDS": "bb",
-    "GC_DW": "gc",
-    "CUSTOM_FORMULA": "custom"
-  };
-  return nameMap[type] || type.toLowerCase();
-};
-
-const prettifyIndicatorParamName = (raw) => {
-  const s = String(raw || "").trim();
-  if (!s) return "";
-  const lower = s.toLowerCase();
-  const m = lower.match(/^(fast|slow|signal)(?:_|-)?period$/);
-  if (m) return `${m[1][0].toUpperCase()}${m[1].slice(1)}Period`;
-  if (lower === "stddev" || lower === "std_dev" || lower === "std-dev") return "StdDev";
-  if (lower === "timeframe" || lower === "time_frame" || lower === "time-frame") return "TimeFrame";
-  if (lower === "gc_mult" || lower === "gc-mult") return "Mult";
-  const chunks = s.split(/[_-]+/g).filter(Boolean);
-  const title = (w) => (w ? `${w[0].toUpperCase()}${w.slice(1)}` : w);
-  const out = chunks.map((c) => title(String(c))).join("");
-  return out || s;
-};
-
-const formatIndicatorParamValue = (key, v) => {
-  if (v == null) return "-";
-  if (typeof v !== "number" || !Number.isFinite(v)) return String(v);
-  const k = String(key || "").toLowerCase();
-  // Params that are typically integer-like
-  const wantsInt =
-    k.includes("period") ||
-    k === "length" ||
-    k === "poles" ||
-    k.endsWith(".length") ||
-    k.endsWith(".poles") ||
-    k.endsWith(".fastperiod") ||
-    k.endsWith(".slowperiod") ||
-    k.endsWith(".signalperiod");
-  if (wantsInt) return String(Math.round(v));
-  // Multipliers / coefficients look better as decimals
-  if (k.includes("mult") || k.includes("std") || k.includes("dev")) return v.toFixed(2);
-  // Default: keep short
-  return Math.abs(v) >= 10 ? String(Math.round(v)) : v.toFixed(2);
-};
-
-const formatIndicatorSnapshot = (ind) => {
-  const prefix = ind?.displayName || getDefaultDisplayName(ind?.type || "");
-  const snap = ind?.paramsSnapshot && typeof ind.paramsSnapshot === "object" ? ind.paramsSnapshot : null;
-  if (!snap) return "";
-  return Object.entries(snap)
-    .map(([k, v]) => {
-      const name = prettifyIndicatorParamName(k) || String(k);
-      const fullKey = `${prefix}.${name}`;
-      return `${fullKey}=${formatIndicatorParamValue(fullKey, v)}`;
-    })
-    .join(", ");
-};
-
-const AddIndicatorModal = memo(({ onClose, onAdd, initialType = "RSI" }) => {
-  const [selectedType, setSelectedType] = useState(initialType);
-  const [displayName, setDisplayName] = useState(() => {
-    const defaultName = getDefaultDisplayName(initialType);
-    console.log("🔍 Initial displayName:", defaultName);
-    return defaultName;
-  });
-  const [source, setSource] = useState(() => {
-    return BASE_INDICATORS[initialType]?.defaultSource || "Close";
-  });
-  const [params, setParams] = useState(() => {
-    return BASE_INDICATORS[initialType]?.params.map(p => ({...p})) || [];
-  });
-  const [customFormula, setCustomFormula] = useState("");
-  
-  useEffect(() => {
-    const baseIndicator = BASE_INDICATORS[selectedType];
-    setParams(baseIndicator.params.map(p => ({...p})));
-    setSource(baseIndicator.defaultSource);
-    // Auto-generate display name when type changes
-    setDisplayName(getDefaultDisplayName(selectedType));
-    // Clear custom formula when changing indicator type
-    setCustomFormula("");
-  }, [selectedType]);
-  
-  const handleParamChange = (index, field, value) => {
-    setParams(prev => prev.map((p, i) => i === index ? {...p, [field]: parseFloat(value) || 0} : p));
-  };
-  
-  const handleAdd = () => {
-    if (!displayName.trim()) {
-      alert("Enter indicator display name");
-      return;
-    }
-    
-    if (selectedType === "CUSTOM_FORMULA" && !customFormula.trim()) {
-      alert("Enter custom formula for Custom Formula indicator");
-      return;
-    }
-    
-    const baseIndicator = BASE_INDICATORS[selectedType];
-    const indicator = {
-      id: Date.now(),
-      type: selectedType,
-      name: baseIndicator.name,
-      displayName: displayName.trim(),
-      source: source,
-      params: params,
-      metrics: [...(baseIndicator.metrics || [])],
-      ...(selectedType === "CUSTOM_FORMULA" && { customFormula: customFormula.trim() })
-    };
-    
-    onAdd(indicator);
-    onClose();
-  };
-  
-  return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/70 px-4">
-      <div className={cx("w-full max-w-3xl max-h-[90vh] overflow-auto", ui.radius, ui.panel, ui.shadow, "p-6 space-y-4")}>
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-[#f5f5f5]">Add Indicator</h2>
-          <button className={cx(ui.btn, "px-2 py-1")} onClick={onClose}>✕</button>
-        </div>
-        
-        <div>
-          <label className={cx("block mb-1 text-xs", ui.textMuted)}>Indicator Type</label>
-          <select value={selectedType} onChange={(e) => setSelectedType(e.target.value)} className={cx(ui.input, "h-9")}>
-            {Object.entries(BASE_INDICATORS).map(([key, info]) => (
-              <option key={key} value={key}>{info.name}</option>
-            ))}
-          </select>
-        </div>
-        
-        <div>
-          <label className={cx("block mb-1 text-xs", ui.textMuted)}>Source</label>
-          <select value={source} onChange={(e) => setSource(e.target.value)} className={cx(ui.input, "h-9")}>
-            {SOURCE_OPTIONS.map(opt => (
-              <option key={opt} value={opt}>{opt}</option>
-            ))}
-          </select>
-        </div>
-        
-        <div>
-          <label className={cx("block mb-1 text-xs", ui.textMuted)}>
-            Display Name [DEBUG: value="{displayName}"]
-          </label>
-          <input 
-            value={displayName} 
-            onChange={(e) => setDisplayName(e.target.value)} 
-            className={ui.input} 
-            placeholder="e.g., rsi, ema, my_indicator"
-            style={{ backgroundColor: displayName ? '#1a3a1a' : '#3a1a1a' }}
-          />
-          <div className={cx("text-[10px]", ui.textMuted, "mt-1")}>
-            This name will be used in formulas (e.g., {displayName || 'indicator'}_close_14)
-          </div>
-        </div>
-        
-        {selectedType === "CUSTOM_FORMULA" && (
-          <div>
-            <label className={cx("block mb-1 text-xs", ui.textMuted)}>Custom Formula</label>
-            <textarea
-              value={customFormula}
-              onChange={(e) => setCustomFormula(e.target.value)}
-              className={cx(ui.input, "font-mono text-[11px]")}
-              rows={6}
-              placeholder={'dataframe["ema_slope_20"] = dataframe["ema_close_20"].diff(1)\ndataframe["macd_slope"] = dataframe["macd_close"].diff(1)'}
-            />
-            <div className={cx("text-[10px]", ui.textMuted, "mt-1")}>
-              Enter Python code to calculate custom indicators. You can use multiple lines.
-            </div>
-          </div>
-        )}
-        
-        {selectedType !== "CUSTOM_FORMULA" && (
-          <div>
-            <div className={cx("text-xs font-medium text-[#d9d9d9] mb-2")}>Parameter Ranges</div>
-            <div className="space-y-3">
-              {params.map((param, idx) => (
-              <div key={idx} className={cx(ui.radius, ui.panelMuted, "p-3")}>
-                <div className="text-[12px] font-medium text-[#d9d9d9] mb-2">{param.label}</div>
-                <div className="grid grid-cols-4 gap-3">
-                  <div>
-                    <label className={cx("block mb-1 text-[10px]", ui.textMuted)}>Default</label>
-                    <input
-                      type="number"
-                      value={param.default}
-                      readOnly
-                      className={cx(ui.input, "h-8 text-[12px] cursor-not-allowed bg-[#181818]")}
-                    />
-                  </div>
-                  <div>
-                    <label className={cx("block mb-1 text-[10px]", ui.textMuted)}>Min</label>
-                    <input type="number" value={param.min} 
-                      onChange={(e) => handleParamChange(idx, "min", e.target.value)}
-                      className={cx(ui.input, "h-8 text-[12px]")} />
-                  </div>
-                  <div>
-                    <label className={cx("block mb-1 text-[10px]", ui.textMuted)}>Max</label>
-                    <input type="number" value={param.max} 
-                      onChange={(e) => handleParamChange(idx, "max", e.target.value)}
-                      className={cx(ui.input, "h-8 text-[12px]")} />
-                  </div>
-                  <div>
-                    <label className={cx("block mb-1 text-[10px]", ui.textMuted)}>Step</label>
-                    <input type="number" step="0.1" value={param.step} 
-                      onChange={(e) => handleParamChange(idx, "step", e.target.value)}
-                      className={cx(ui.input, "h-8 text-[12px]")} />
-                  </div>
-                </div>
-              </div>
-            ))}
-            </div>
-          </div>
-        )}
-        
-        <div className="flex justify-end gap-2 pt-2">
-          <button onClick={onClose} className={ui.btn}>Cancel</button>
-          <button onClick={handleAdd} className={ui.btnPrimary}>Add Indicator</button>
-        </div>
-      </div>
-    </div>
-  );
-});
-
-const EditIndicatorModal = memo(({ indicator, onClose, onSave }) => {
-  const [params, setParams] = useState(indicator.params.map(p => ({...p})));
-  const [source, setSource] = useState(indicator.source);
-  const [displayName, setDisplayName] = useState(
-    indicator.displayName || getDefaultDisplayName(indicator.type)
-  );
-  const [customFormula, setCustomFormula] = useState(indicator.customFormula || "");
-  
-  const handleParamChange = (index, field, value) => {
-    setParams(prev => prev.map((p, i) => i === index ? {...p, [field]: parseFloat(value) || 0} : p));
-  };
-  
-  const handleSave = () => {
-    const updatedIndicator = {
-      ...indicator, 
-      params, 
-      source, 
-      displayName: displayName.trim()
-    };
-    
-    if (indicator.type === "CUSTOM_FORMULA") {
-      updatedIndicator.customFormula = customFormula.trim();
-    }
-    
-    onSave(updatedIndicator);
-    onClose();
-  };
-  
-  return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/70 px-4">
-      <div className={cx("w-full max-w-2xl", ui.radius, ui.panel, ui.shadow, "p-6 space-y-4")}>
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-[#f5f5f5]">Edit Indicator: {indicator.name}</h2>
-          <button className={cx(ui.btn, "px-2 py-1")} onClick={onClose}>✕</button>
-        </div>
-        
-        <div>
-          <label className={cx("block mb-1 text-xs", ui.textMuted)}>Source</label>
-          <select value={source} onChange={(e) => setSource(e.target.value)} className={cx(ui.input, "h-9")}>
-            {SOURCE_OPTIONS.map(opt => (
-              <option key={opt} value={opt}>{opt}</option>
-            ))}
-          </select>
-        </div>
-        
-        <div>
-          <label className={cx("block mb-1 text-xs", ui.textMuted)}>Display Name</label>
-          <input 
-            value={displayName} 
-            onChange={(e) => setDisplayName(e.target.value)} 
-            className={ui.input} 
-            placeholder="e.g., rsi, ema, my_indicator"
-          />
-          <div className={cx("text-[10px]", ui.textMuted, "mt-1")}>
-            This name will be used in formulas (e.g., {displayName || 'indicator'}_close_14)
-          </div>
-        </div>
-        
-        {indicator.type === "CUSTOM_FORMULA" && (
-          <div>
-            <label className={cx("block mb-1 text-xs", ui.textMuted)}>Custom Formula</label>
-            <textarea 
-              value={customFormula} 
-              onChange={(e) => setCustomFormula(e.target.value)} 
-              className={cx(ui.input, "min-h-[120px] font-mono text-[11px]")}
-              placeholder={`Enter Python code for your custom indicator, e.g.:\ndataframe["ema_slope_20"] = dataframe["ema_close_20"].diff(1)\ndataframe["rsi_ma_14"] = dataframe["rsi_close_14"].rolling(14).mean()`}
-            />
-            <div className={cx("text-[10px]", ui.textMuted, "mt-1")}>
-              Python code snippet to calculate custom indicator values
-            </div>
-          </div>
-        )}
-        
-        {indicator.type !== "CUSTOM_FORMULA" && (
-          <div className="space-y-3">
-            {params.map((param, idx) => (
-            <div key={idx} className={cx(ui.radius, ui.panelMuted, "p-3")}>
-              <div className="text-[12px] font-medium text-[#d9d9d9] mb-2">{param.label}</div>
-              <div className="grid grid-cols-4 gap-3">
-                <div>
-                  <label className={cx("block mb-1 text-[10px]", ui.textMuted)}>Default</label>
-                  <input
-                    type="number"
-                    value={param.default}
-                    readOnly
-                    className={cx(ui.input, "h-8 text-[12px] cursor-not-allowed bg-[#181818]")}
-                  />
-                </div>
-                <div>
-                  <label className={cx("block mb-1 text-[10px]", ui.textMuted)}>Min</label>
-                  <input type="number" value={param.min} 
-                    onChange={(e) => handleParamChange(idx, "min", e.target.value)}
-                    className={cx(ui.input, "h-8 text-[12px]")} />
-                </div>
-                <div>
-                  <label className={cx("block mb-1 text-[10px]", ui.textMuted)}>Max</label>
-                  <input type="number" value={param.max} 
-                    onChange={(e) => handleParamChange(idx, "max", e.target.value)}
-                    className={cx(ui.input, "h-8 text-[12px]")} />
-                </div>
-                <div>
-                  <label className={cx("block mb-1 text-[10px]", ui.textMuted)}>Step</label>
-                  <input type="number" step="0.1" value={param.step} 
-                    onChange={(e) => handleParamChange(idx, "step", e.target.value)}
-                    className={cx(ui.input, "h-8 text-[12px]")} />
-                </div>
-              </div>
-            </div>
-          ))}
-          </div>
-        )}
-        
-        <div className="flex justify-end gap-2 pt-2">
-          <button onClick={onClose} className={ui.btn}>Cancel</button>
-          <button onClick={handleSave} className={ui.btnPrimary}>Save Changes</button>
-        </div>
-      </div>
-    </div>
-  );
-});
-
-/* ====================== Collapsible Variable Select ====================== */
-
-const CollapsibleSelect = memo(({ value, onChange, groupedVars }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [expandedGroups, setExpandedGroups] = useState(new Set()); // All groups collapsed by default
-  const [dropdownPosition, setDropdownPosition] = useState(null);
-  const dropdownRef = useRef(null);
-  const buttonRef = useRef(null);
-  
-  // Calculate dropdown position when opened
-  useEffect(() => {
-    if (isOpen && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      setDropdownPosition({
-        top: rect.bottom + 4,
-        left: rect.left,
-        width: Math.max(rect.width, 350)
-      });
-    }
-  }, [isOpen]);
-  
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setIsOpen(false);
-      }
-    };
-    
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [isOpen]);
-  
-  const toggleGroup = useCallback((groupName) => {
-    setExpandedGroups(prev => {
-      const next = new Set(prev);
-      if (next.has(groupName)) {
-        next.delete(groupName);
-      } else {
-        next.add(groupName);
-      }
-      return next;
-    });
-  }, []);
-  
-  const handleSelect = useCallback((varName) => {
-    onChange(varName);
-    setIsOpen(false);
-  }, [onChange]);
-  
-  return (
-    <div ref={dropdownRef} className="relative w-full">
-      <div 
-        ref={buttonRef}
-        className="relative w-full"
-      >
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onFocus={() => setIsOpen(true)}
-          className={cx(
-            ui.input,
-            "w-full h-8 text-[11px] pr-8"
-          )}
-          placeholder="Enter value or select from list"
-        />
-        <button
-          type="button"
-          onClick={() => setIsOpen(!isOpen)}
-          className="absolute right-1 top-1/2 -translate-y-1/2 px-2 py-1 text-[#8c8c8c] hover:text-[#d9d9d9] transition-colors"
-        >
-          {isOpen ? '▲' : '▼'}
-        </button>
-      </div>
-      
-      {isOpen && groupedVars && dropdownPosition && (
-        <div 
-          className={cx(
-            "fixed z-[9999]",
-            "rounded border border-[#303030] bg-[#1a1a1a] shadow-lg"
-          )}
-          style={{ 
-            top: dropdownPosition.top,
-            left: dropdownPosition.left,
-            width: dropdownPosition.width,
-            maxHeight: '400px',
-            overflowY: 'auto',
-            overflowX: 'hidden'
-          }}
-        >
-          {groupedVars.map(([groupName, vars]) => (
-            <div key={groupName}>
-              {/* Group Header */}
-              <button
-                type="button"
-                onClick={() => toggleGroup(groupName)}
-                className={cx(
-                  "w-full px-3 py-2 text-left text-[12px] font-medium",
-                  "flex items-center justify-between",
-                  "hover:bg-[#252525] transition-colors",
-                  "border-b border-[#303030]",
-                  "sticky top-0 bg-[#1f1f1f] z-10"
-                )}
-              >
-                <span className="text-[#a6a6a6]">
-                  {expandedGroups.has(groupName) ? '▼' : '▶'} {groupName}
-                </span>
-                <span className="text-[#595959] text-[11px]">({vars.length})</span>
-              </button>
-              
-              {/* Group Items */}
-              {expandedGroups.has(groupName) && (
-                <div>
-                  {vars.map(varName => (
-                    <button
-                      key={varName}
-                      type="button"
-                      onClick={() => handleSelect(varName)}
-                      className={cx(
-                        "w-full px-4 py-2 text-left text-[12px]",
-                        "hover:bg-[#2a2a2a] transition-colors",
-                        varName === value 
-                          ? "bg-emerald-500/20 text-emerald-300 font-medium" 
-                          : "text-[#d9d9d9]"
-                      )}
-                    >
-                      {varName}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-});
-
-/* ====================== Table-Based Editor ====================== */
-
-const TableBasedEditor = memo(({ rules, onChange, groupedVars }) => {
-  const handleAddRule = useCallback(() => {
-    onChange([...rules, {
-      id: Date.now(),
-      conditions: [{ variable: 'Close', operator: '>', value: 'Close', logic: 'AND' }]
-    }]);
-  }, [rules, onChange]);
-  
-  const handleDeleteRule = useCallback((ruleId) => {
-    onChange(rules.filter(r => r.id !== ruleId));
-  }, [rules, onChange]);
-  
-  const handleAddCondition = useCallback((ruleId) => {
-    onChange(rules.map(rule => 
-      rule.id === ruleId 
-        ? { ...rule, conditions: [...rule.conditions, { variable: 'Close', operator: '>', value: 'Close', logic: 'AND' }] }
-        : rule
-    ));
-  }, [rules, onChange]);
-  
-  const handleDeleteCondition = useCallback((ruleId, condIndex) => {
-    onChange(rules.map(rule => 
-      rule.id === ruleId 
-        ? { ...rule, conditions: rule.conditions.filter((_, i) => i !== condIndex) }
-        : rule
-    ));
-  }, [rules, onChange]);
-  
-  const handleUpdateCondition = useCallback((ruleId, condIndex, field, value) => {
-    onChange(rules.map(rule => 
-      rule.id === ruleId 
-        ? { 
-            ...rule, 
-            conditions: rule.conditions.map((cond, i) => 
-              i === condIndex ? { ...cond, [field]: value } : cond
-            ) 
-          }
-        : rule
-    ));
-  }, [rules, onChange]);
-  
-  const handleUpdateAction = useCallback((ruleId, action) => {
-    onChange(rules.map(rule => rule.id === ruleId ? { ...rule, action } : rule));
-  }, [rules, onChange]);
-  
-  return (
-    <div className="space-y-3">
-      {rules.map((rule, ruleIndex) => (
-        <div key={rule.id} className={cx(ui.radius, ui.panel, "overflow-hidden")}>
-          <div className={cx("flex items-center justify-between px-3 py-2", ui.panelMuted, "border-0 border-b", ui.divider)}>
-            <div className="text-[12px] font-medium text-[#d9d9d9]">
-              Rule #{ruleIndex + 1}
-            </div>
-            <button 
-              onClick={() => handleDeleteRule(rule.id)}
-              className={cx(ui.btn, "h-7 px-2 text-[10px] text-red-400 hover:text-red-300")}
-              title="Delete rule"
-            >
-              ✕ Delete
-            </button>
-          </div>
-          
-          <div className="p-3 space-y-2">
-            {/* Conditions */}
-            <div className="space-y-2">
-              {rule.conditions.map((condition, condIndex) => (
-                <div key={condIndex} className="flex items-center gap-2">
-                  {/* Column 1: AND/OR Logic (80px) */}
-                  <div className="w-20 shrink-0">
-                    {condIndex > 0 ? (
-                      <select
-                        value={condition.logic}
-                        onChange={(e) => handleUpdateCondition(rule.id, condIndex, 'logic', e.target.value)}
-                        className={cx(ui.input, "w-full h-8 text-[11px]")}
-                      >
-                        <option value="AND">AND</option>
-                        <option value="OR">OR</option>
-                      </select>
-                    ) : null}
-                  </div>
-                  
-                  {/* Column 2: First Indicator (flex) */}
-                  <div className="flex-1 min-w-0">
-                    <CollapsibleSelect
-                      value={condition.variable}
-                      onChange={(newValue) => handleUpdateCondition(rule.id, condIndex, 'variable', newValue)}
-                      groupedVars={groupedVars}
-                    />
-                  </div>
-                  
-                  {/* Column 3: Operator (80px) */}
-                  <div className="w-20 shrink-0">
-                    <select
-                      value={condition.operator}
-                      onChange={(e) => handleUpdateCondition(rule.id, condIndex, 'operator', e.target.value)}
-                      className={cx(ui.input, "w-full h-8 text-[11px]")}
-                    >
-                      <option value=">">{'>'}</option>
-                      <option value="<">{'<'}</option>
-                      <option value=">=">{'>='}</option>
-                      <option value="<=">{'<='}</option>
-                      <option value="==">{'=='}</option>
-                      <option value="!=">{'!='}</option>
-                    </select>
-                  </div>
-                  
-                  {/* Column 4: Second Indicator (flex) */}
-                  <div className="flex-1 min-w-0">
-                    <CollapsibleSelect
-                      value={condition.value}
-                      onChange={(newValue) => handleUpdateCondition(rule.id, condIndex, 'value', newValue)}
-                      groupedVars={groupedVars}
-                    />
-                  </div>
-                  
-                  {/* Column 5: Delete Button (32px) */}
-                  <div className="w-8 shrink-0">
-                    {rule.conditions.length > 1 && (
-                      <button
-                        onClick={() => handleDeleteCondition(rule.id, condIndex)}
-                        className={cx(ui.btn, "w-full h-8 text-[11px] text-red-400 hover:text-red-300")}
-                        title="Delete condition"
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-            
-            {/* Add Condition Button */}
-            <button
-              onClick={() => handleAddCondition(rule.id)}
-              className={cx(ui.btn, "h-7 px-2 text-[10px] w-full")}
-            >
-              + Add Condition
-            </button>
-            
-            {/* Action */}
-            <div className="flex items-center gap-2 pt-2 border-t border-[#303030]">
-              <span className="text-[11px] text-[#8c8c8c]">THEN</span>
-              <select
-                value={rule.action}
-                onChange={(e) => handleUpdateAction(rule.id, e.target.value)}
-                className={cx(ui.input, "flex-1 h-8 text-[11px] font-medium text-emerald-400")}
-              >
-                <option value="SIGNAL">Signal = True</option>
-              </select>
-            </div>
-          </div>
-        </div>
-      ))}
-      
-      {/* Add Rule Button */}
-      <button
-        onClick={handleAddRule}
-        className={cx(ui.btn, "h-10 px-4 text-[12px] w-full", ui.radius)}
-      >
-        + Add New Rule
-      </button>
-      
-      {rules.length === 0 && (
-        <div className={cx(ui.panel, ui.radius, "p-8 text-center")}>
-          <div className="text-[#595959] text-[12px]">
-            No rules defined. Click "Add New Rule" to create your first trading rule.
-          </div>
-        </div>
-      )}
-    </div>
-  );
-});
-
-/* ====================== Formula Editor ====================== */
-
-const FormulaEditor = memo(({ value, onChange, indicators, mode = "signal" }) => {
-  const editorRef = useRef(null);
-  const monacoRef = useRef(null);
-  const [editorMode, setEditorMode] = useState('python'); // 'python' | 'table'
-  const [tableRules, setTableRules] = useState([]);
-  const [pythonCodeManuallyEdited, setPythonCodeManuallyEdited] = useState(false);
-  const [generatedPythonCode, setGeneratedPythonCode] = useState('');
-  
-  // Initialize table rules if empty
-  useEffect(() => {
-    if (tableRules.length === 0) {
-      setTableRules([
-        {
-          id: Date.now(),
-          conditions: [{ variable: 'Close', operator: '>', value: 'Close', logic: 'AND' }]
-        }
-      ]);
-    }
-  }, [tableRules.length]);
-  
-  // Generate available variables from indicators (with ranges)
-  const availableVars = useMemo(() => {
-    const vars = new Set(["Close", "Open", "High", "Low", "Volume", "BUY", "SELL"]);
-    
-    indicators.forEach(ind => {
-      if (!ind.enabled) return;
-      
-      const src = ind.source.toLowerCase();
-      const displayName = ind.displayName || (ind.type === "RSI" ? "rsi" : ind.type === "EMA" ? "ema" : ind.type === "MACD" ? "macd" : ind.type === "BBANDS" ? "bb" : ind.type === "GC_DW" ? "gc" : ind.type.toLowerCase());
-      
-      // Add simple indicator variables without parameter details
-      if (ind.type === "RSI") {
-        vars.add(`${displayName}_${src}`);
-      } else if (ind.type === "EMA") {
-        vars.add(`${displayName}_${src}`);
-      } else if (ind.type === "MACD") {
-        vars.add(`${displayName}`);
-        vars.add(`${displayName}_signal`);
-        vars.add(`${displayName}_hist`);
-      } else if (ind.type === "BBANDS") {
-        vars.add(`${displayName}_upper`);
-        vars.add(`${displayName}_middle`);
-        vars.add(`${displayName}_lower`);
-        vars.add(`${displayName}_width`);
-      } else if (ind.type === "GC_DW") {
-        vars.add(`${displayName}_mid`);
-        vars.add(`${displayName}_upper`);
-        vars.add(`${displayName}_lower`);
-      } else if (ind.type === "CUSTOM_FORMULA") {
-        // For custom formulas, add a generic variable
-        vars.add(`${displayName}`);
-      }
-    });
-    
-    return Array.from(vars).sort();
-  }, [indicators]);
-  
-  // Group variables hierarchically for dropdown
-  const groupedVars = useMemo(() => {
-    const groups = {
-      'Price Data': []
-    };
-    
-    // Create groups dynamically based on indicators
-    indicators.forEach(ind => {
-      if (ind.enabled && ind.displayName) {
-        const groupName = ind.displayName.charAt(0).toUpperCase() + ind.displayName.slice(1);
-        if (!groups[groupName]) {
-          groups[groupName] = [];
-        }
-      }
-    });
-    
-    // Add a Custom group for any unmatched variables
-    groups['Custom'] = [];
-    
-    availableVars.forEach(varName => {
-      if (['Close', 'Open', 'High', 'Low', 'Volume'].includes(varName)) {
-        groups['Price Data'].push(varName);
-      } else {
-        // Find which indicator this variable belongs to
-        let found = false;
-        for (const ind of indicators) {
-          if (ind.enabled && ind.displayName) {
-            // Check if variable matches exactly or starts with displayName_
-            const matches = varName === ind.displayName || varName.startsWith(ind.displayName + '_');
-            if (matches) {
-              const groupName = ind.displayName.charAt(0).toUpperCase() + ind.displayName.slice(1);
-              if (!groups[groupName]) {
-                groups[groupName] = [];
-              }
-              groups[groupName].push(varName);
-              found = true;
-              break;
-            }
-          }
-        }
-        if (!found) {
-          groups['Custom'].push(varName);
-        }
-      }
-    });
-    
-    // Remove empty groups
-    return Object.entries(groups).filter(([_, vars]) => vars.length > 0);
-  }, [availableVars, indicators]);
-  
-  // Configure Monaco Editor
-  const handleEditorWillMount = useCallback((monaco) => {
-    monacoRef.current = monaco;
-    
-    // Register custom language for trading formulas
-    monaco.languages.register({ id: 'tradingFormula' });
-    
-    // Define syntax highlighting
-    monaco.languages.setMonarchTokensProvider('tradingFormula', {
-      keywords: ['IF', 'THEN', 'ELIF', 'ELSE', 'END', 'AND', 'OR', 'NOT', 'BUY', 'SELL', 'TRUE', 'FALSE'],
-      operators: ['>', '<', '>=', '<=', '==', '!=', '=', '+', '-', '*', '/', '%'],
-      
-      tokenizer: {
-        root: [
-          [/#.*$/, 'comment'],
-          [/\b(?:IF|THEN|ELIF|ELSE|END|AND|OR|NOT)\b/, 'keyword'],
-          [/\b(?:BUY|SELL)\b/, 'keyword.control'],
-          [/\b(?:TRUE|FALSE)\b/, 'constant.language'],
-          [/\b\d+\.?\d*\b/, 'number'],
-          [/[<>=!]+/, 'operator'],
-          [/[+\-*/%]/, 'operator'],
-          [/[()]/, 'delimiter.parenthesis'],
-        ]
-      }
-    });
-    
-    // Define theme
-    monaco.editor.defineTheme('tradingDark', {
-      base: 'vs-dark',
-      inherit: true,
-      rules: [
-        { token: 'comment', foreground: '6A9955', fontStyle: 'italic' },
-        { token: 'keyword', foreground: 'C586C0' },
-        { token: 'keyword.control', foreground: '10B981', fontStyle: 'bold' },
-        { token: 'constant.language', foreground: '569CD6' },
-        { token: 'number', foreground: 'B5CEA8' },
-        { token: 'operator', foreground: 'D4D4D4' },
-      ],
-      colors: {
-        'editor.background': '#0f0f0f',
-        'editor.foreground': '#d9d9d9',
-        'editorLineNumber.foreground': '#595959',
-        'editor.lineHighlightBackground': '#1f1f1f',
-        'editor.selectionBackground': '#264f78',
-        'editorCursor.foreground': '#10B981',
-      }
-    });
-    
-    // Register completion provider for autocomplete
-    monaco.languages.registerCompletionItemProvider('tradingFormula', {
-      provideCompletionItems: (model, position) => {
-        const word = model.getWordUntilPosition(position);
-        const range = {
-          startLineNumber: position.lineNumber,
-          endLineNumber: position.lineNumber,
-          startColumn: word.startColumn,
-          endColumn: word.endColumn
-        };
-        
-        const suggestions = [
-          // Keywords
-          ...['IF', 'THEN', 'ELIF', 'ELSE', 'END', 'AND', 'OR', 'NOT'].map(keyword => ({
-            label: keyword,
-            kind: monaco.languages.CompletionItemKind.Keyword,
-            insertText: keyword,
-            range: range,
-            documentation: `Keyword: ${keyword}`
-          })),
-          
-          // Actions
-          ...['BUY', 'SELL'].map(action => ({
-            label: action,
-            kind: monaco.languages.CompletionItemKind.Function,
-            insertText: `${action} = True`,
-            range: range,
-            documentation: `Action: ${action}`
-          })),
-          
-          // Variables from indicators
-          ...availableVars.map(varName => ({
-            label: varName,
-            kind: monaco.languages.CompletionItemKind.Variable,
-            insertText: varName,
-            range: range,
-            documentation: `Variable: ${varName}`
-          })),
-          
-          // Operators
-          ...['>', '<', '>=', '<=', '==', '!='].map(op => ({
-            label: op,
-            kind: monaco.languages.CompletionItemKind.Operator,
-            insertText: op,
-            range: range,
-            documentation: `Operator: ${op}`
-          })),
-          
-          // Snippets
-          {
-            label: 'if-then',
-            kind: monaco.languages.CompletionItemKind.Snippet,
-            insertText: 'IF ${1:condition} THEN\n  ${2:action}\nEND',
-            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-            range: range,
-            documentation: 'IF-THEN statement'
-          }
-        ];
-        
-        return { suggestions };
-      }
-    });
-  }, [availableVars]);
-  
-  const handleEditorDidMount = useCallback((editor, monaco) => {
-    editorRef.current = editor;
-    
-    // Configure editor options
-    editor.updateOptions({
-      fontSize: 13,
-      lineHeight: 20,
-      fontFamily: 'Monaco, Menlo, "Courier New", monospace',
-      minimap: { enabled: false },
-      scrollBeyondLastLine: false,
-      renderLineHighlight: 'all',
-      renderWhitespace: 'none',
-      automaticLayout: true,
-    });
-    
-    // Set dark theme for Python editor
-    monaco.editor.setTheme('vs-dark');
-  }, []);
-  
-  // Convert code to table rules
-  const parseCodeToRules = useCallback((code) => {
-    const rules = [];
-    const lines = (code || '').split('\n').filter(l => l.trim() && !l.trim().startsWith('#'));
-    
-    let currentConditions = [];
-    let currentAction = null;
-    
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      
-      if (line.startsWith('IF ')) {
-        // Parse condition
-        const condPart = line.replace('IF ', '').replace(' THEN', '').trim();
-        const conditions = parseConditions(condPart);
-        currentConditions = conditions;
-        
-        // Check if action is on the same line
-        if (line.includes('THEN') && i + 1 < lines.length) {
-          const nextLine = lines[i + 1].trim();
-          if (nextLine.includes('BUY') || nextLine.includes('SELL')) {
-            currentAction = nextLine.includes('BUY') ? 'BUY' : 'SELL';
-            rules.push({
-              id: Date.now() + rules.length,
-              conditions: currentConditions,
-              action: currentAction
-            });
-            currentConditions = [];
-            currentAction = null;
-          }
-        }
-      } else if (line.includes('BUY') || line.includes('SELL')) {
-        currentAction = line.includes('BUY') ? 'BUY' : 'SELL';
-        if (currentConditions.length > 0) {
-          rules.push({
-            id: Date.now() + rules.length,
-            conditions: currentConditions,
-            action: currentAction
-          });
-          currentConditions = [];
-          currentAction = null;
-        }
-      }
-    }
-    
-    return rules;
-  }, []);
-  
-  // Parse conditions string
-  const parseConditions = (condStr) => {
-    const conditions = [];
-    const parts = condStr.split(/\s+(AND|OR)\s+/);
-    
-    for (let i = 0; i < parts.length; i += 2) {
-      const part = parts[i].trim().replace(/[()]/g, '');
-      const logic = i > 0 ? parts[i - 1] : 'AND';
-      
-      // Parse condition: variable operator value
-      const match = part.match(/(\S+)\s*([><=!]+)\s*(.+)/);
-      if (match) {
-        conditions.push({
-          variable: match[1],
-          operator: match[2],
-          value: match[3],
-          logic: logic
-        });
-      }
-    }
-    
-    return conditions;
-  };
-  
-  // Convert table rules to code (legacy IF-THEN format)
-  const convertRulesToCode = useCallback((rules) => {
-    if (!rules || rules.length === 0) {
-      return '# Define your trading signals\n';
-    }
-    
-    let code = '# Trading signals\n\n';
-    
-    rules.forEach((rule, index) => {
-      // Build conditions
-      const conditionsStr = rule.conditions.map((cond, i) => {
-        const prefix = i > 0 ? ` ${cond.logic} ` : '';
-        return `${prefix}${cond.variable} ${cond.operator} ${cond.value}`;
-      }).join('');
-      
-      code += `# Rule ${index + 1}\n`;
-      code += `IF ${conditionsStr} THEN\n`;
-      code += `  ${rule.action} = True\n`;
-      code += `END\n\n`;
-    });
-    
-    return code;
-  }, []);
-  
-  // Generate Python code for Freqtrade from table rules
-  // mode: "signal" | "entry" — для Entry оставляем старый шаблон populate_entry_trend
-  const generatePythonSignalCode = useCallback((rules, mode = "signal") => {
-    const isEntryMode = mode === "entry";
-
-    if (!rules || rules.length === 0) {
-      if (isEntryMode) {
-        // Старый шаблон для Entry formulas
-        return `def populate_entry_trend(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
-    """
-    Populate entry trend signals.
-    Add your signal conditions here.
-    """
-    # Initialize signal column
-    dataframe.loc[:, 'signal'] = False
-    
-    return dataframe
-`;
-      }
-
-      // Новый шаблон для Signal
-      return `def populate_indicators(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
-    """
-    Populate signals.
-    Based on the following conditions:
-    - Rule 1: Close > Close
-    """
-    # Initialize signal column
-    dataframe.loc[:, 'signal'] = False
-    
-    # Rule 1
-    condition1 = (dataframe['Close'] > dataframe['Close'])
-    dataframe.loc[condition1, 'signal'] = True
-
-    return dataframe
-`;
-    }
-    
-    let code;
-    if (isEntryMode) {
-      // Старый заголовок для Entry
-      code = `def populate_entry_trend(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
-    """
-    Populate entry trend signals.
-    Based on the following conditions:
-`;
-    } else {
-      // Новый заголовок для Signal
-      code = `def populate_indicators(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
-    """
-    Populate signals.
-    Based on the following conditions:
-`;
-    }
-    
-    // Add rule descriptions
-    rules.forEach((rule, index) => {
-      const conditionsDesc = rule.conditions.map((cond, i) => {
-        const prefix = i > 0 ? ` ${cond.logic} ` : '';
-        return `${prefix}${cond.variable} ${cond.operator} ${cond.value}`;
-      }).join('');
-      code += `    - Rule ${index + 1}: ${conditionsDesc}\n`;
-    });
-    
-    code += `    """
-    # Initialize signal column
-    dataframe.loc[:, 'signal'] = False
-    
-`;
-    
-    // Generate conditions for each rule
-    rules.forEach((rule, index) => {
-      code += `    # Rule ${index + 1}\n`;
-      
-      // Build Python condition expression with each condition on a new line
-      if (rule.conditions.length === 1) {
-        // Single condition - keep it on one line
-        const cond = rule.conditions[0];
-        
-        // Handle value - could be a number or another dataframe column
-        let valueExpr;
-        const valueStr = String(cond.value).trim();
-        
-        // Check if it's a dataframe column (starts with indicator prefix or is a price column)
-        if (['Close', 'Open', 'High', 'Low', 'Volume'].includes(valueStr) || 
-            valueStr.startsWith('ema_') || valueStr.startsWith('rsi_') || 
-            valueStr.startsWith('macd_') || valueStr.startsWith('bb_') || 
-            valueStr.startsWith('gc_') || valueStr.startsWith('custom_')) {
-          // It's a dataframe column
-          valueExpr = `dataframe['${valueStr}']`;
-        } else {
-          // Check if it's a numeric value
-          const numValue = parseFloat(valueStr);
-          if (!isNaN(numValue) && isFinite(numValue)) {
-            // It's a numeric value
-            valueExpr = numValue.toString();
-          } else {
-            // It's a string value (shouldn't happen in normal flow, but handle it)
-            valueExpr = `'${valueStr}'`;
-          }
-        }
-        
-        // Handle operator conversion
-        let operator = cond.operator;
-        if (operator === '=') operator = '==';
-        
-        code += `    condition${index + 1} = (dataframe['${cond.variable}'] ${operator} ${valueExpr})\n`;
-      } else {
-        // Multiple conditions - each on a new line
-        code += `    condition${index + 1} = (\n`;
-        
-        rule.conditions.forEach((cond, i) => {
-          const logicOp = cond.logic === 'OR' ? '|' : '&';
-          
-          // Handle value - could be a number or another dataframe column
-          let valueExpr;
-          const valueStr = String(cond.value).trim();
-          
-          // Check if it's a dataframe column (starts with indicator prefix or is a price column)
-          if (['Close', 'Open', 'High', 'Low', 'Volume'].includes(valueStr) || 
-              valueStr.startsWith('ema_') || valueStr.startsWith('rsi_') || 
-              valueStr.startsWith('macd_') || valueStr.startsWith('bb_') || 
-              valueStr.startsWith('gc_') || valueStr.startsWith('custom_')) {
-            // It's a dataframe column
-            valueExpr = `dataframe['${valueStr}']`;
-          } else {
-            // Check if it's a numeric value
-            const numValue = parseFloat(valueStr);
-            if (!isNaN(numValue) && isFinite(numValue)) {
-              // It's a numeric value
-              valueExpr = numValue.toString();
-            } else {
-              // It's a string value (shouldn't happen in normal flow, but handle it)
-              valueExpr = `'${valueStr}'`;
-            }
-          }
-          
-          // Handle operator conversion
-          let operator = cond.operator;
-          if (operator === '=') operator = '==';
-          
-          if (i === 0) {
-            // First condition
-            code += `        (dataframe['${cond.variable}'] ${operator} ${valueExpr})`;
-          } else {
-            // Subsequent conditions with logic operator
-            code += ` ${logicOp}\n        (dataframe['${cond.variable}'] ${operator} ${valueExpr})`;
-          }
-        });
-        
-        code += `\n    )\n`;
-      }
-      
-      code += `    dataframe.loc[condition${index + 1}, 'signal'] = True\n\n`;
-    });
-    
-    code += `    return dataframe
-`;
-    
-    return code;
-  }, []);
-  
-  // Generate Python code when table rules change
-  useEffect(() => {
-    if (tableRules.length > 0) {
-      const pythonCode = generatePythonSignalCode(tableRules, mode);
-      setGeneratedPythonCode(pythonCode);
-      if (!pythonCodeManuallyEdited) {
-        onChange(pythonCode);
-      }
-    }
-  }, [tableRules, generatePythonSignalCode, pythonCodeManuallyEdited, onChange, mode]);
-  
-  // Handle mode switch
-  const handleModeSwitch = useCallback((newMode) => {
-    if (newMode === 'table' && editorMode === 'python') {
-      // Switching from Python to Table - keep table rules as is
-      // (no conversion needed, table rules are source of truth)
-    } else if (newMode === 'python' && editorMode === 'table') {
-      // Switching from Table to Python - generate Python code from table rules
-      const pythonCode = generatePythonSignalCode(tableRules, mode);
-      setGeneratedPythonCode(pythonCode);
-      setPythonCodeManuallyEdited(false);
-      onChange(pythonCode);
-    }
-    setEditorMode(newMode);
-  }, [editorMode, tableRules, generatePythonSignalCode, onChange, mode]);
-  
-  // Handle table rules update
-  const handleTableRulesChange = useCallback((newRules) => {
-    setTableRules(newRules);
-    // Python code will be regenerated via useEffect
-  }, []);
-  
-  // Handle Python code manual edit
-  const handlePythonCodeChange = useCallback((newCode) => {
-    setPythonCodeManuallyEdited(true);
-    onChange(newCode);
-  }, [onChange]);
-  
-  // Reset to generated Python code
-  const handleResetPythonCode = useCallback(() => {
-    setPythonCodeManuallyEdited(false);
-    onChange(generatedPythonCode);
-  }, [generatedPythonCode, onChange]);
-  
-  return (
-    <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
-      <div className={cx("flex items-center justify-between px-3 py-2", ui.panelMuted, "border-0 border-b", ui.divider)}>
-        <div className="flex-1">
-          <div className="text-[12px] font-medium text-[#d9d9d9]">
-            {mode === "entry" ? "Entry formulas" : "Signal Formulas"}
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Mode Switcher */}
-          <div className="flex border border-[#303030] rounded overflow-hidden">
-            <button
-              onClick={() => handleModeSwitch('python')}
-              className={cx(
-                "h-7 px-3 text-[10px] transition-colors",
-                editorMode === 'python' 
-                  ? "bg-emerald-500/20 text-emerald-300 font-medium" 
-                  : "bg-[#1a1a1a] text-[#8c8c8c] hover:text-[#d9d9d9]"
-              )}
-              title="Python Code Editor"
-            >
-              🐍 Python
-            </button>
-            <button
-              onClick={() => handleModeSwitch('table')}
-              className={cx(
-                "h-7 px-3 text-[10px] transition-colors border-l border-[#303030] inline-flex items-center gap-1.5",
-                editorMode === 'table' 
-                  ? "bg-emerald-500/20 text-emerald-300 font-medium" 
-                  : "bg-[#1a1a1a] text-[#8c8c8c] hover:text-[#d9d9d9]"
-              )}
-              title="Builder"
-            >
-              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="7" height="7" rx="1" />
-                <rect x="14" y="3" width="7" height="7" rx="1" />
-                <rect x="3" y="14" width="7" height="7" rx="1" />
-                <rect x="14" y="14" width="7" height="7" rx="1" />
-              </svg>
-              Builder
-            </button>
-          </div>
-          
-          {editorMode === 'python' && (
-            <>
-              {pythonCodeManuallyEdited && (
-                <button 
-                  onClick={handleResetPythonCode}
-                  className={cx(ui.btn, "h-7 px-2 text-[10px] bg-amber-500/20 text-amber-300 hover:bg-amber-500/30")}
-                  title="Reset to auto-generated code"
-                >
-                  Reset
-                </button>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-      
-      {editorMode === 'python' ? (
-        <>
-          {pythonCodeManuallyEdited && (
-            <div className={cx("mx-3 mt-3 p-2 rounded border border-amber-500/30 bg-amber-500/10 text-[11px]", ui.textMuted)}>
-              ⚠️ <strong>Warning:</strong> This code has been manually edited. Changes made in Table mode will overwrite your manual edits. 
-              Click <button onClick={handleResetPythonCode} className="text-amber-300 underline hover:text-amber-200">Reset</button> to restore auto-generated code.
-            </div>
-          )}
-          <div className="relative" style={{ height: '400px' }}>
-            <Editor
-              height="400px"
-              defaultLanguage="python"
-              language="python"
-              theme="vs-dark"
-              value={value}
-              onChange={(newValue) => handlePythonCodeChange(newValue || '')}
-              onMount={handleEditorDidMount}
-              options={{
-                fontSize: 13,
-                lineHeight: 20,
-                fontFamily: 'Monaco, Menlo, "Courier New", monospace',
-                minimap: { enabled: false },
-                scrollBeyondLastLine: false,
-                renderLineHighlight: 'all',
-                renderWhitespace: 'none',
-                automaticLayout: true,
-                wordWrap: 'on',
-                lineNumbers: 'on',
-                glyphMargin: false,
-                folding: true,
-                lineDecorationsWidth: 0,
-                lineNumbersMinChars: 3,
-                renderValidationDecorations: 'on',
-                tabSize: 4,
-                insertSpaces: true,
-              }}
-            />
-          </div>
-          
-          <div className={cx("px-3 py-2 border-0 border-t", ui.divider, "flex justify-end")}>
-            <button type="button" className={cx(ui.btnPrimary, "h-8 px-3 text-[11px]")}>
-              Validate
-            </button>
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="p-3" style={{ maxHeight: '600px', overflowY: 'auto' }}>
-            <TableBasedEditor 
-              rules={tableRules}
-              onChange={handleTableRulesChange}
-              groupedVars={groupedVars}
-            />
-          </div>
-          
-          <div className={cx("px-3 py-2 text-[10px]", ui.textMuted, "border-0 border-t", ui.divider)}>
-            💡 <strong>Tips:</strong> Click "Add New Rule" to create trading conditions • 
-            Combine multiple conditions with <code className="text-amber-300">AND</code>/<code className="text-amber-300">OR</code> • 
-            Switch to Code mode to see generated formula
-          </div>
-        </>
-      )}
-    </div>
-  );
-});
 
 /* ====================== HeatMap Configuration (imported from components/heatmap) ====================== */
 
@@ -1753,6 +139,7 @@ const BuilderStepper = memo(function BuilderStepper({
   const setUnknowTimeRangeEnd = isEntryStage ? setEntryUnknowTimeRangeEnd : setSignalUnknowTimeRangeEnd;
   const hyperoptType = isEntryStage ? entryHyperoptType : signalHyperoptType;
   const setHyperoptType = isEntryStage ? setEntryHyperoptType : setSignalHyperoptType;
+  const [hyperoptRun, setHyperoptRun] = useState("Pipeline");
   // Best results are tracked only for Signal stage
   const [signalBestResults, setSignalBestResults] = useState([]);
   const [selectedBestResult, setSelectedBestResult] = useState(null);
@@ -1770,39 +157,6 @@ const BuilderStepper = memo(function BuilderStepper({
   const setIntermediateScoreFormula = isEntryStage ? setEntryIntermediateScoreFormula : setSignalIntermediateScoreFormula;
   const finalScoreFormula = isEntryStage ? entryFinalScoreFormula : signalFinalScoreFormula;
   const setFinalScoreFormula = isEntryStage ? setEntryFinalScoreFormula : setSignalFinalScoreFormula;
-  const setWeightCapped = useCallback((setter, value, othersSum) => {
-    const n = Math.max(0, Math.min(100, Number(value)));
-    setter(Math.min(n, 100 - othersSum));
-  }, []);
-  const DEFAULT_FORMULA_CODE = "1 / (1 + exp( -k * ( (medMFE - median(medMFE)) / median(|medMFE - median(medMFE)|) ) ))";
-  const DEFAULT_FINAL_SCORE_FORMULA = "weightMFE * normMFE - weightMAE * normMAE + weightAIR * normAIR + weightHitRate * normHitRate";
-  const DEFAULT_FINAL_SCORE_FORMULA_WITH_STABILITY = "weightMFE * normMFE - weightMAE * normMAE + weightAIR * normAIR + weightHitRate * normHitRate - weightStability * normStability";
-  const DEFAULT_STABILITY_FORMULA = "min(max((stabilityScore - stabilityLow) / (stabilityHigh - stabilityLow), 0), 1)";
-  const DEFAULT_STABILITY_BLOCK_FORMULA = "weightStabilityMFE * normDiffMFE + weightStabilityMAE * normDiffMAE + weightStabilityAIR * normDiffAIR + weightStabilityHitRate * normDiffHitRate + weightStabilityDiffStd * normDiffStd";
-  const DEFAULT_MFE_FORMULA = "1 / (1 + EXP(-1 * Z-scoreMedMFE))";
-  const DEFAULT_MAE_FORMULA = "1 / (1 + EXP(1 * Z-scoreMedMAE))";
-  const DEFAULT_AIR_FORMULA = "1 / (1 + EXP(-1 * Z-scoreMedAIR))";
-  const DEFAULT_HITRATE_FORMULA = "1 / (1 + EXP(-1 * Z-scoreValHitRate))";
-  const FORMULA_VARIABLES = [
-    "median",
-    "medMFE",
-    "medMAE",
-    "medAIR",
-    "medHitRate",
-    "medMFELow",
-    "medMFEHigh",
-    "medMAELow",
-    "medMAEHigh",
-    "medAIRLow",
-    "medAIRHigh",
-    "medHitRateLow",
-    "medHitRateHigh",
-    "valHitRate",
-    "valHitRateLow",
-    "valHitRateHigh",
-    "exp",
-    "k",
-  ];
   // Intermediate metrics table (after user selects Normalization global formula)
   const [signalIntMfeFormula, setSignalIntMfeFormula] = useState("Formula 1");
   const [signalIntMaeFormula, setSignalIntMaeFormula] = useState("Formula 1");
@@ -1887,54 +241,8 @@ const BuilderStepper = memo(function BuilderStepper({
   const [entryFinAirFormula, setEntryFinAirFormula] = useState("Formula 1");
   const [entryFinHitRateFormula, setEntryFinHitRateFormula] = useState("Formula 1");
 
-  const INTERMEDIATE_SCORE_CODE_BY_TEMPLATE = useMemo(
-    () => ({
-      "Base formula": "weightMFE * normMFE - weightMAE * normMAE + weightAIR * normAIR + weightHitRate * normHitRate",
-      "AIR punishment":
-        "weightMFE * normMFE - weightMAE * normMAE + weightAIR * IF(medMFE >= medMAE ;normAIR ;-1*normAIR) + weightHitRate * normHitRate",
-    }),
-    [],
-  );
-  const FINAL_SCORE_CODE_BY_TEMPLATE = useMemo(
-    () => ({
-      "Base formula": "weightMFE * normMFE - weightMAE * normMAE + weightAIR * normAIR + weightHitRate * normHitRate - weightStability * normStability",
-      "AIR punishment":
-        "weightMFE * normMFE - weightMAE * normMAE + weightAIR * IF(medMFE >= medMAE ;normAIR ;-1*normAIR) + weightHitRate * normHitRate - weightStability * normStability",
-    }),
-    [],
-  );
-  const INTERMEDIATE_METRIC_FORMULA_CODE_BY_TEMPLATE = useMemo(
-    () => ({
-      normMFE: { "Formula 1": "min(max((medMFE - medMFELow) / (medMFEHigh - medMFELow), 0), 1)" },
-      normMAE: { "Formula 1": "min(max((medMAE - medMAELow) / (medMAEHigh - medMAELow), 0), 1)" },
-      normAIR: { "Formula 1": "min(max((medAIR - medAIRLow) / (medAIRHigh - medAIRLow), 0), 1)" },
-      normHitRate: { "Formula 1": "min(max((medHitRate - medHitRateLow) / (medHitRateHigh - medHitRateLow), 0), 1)" },
-    }),
-    [],
-  );
-  const STABILITY_NORM_DIFF_DEFAULTS = {
-    normDiffMFE: "min(max((abs(diffMFE) - diffMFELow) / (diffMFEHigh - diffMFELow), 0), 1)",
-    normDiffMAE: "min(max((abs(diffMAE) - diffMAELow) / (diffMAEHigh - diffMAELow), 0), 1)",
-    normDiffAIR: "min(max((abs(diffAIR) - diffAIRLow) / (diffAIRHigh - diffAIRLow), 0), 1)",
-    normDiffHitRate: "min(max((abs(diffHitRate) - diffHitRateLow) / (diffHitRateHigh - diffHitRateLow), 0), 1)",
-    normDiffStd: "min(max((abs(diffStd) - diffStdLow) / (diffStdHigh - diffStdLow), 0), 1)",
-  };
-  const STABILITY_NORM_DIFF_FORMULA_CODE_BY_TEMPLATE = useMemo(
-    () => ({
-      normDiffMFE: { "Formula 1": STABILITY_NORM_DIFF_DEFAULTS.normDiffMFE, "Formula 2": "Fake formula" },
-      normDiffMAE: { "Formula 1": STABILITY_NORM_DIFF_DEFAULTS.normDiffMAE, "Formula 2": "Fake formula" },
-      normDiffAIR: { "Formula 1": STABILITY_NORM_DIFF_DEFAULTS.normDiffAIR, "Formula 2": "Fake formula" },
-      normDiffHitRate: { "Formula 1": STABILITY_NORM_DIFF_DEFAULTS.normDiffHitRate, "Formula 2": "Fake formula" },
-      normDiffStd: { "Formula 1": STABILITY_NORM_DIFF_DEFAULTS.normDiffStd, "Formula 2": "Fake formula" },
-    }),
-    [],
-  );
   const [intermediateBlockScoreFormula, setIntermediateBlockScoreFormula] = useState("Base formula");
   const [intermediateBlockScoreFormulaCode, setIntermediateBlockScoreFormulaCode] = useState(DEFAULT_FINAL_SCORE_FORMULA);
-  const DEFAULT_INT_NORM_MFE = "min(max((medMFE - medMFELow) / (medMFEHigh - medMFELow), 0), 1)";
-  const DEFAULT_INT_NORM_MAE = "min(max((medMAE - medMAELow) / (medMAEHigh - medMAELow), 0), 1)";
-  const DEFAULT_INT_NORM_AIR = "min(max((medAIR - medAIRLow) / (medAIRHigh - medAIRLow), 0), 1)";
-  const DEFAULT_INT_NORM_HITRATE = "min(max((medHitRate - medHitRateLow) / (medHitRateHigh - medHitRateLow), 0), 1)";
   const [signalIntNormMfeFormula, setSignalIntNormMfeFormula] = useState("Formula 1");
   const [signalIntNormMfeFormulaCode, setSignalIntNormMfeFormulaCode] = useState(DEFAULT_INT_NORM_MFE);
   const [signalIntNormMaeFormula, setSignalIntNormMaeFormula] = useState("Formula 1");
@@ -1951,26 +259,6 @@ const BuilderStepper = memo(function BuilderStepper({
   const [entryIntNormAirFormulaCode, setEntryIntNormAirFormulaCode] = useState(DEFAULT_INT_NORM_AIR);
   const [entryIntNormHitRateFormula, setEntryIntNormHitRateFormula] = useState("Formula 1");
   const [entryIntNormHitRateFormulaCode, setEntryIntNormHitRateFormulaCode] = useState(DEFAULT_INT_NORM_HITRATE);
-  const METRIC_FORMULA_CODE_BY_TEMPLATE = useMemo(
-    () => ({
-      normStability: {
-        "Formula 1": "min(max((stabilityScore - stabilityLow) / (stabilityHigh - stabilityLow), 0), 1)",
-      },
-      normMFE: {
-        "Formula 1": "1 / (1 + EXP(-1 * Z-scoreMedMFE))",
-      },
-      normMAE: {
-        "Formula 1": "1 / (1 + EXP(1 * Z-scoreMedMAE))",
-      },
-      normAIR: {
-        "Formula 1": "1 / (1 + EXP(-1 * Z-scoreMedAIR))",
-      },
-      normHitRate: {
-        "Formula 1": "1 / (1 + EXP(-1 * Z-scoreValHitRate))",
-      },
-    }),
-    [],
-  );
   const [entryFinFinalFormulaCode, setEntryFinFinalFormulaCode] = useState(DEFAULT_FINAL_SCORE_FORMULA_WITH_STABILITY);
   const [entryFinStabilityFormulaCode, setEntryFinStabilityFormulaCode] = useState(DEFAULT_STABILITY_FORMULA);
   const [entryFinMfeFormulaCode, setEntryFinMfeFormulaCode] = useState(DEFAULT_MFE_FORMULA);
@@ -2240,91 +528,6 @@ const BuilderStepper = memo(function BuilderStepper({
     signalFinStabDiffStdWeight,
   ]);
 
-  // Formula Editor helpers (for Score formula)
-  const FORMULA_EDITOR_VARIABLES = [
-    "medMFE",
-    "medMAE",
-    "medAIR",
-    "medHitRate",
-    "medMFELow",
-    "medMFEHigh",
-    "medMAELow",
-    "medMAEHigh",
-    "medAIRLow",
-    "medAIRHigh",
-    "medHitRateLow",
-    "medHitRateHigh",
-    "valHitRate",
-    "valHitRateLow",
-    "valHitRateHigh",
-    "Stability",
-    "weightMFE",
-    "normMFE",
-    "weightMAE",
-    "normMAE",
-    "weightAIR",
-    "normAIR",
-    "weightHitRate",
-    "normHitRate",
-    "normDiffMFE",
-    "normDiffMAE",
-    "normDiffAIR",
-    "normDiffHitRate",
-    "normDiffStd",
-    "diffMFE",
-    "diffMFELow",
-    "diffMFEHigh",
-    "diffMAE",
-    "diffMAELow",
-    "diffMAEHigh",
-    "diffAIR",
-    "diffAIRLow",
-    "diffAIRHigh",
-    "diffHitRate",
-    "diffHitRateLow",
-    "diffHitRateHigh",
-    "diffStd",
-    "diffStdLow",
-    "diffStdHigh",
-    "Z-scoreMedMFE",
-    "Z-scoreMedMAE",
-    "Z-scoreMedAIR",
-    "Z-scoreValHitRate",
-    "stabilityScore",
-    "stabilityLow",
-    "stabilityHigh",
-    "weightStabilityMFE",
-    "weightStabilityMAE",
-    "weightStabilityAIR",
-    "weightStabilityHitRate",
-    "weightStabilityDiffStd",
-  ];
-  const FORMULA_EDITOR_FUNCTIONS = [
-    { label: "IF", template: "IF(cond; a; b)" },
-    { label: "IFS", template: "IFS(c1; v1; c2; v2; default)" },
-    { label: "AND", template: "AND(a; b; c)" },
-    { label: "OR", template: "OR(a; b)" },
-    { label: "NOT", template: "NOT(a)" },
-    { label: "IFERROR", template: "IFERROR(expr; fallback)" },
-    { label: "ABS", template: "ABS(x)" },
-    { label: "MIN", template: "MIN(a; b; c)" },
-    { label: "MAX", template: "MAX(a; b; c)" },
-    { label: "ROUND", template: "ROUND(x; digits)" },
-  ];
-  const FORMULA_EDITOR_OPERATORS = [
-    "+",
-    "-",
-    "*",
-    "/",
-    "^",
-    "=",
-    "<>",
-    "<",
-    "<=",
-    ">",
-    ">=",
-  ];
-
   const [showFormulaEditor, setShowFormulaEditor] = useState(false);
   const [formulaEditorValue, setFormulaEditorValue] = useState("");
   const formulaEditorRef = useRef(null);
@@ -2507,7 +710,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
   // Hyperopt Results three-level table data (level 1: runs; level 2: normalization results; level 3: HeatMaps & Reports)
   const [hyperoptResultsRows, setHyperoptResultsRows] = useState(() => [
     { id: "hr1", date: "2024-01-15", pairs: "BTC/USDT", timeFrame: "1h", knowRange: "2020-01-01 – 2023-06-01", unknowRange: "2023-06-01 – 2023-12-31", children: [
-      { id: "hr1-1", date: "2024-01-15", minScore: "0.20", avgScore: "0.55", maxScore: "0.89", foldSize: "24", truncScores: { min: "-0.14", avg: "-0.45", max: "0.84" }, heatmapsAndReports: [
+      { id: "hr1-1", date: "2024-01-15", minScore: "0.20", avgScore: "0.55", maxScore: "0.99", foldSize: "24", truncScores: { min: "-0.14", avg: "-0.45", max: "0.84" }, heatmapsAndReports: [
         { id: "hr1-1-h1", date: "2024-01-15", type: "Heatmap" },
         { id: "hr1-1-r1", date: "2024-01-15", type: "Report" },
       ]},
@@ -2714,81 +917,15 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
     if (!generatedHeatMap?.fullResults || !generatedHeatMap?.config) return null;
     return buildHeatMap(generatedHeatMap.fullResults, generatedHeatMap.config, heatMapZoomRanges);
   }, [generatedHeatMap?.fullResults, generatedHeatMap?.config, heatMapZoomRanges]);
-  // Helper: build indicator snapshot for Best result (Signal only)
-  const buildIndicatorSnapshot = useCallback(
-    (indicator) => {
-      const paramsSnapshot = {};
-      if (Array.isArray(indicator.params)) {
-        indicator.params.forEach((param) => {
-          const key = param.key || param.name || param.label;
-          if (!key) return;
-          let value = null;
-          if (param.value !== undefined) {
-            value = param.value;
-          } else if (Array.isArray(param.values) && param.values.length > 0) {
-            // Pick random from available values (mock behaviour)
-            const idx = Math.floor(Math.random() * param.values.length);
-            value = param.values[idx];
-          } else if (param.min !== undefined && param.max !== undefined) {
-            // Random within numeric range if provided
-            const min = Number(param.min);
-            const max = Number(param.max);
-            if (Number.isFinite(min) && Number.isFinite(max) && max > min) {
-              value = min + Math.random() * (max - min);
-            }
-          }
-          if (value === null && param.defaultValue !== undefined) {
-            value = param.defaultValue;
-          }
-          paramsSnapshot[key] = value;
-        });
-      }
-      return {
-        id: indicator.id,
-        type: indicator.type,
-        displayName: indicator.displayName || indicator.name || String(indicator.type || ""),
-        paramsSnapshot,
-      };
-    },
-    [],
-  );
-
   const buildSignalBestResult = useCallback(
-    ({ label, source, scores, meta, timeRangeOverride }) => {
-      const indicatorSnapshots = signalIndicators.map((ind) => buildIndicatorSnapshot(ind));
-      const indicatorsRaw = signalIndicators.map((ind) => ({ ...ind }));
-      // For mock: use random values within available ranges for params and metrics
-      const numericScoreBase =
-        scores && scores.avg != null ? Number(scores.avg) : scores && scores.max != null ? Number(scores.max) : 0.5;
-      const randomAround = (base, spread = 0.15) => {
-        const v = base + (Math.random() * 2 - 1) * spread;
-        return Math.max(-1, Math.min(1, v));
-      };
-      const score = randomAround(Number.isFinite(numericScoreBase) ? numericScoreBase : 0.5, 0.1);
-      const mfe = randomAround(score, 0.2);
-      const mae = randomAround(-Math.abs(score), 0.2);
-      const air = randomAround(score, 0.25);
-      const stability = randomAround(0.5, 0.3);
-      const result = {
-        id: `signal-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        source,
-        label,
-        timestamp: new Date().toISOString(),
-        score,
-        mfe,
-        mae,
-        air,
-        stability,
-        indicators: indicatorSnapshots,
-        indicatorsRaw,
+    (params) =>
+      buildSignalBestResultFromUtils(params, {
+        signalIndicators,
         pairs,
-        timeRange: timeRangeOverride != null ? timeRangeOverride : timeRange,
-        hyperoptType: signalHyperoptType,
-        meta,
-      };
-      return result;
-    },
-    [signalIndicators, buildIndicatorSnapshot, pairs, timeRange, signalHyperoptType],
+        timeRange,
+        signalHyperoptType,
+      }),
+    [signalIndicators, pairs, timeRange, signalHyperoptType],
   );
 
   const handleSaveSignalBestResultFromDetail = useCallback(
@@ -3196,6 +1333,17 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
               {!collapsedSections.has(3) && (
               <div className="p-3 space-y-3">
                 <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
+                  <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">Hyperopt run</div>
+                  <select
+                    value={hyperoptRun}
+                    onChange={(e) => setHyperoptRun(e.target.value)}
+                    className={cx(ui.input, "h-9 text-[12px] w-full max-w-[260px]")}
+                  >
+                    <option value="Pipeline">Pipeline</option>
+                    <option value="Admin run">Admin run</option>
+                  </select>
+                </div>
+                <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
                   <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">Market configuration</div>
                   <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                     <PairsDropdown value={pairs} onChange={onPairsChange} />
@@ -3208,7 +1356,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                       </select>
                     </div>
                     <div className="space-y-1.5">
-                      <label className={cx("block mb-1 text-xs", ui.textMuted)}>Know Time Range</label>
+                      <label className={cx("block mb-1 text-xs", ui.textMuted)}>Time Range</label>
                       <div className="flex items-center gap-2">
                         <input
                           type="date"
@@ -3217,7 +1365,6 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                           className={cx(ui.input, "h-9 text-[12px] flex-1 min-w-0")}
                           title="From"
                         />
-                        <span className="text-[#8c8c8c] text-xs shrink-0">–</span>
                         <input
                           type="date"
                           value={timeFrameEnd}
@@ -3227,44 +1374,8 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                         />
                       </div>
                     </div>
-                    <div className="space-y-1.5">
-                      <label className={cx("block mb-1 text-xs", ui.textMuted)}>Unknow Time Range</label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="date"
-                          value={unknowTimeRangeStart}
-                          onChange={(e) => setUnknowTimeRangeStart(e.target.value)}
-                          className={cx(ui.input, "h-9 text-[12px] flex-1 min-w-0")}
-                          title="From"
-                        />
-                        <span className="text-[#8c8c8c] text-xs shrink-0">–</span>
-                        <input
-                          type="date"
-                          value={unknowTimeRangeEnd}
-                          onChange={(e) => setUnknowTimeRangeEnd(e.target.value)}
-                          className={cx(ui.input, "h-9 text-[12px] flex-1 min-w-0")}
-                          title="To"
-                        />
-                      </div>
-                    </div>
                   </div>
                 </div>
-                <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
-                  <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">Technical params</div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div>
-                      <label className={cx("block mb-1 text-xs", ui.textMuted)}>Max possible std</label>
-                      <input
-                        type="text"
-                        value={maxPossibleStd}
-                        onChange={(e) => setMaxPossibleStd(e.target.value)}
-                        placeholder="Max possible std"
-                        className={cx(ui.input, "h-9 text-[12px] w-full")}
-                      />
-                    </div>
-                  </div>
-                </div>
-
                 <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
                   <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">
                     Hyperopt type {isEntryStage ? "(Entry)" : "(Signal)"}
@@ -3279,9 +1390,752 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                   </select>
                 </div>
 
-                {/* Normalization formulas — shown only when Hyperopt type is not Brute Force */}
+                {/* Intermediate formula — скрыт только для Brute Force; Post-processing ниже показывается для всех типов */}
                 {hyperoptType !== "Brute Force" && (
                 <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="text-[12px] font-medium text-[#d9d9d9]">
+                      Intermediate formula (Score and normalization metrics)
+                    </div>
+                    {isEntryStage && signalHyperoptType === entryHyperoptType && (
+                      <div className="text-[10px] text-emerald-400">
+                        In sync with Signal (read-only)
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-3 pt-0 space-y-3 border-t border-[#303030]">
+                          <div className="space-y-1.5">
+                          <div className="text-[11px] font-medium text-[#d9d9d9]">Score formula</div>
+                            <div className="flex flex-wrap items-center gap-3 gap-y-2">
+                              <select
+                                value={intermediateBlockScoreFormula}
+                                onChange={(e) => {
+                                  const next = e.target.value;
+                                  setIntermediateBlockScoreFormula(next);
+                                  const code = INTERMEDIATE_SCORE_CODE_BY_TEMPLATE[next];
+                                  if (code) setIntermediateBlockScoreFormulaCode(code);
+                                }}
+                                disabled={isEntryStage && signalHyperoptType === entryHyperoptType}
+                                className={cx(
+                                  ui.input,
+                                  "h-9 text-[12px] w-full max-w-[200px]",
+                                  isEntryStage && signalHyperoptType === entryHyperoptType && "opacity-60 cursor-not-allowed",
+                                )}
+                              >
+                                {FINAL_SCORE_FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
+                              </select>
+                              <div className="min-w-[200px] flex-1 max-w-[800px]">
+                                  <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-9 overflow-hidden">
+                                  <div data-formula-mirror className="absolute left-0 top-0 bottom-0 right-8 pl-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
+                                    <span className="inline-block min-w-full">{intermediateBlockScoreFormulaCode ? renderFormulaWithVariables(intermediateBlockScoreFormulaCode) : <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>}</span>
+                                  </div>
+                                  <input
+                                    type="text"
+                                    value={intermediateBlockScoreFormulaCode}
+                                    onChange={(e) => setIntermediateBlockScoreFormulaCode(e.target.value)}
+                                    onScroll={(e) => {
+                                      const m = e.target.parentElement?.querySelector("[data-formula-mirror]");
+                                      if (m) m.scrollLeft = e.target.scrollLeft;
+                                    }}
+                                    placeholder="Formula code"
+                                    disabled={isEntryStage && signalHyperoptType === entryHyperoptType}
+                                    className={cx(
+                                      "relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 pl-3 pr-8 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset",
+                                      isEntryStage && signalHyperoptType === entryHyperoptType && "cursor-not-allowed",
+                                    )}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => openFormulaEditor(intermediateBlockScoreFormulaCode, setIntermediateBlockScoreFormulaCode)}
+                                    disabled={isEntryStage && signalHyperoptType === entryHyperoptType}
+                                    className={cx(
+                                      "absolute right-0 top-0 bottom-0 z-20 flex items-center justify-center w-8 h-full bg-emerald-600 text-white hover:bg-emerald-500 active:bg-emerald-700 rounded-r-md",
+                                      isEntryStage && signalHyperoptType === entryHyperoptType && "opacity-60 cursor-not-allowed",
+                                    )}
+                                    title="Формула"
+                                  >
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                                      <path
+                                        fillRule="nonzero"
+                                        d="M5 4.5C5 3.672 5.672 3 6.5 3h11c.828 0 1.5.672 1.5 1.5V5c0 .552-.448 1-1 1s-1-.448-1-1V5H7v.54l6.562 5.625c.512.44.512 1.232 0 1.671L7 18.46V19h10c.552 0 1 .448 1 1s-.448 1-1 1H6.5C5.672 21 5 20.328 5 19.5v-1.27c0-.438.191-.854.524-1.139l5.94-4.091L5.524 6.909C5.191 6.624 5 6.208 5 5.77V4.5z"
+                                      />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-[11px] font-medium text-[#d9d9d9]">Normalization metrics formulas and weights</div>
+                          <div className="overflow-x-auto border border-[#303030] rounded-lg">
+                            <table className="w-full text-[11px] border-collapse">
+                              <thead>
+                                <tr className="bg-[#1a1a1a] text-[#8c8c8c]">
+                                  <th className="px-3 py-2 text-left font-medium border-b border-[#303030] w-24">Metrics</th>
+                                  <th className="px-3 py-2 text-left font-medium border-b border-[#303030] w-32">Formula</th>
+                                  <th className="px-3 py-2 text-left font-medium border-b border-[#303030] min-w-[200px]">Formula Code</th>
+                                  <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Weight</th>
+                                </tr>
+                              </thead>
+                              <tbody className="text-[#d9d9d9]">
+                                {[
+                                  { metric: "normMFE", formula: intNormMfeFormula, setFormula: setIntNormMfeFormula, formulaCode: intNormMfeFormulaCode, setFormulaCode: setIntNormMfeFormulaCode, weight: finMfeWeight, setWeight: setFinMfeWeight, others: finMaeWeight + finAirWeight + finHitRateWeight },
+                                  { metric: "normMAE", formula: intNormMaeFormula, setFormula: setIntNormMaeFormula, formulaCode: intNormMaeFormulaCode, setFormulaCode: setIntNormMaeFormulaCode, weight: finMaeWeight, setWeight: setFinMaeWeight, others: finMfeWeight + finAirWeight + finHitRateWeight },
+                                  { metric: "normAIR", formula: intNormAirFormula, setFormula: setIntNormAirFormula, formulaCode: intNormAirFormulaCode, setFormulaCode: setIntNormAirFormulaCode, weight: finAirWeight, setWeight: setFinAirWeight, others: finMfeWeight + finMaeWeight + finHitRateWeight },
+                                  { metric: "normHitRate", formula: intNormHitRateFormula, setFormula: setIntNormHitRateFormula, formulaCode: intNormHitRateFormulaCode, setFormulaCode: setIntNormHitRateFormulaCode, weight: finHitRateWeight, setWeight: setFinHitRateWeight, others: finMfeWeight + finMaeWeight + finAirWeight },
+                                ].map((row) => (
+                                  <tr key={row.metric} className="border-b border-[#303030]">
+                                    <td className="px-3 py-2 text-[#a6a6a6] align-top">{row.metric}</td>
+                                    <td className="px-3 py-2 w-32 align-top">
+                                      <select
+                                        value={row.formula}
+                                        onChange={(e) => {
+                                          const next = e.target.value;
+                                          row.setFormula(next);
+                                          const byTemplate = INTERMEDIATE_METRIC_FORMULA_CODE_BY_TEMPLATE[row.metric];
+                                          const code = byTemplate && byTemplate[next];
+                                          if (code) row.setFormulaCode(code);
+                                        }}
+                                        disabled={isEntryStage && signalHyperoptType === entryHyperoptType}
+                                        className={cx(
+                                          ui.input,
+                                          "h-8 text-[11px] w-full min-w-0",
+                                          isEntryStage && signalHyperoptType === entryHyperoptType && "opacity-60 cursor-not-allowed",
+                                        )}
+                                      >
+                                        <option value="Formula 1">{row.metric}</option>
+                                        <option value="Formula 2">Fake formula</option>
+                                      </select>
+                                    </td>
+                                    <td className="px-3 py-2 align-top min-w-[200px]">
+                                      <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-8 overflow-hidden min-w-[200px]">
+                                        <div
+                                          data-formula-mirror
+                                          className="absolute left-0 top-0 bottom-0 right-8 pl-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden"
+                                          style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+                                          aria-hidden
+                                        >
+                                          <span className="inline-block min-w-full">
+                                            {row.formulaCode
+                                              ? renderFormulaWithVariables(row.formulaCode)
+                                              : <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>}
+                                          </span>
+                                        </div>
+                                        <input
+                                          type="text"
+                                          value={row.formulaCode}
+                                          readOnly
+                                          onKeyDown={(e) => e.preventDefault()}
+                                          onPaste={(e) => e.preventDefault()}
+                                          onScroll={(e) => {
+                                            const m = e.target.parentElement?.querySelector("[data-formula-mirror]");
+                                            if (m) m.scrollLeft = e.target.scrollLeft;
+                                          }}
+                                          disabled={isEntryStage && signalHyperoptType === entryHyperoptType}
+                                          className={cx(
+                                            "relative z-10 w-full h-full bg-transparent text-transparent caret-transparent select-none cursor-not-allowed rounded-md border-0 pl-3 pr-8 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset",
+                                            isEntryStage && signalHyperoptType === entryHyperoptType && "cursor-not-allowed",
+                                          )}
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => openFormulaEditor(row.formulaCode, row.setFormulaCode)}
+                                          disabled={isEntryStage && signalHyperoptType === entryHyperoptType}
+                                          className={cx(
+                                            "absolute right-0 top-0 bottom-0 z-20 flex items-center justify-center w-8 h-full bg-emerald-600 text-white hover:bg-emerald-500 active:bg-emerald-700 rounded-r-md",
+                                            isEntryStage && signalHyperoptType === entryHyperoptType && "opacity-60 cursor-not-allowed",
+                                          )}
+                                          title="Формула"
+                                        >
+                                          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                                            <path
+                                              fillRule="nonzero"
+                                              d="M5 4.5C5 3.672 5.672 3 6.5 3h11c.828 0 1.5.672 1.5 1.5V5c0 .552-.448 1-1 1s-1-.448-1-1V5H7v.54l6.562 5.625c.512.44.512 1.232 0 1.671L7 18.46V19h10c.552 0 1 .448 1 1s-.448 1-1 1H6.5C5.672 21 5 20.328 5 19.5v-1.27c0-.438.191-.854.524-1.139l5.94-4.091L5.524 6.909C5.191 6.624 5 6.208 5 5.77V4.5z"
+                                            />
+                                          </svg>
+                                        </button>
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-2 align-top">
+                                      <div className="flex items-center gap-2">
+                                        <input
+                                          type="range"
+                                          min={0}
+                                          max={100}
+                                          step={1}
+                                          value={row.weight}
+                                          onChange={(e) => setWeightCapped(row.setWeight, e.target.value, row.others)}
+                                          disabled={isEntryStage && signalHyperoptType === entryHyperoptType}
+                                          className={cx(
+                                            "flex-1 max-w-[120px] h-2 accent-emerald-500",
+                                            isEntryStage && signalHyperoptType === entryHyperoptType && "opacity-60 cursor-not-allowed",
+                                          )}
+                                        />
+                                        <span className="text-[#8c8c8c] w-7">{row.weight}%</span>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              <tfoot>
+                                <tr className="bg-[#1a1a1a]">
+                                  <td colSpan={3} className="px-3 py-2 text-right text-[11px] font-medium text-[#8c8c8c]">Total</td>
+                                  <td className={cx("px-3 py-2 text-[11px] font-medium", (finMfeWeight + finMaeWeight + finAirWeight + finHitRateWeight) === 100 ? "text-emerald-500" : (finMfeWeight + finMaeWeight + finAirWeight + finHitRateWeight) > 100 ? "text-amber-500" : "text-[#8c8c8c]")}>{finMfeWeight + finMaeWeight + finAirWeight + finHitRateWeight}%</td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+                  </div>
+                </div>
+                )}
+
+                {/* Post-processing */}
+                <div className={cx(ui.radius, ui.panelMuted, "p-3", hyperoptRun !== "Pipeline" && "hidden")}>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="text-[12px] font-medium text-[#d9d9d9]">Post-processing</div>
+                    {isEntryStage && signalHyperoptType === entryHyperoptType && (
+                      <div className="text-[10px] text-emerald-400">
+                        In sync with Signal (read-only)
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-3 border-t border-[#303030] pt-3">
+                    {/* Block 1: Stability formula (collapsible) */}
+                    <div className="rounded-lg border border-[#303030] overflow-hidden bg-[#0f0f0f]/50">
+                      <button
+                        type="button"
+                        onClick={() => toggleNormSection("post-stability")}
+                        className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-[12px] font-medium text-[#d9d9d9] hover:bg-[#1a1a1a] transition-colors"
+                      >
+                        <span className="text-[#8c8c8c] text-[10px]">{collapsedNormSections.has("post-stability") ? "▶" : "▼"}</span>
+                        <span>Stability formula</span>
+                      </button>
+                      {!collapsedNormSections.has("post-stability") && (
+                        <div className="px-3 pb-3 pt-0 space-y-3 border-t border-[#303030]">
+                          <div className="space-y-1.5 pt-3">
+                            <div className="text-[11px] font-medium text-[#d9d9d9]">Stability formula</div>
+                            <div className="flex flex-wrap items-center gap-3 gap-y-2">
+                              <select
+                                value={finStabilityBlockFormula}
+                                onChange={(e) => setFinStabilityBlockFormula(e.target.value)}
+                                disabled={isEntryStage && signalHyperoptType === entryHyperoptType}
+                                className={cx(ui.input, "h-9 text-[12px] w-full max-w-[200px]")}
+                              >
+                                {METRIC_FORMULA_OPTIONS.map((v) => (
+                                  <option key={v} value={v}>
+                                    {v}
+                                  </option>
+                                ))}
+                              </select>
+                              <div className="min-w-[200px] flex-1 max-w-[800px]">
+                                <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-9 overflow-hidden">
+                                  <div
+                                    data-formula-mirror
+                                    className="absolute left-0 top-0 bottom-0 right-8 pl-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden"
+                                    style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+                                    aria-hidden
+                                  >
+                                    <span className="inline-block min-w-full">
+                                      {finStabilityBlockFormulaCode ? (
+                                        renderFormulaWithVariables(finStabilityBlockFormulaCode)
+                                      ) : (
+                                        <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>
+                                      )}
+                                    </span>
+                                  </div>
+                                  <input
+                                    type="text"
+                                    value={finStabilityBlockFormulaCode}
+                                    onChange={(e) => setFinStabilityBlockFormulaCode(e.target.value)}
+                                    onScroll={(e) => {
+                                      const m = e.target.parentElement?.querySelector("[data-formula-mirror]");
+                                      if (m) m.scrollLeft = e.target.scrollLeft;
+                                    }}
+                                    disabled={isEntryStage && signalHyperoptType === entryHyperoptType}
+                                    className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 pl-3 pr-8 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => openFormulaEditor(finStabilityBlockFormulaCode, setFinStabilityBlockFormulaCode)}
+                                    disabled={isEntryStage && signalHyperoptType === entryHyperoptType}
+                                    className="absolute right-0 top-0 bottom-0 z-20 flex items-center justify-center w-8 h-full bg-emerald-600 text-white hover:bg-emerald-500 active:bg-emerald-700 rounded-r-md"
+                                    title="Формула"
+                                  >
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                                      <path
+                                        fillRule="nonzero"
+                                        d="M5 4.5C5 3.672 5.672 3 6.5 3h11c.828 0 1.5.672 1.5 1.5V5c0 .552-.448 1-1 1s-1-.448-1-1V5H7v.54l6.562 5.625c.512.44.512 1.232 0 1.671L7 18.46V19h10c.552 0 1 .448 1 1s-.448 1-1 1H6.5C5.672 21 5 20.328 5 19.5v-1.27c0-.438.191-.854.524-1.139l5.94-4.091L5.524 6.909C5.191 6.624 5 6.208 5 5.77V4.5z"
+                                      />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          {/* Normalization stability formulas and weights (normDiff*) */}
+                          <div>
+                            <div className="text-[11px] font-medium text-[#d9d9d9] mb-2">
+                              Normalization stability formulas and weights
+                            </div>
+                            <div className="overflow-x-auto border border-[#303030] rounded-lg">
+                              <table className="w-full text-[11px] border-collapse">
+                                <thead>
+                                  <tr className="bg-[#1a1a1a] text-[#8c8c8c]">
+                                    <th className="px-3 py-2 text-left font-medium border-b border-[#303030] w-24">
+                                      Metrics
+                                    </th>
+                                    <th className="px-3 py-2 text-left font-medium border-b border-[#303030] w-32">
+                                      Formula
+                                    </th>
+                                    <th className="px-3 py-2 text-left font-medium border-b border-[#303030] min-w-[200px]">
+                                      Formula Code
+                                    </th>
+                                    <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">
+                                      Weight
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody className="text-[#d9d9d9]">
+                                  {[
+                                    {
+                                      metric: "normDiffMFE",
+                                      formula: finStabDiffMfeFormula,
+                                      setFormula: setFinStabDiffMfeFormula,
+                                      formulaCode: finStabDiffMfeFormulaCode,
+                                      setFormulaCode: setFinStabDiffMfeFormulaCode,
+                                      weight: finStabDiffMfeWeight,
+                                      setWeight: setFinStabDiffMfeWeight,
+                                      others:
+                                        finStabDiffMaeWeight +
+                                        finStabDiffAirWeight +
+                                        finStabDiffHitRateWeight +
+                                        finStabDiffStdWeight,
+                                    },
+                                    {
+                                      metric: "normDiffMAE",
+                                      formula: finStabDiffMaeFormula,
+                                      setFormula: setFinStabDiffMaeFormula,
+                                      formulaCode: finStabDiffMaeFormulaCode,
+                                      setFormulaCode: setFinStabDiffMaeFormulaCode,
+                                      weight: finStabDiffMaeWeight,
+                                      setWeight: setFinStabDiffMaeWeight,
+                                      others:
+                                        finStabDiffMfeWeight +
+                                        finStabDiffAirWeight +
+                                        finStabDiffHitRateWeight +
+                                        finStabDiffStdWeight,
+                                    },
+                                    {
+                                      metric: "normDiffAIR",
+                                      formula: finStabDiffAirFormula,
+                                      setFormula: setFinStabDiffAirFormula,
+                                      formulaCode: finStabDiffAirFormulaCode,
+                                      setFormulaCode: setFinStabDiffAirFormulaCode,
+                                      weight: finStabDiffAirWeight,
+                                      setWeight: setFinStabDiffAirWeight,
+                                      others:
+                                        finStabDiffMfeWeight +
+                                        finStabDiffMaeWeight +
+                                        finStabDiffHitRateWeight +
+                                        finStabDiffStdWeight,
+                                    },
+                                    {
+                                      metric: "normDiffHitRate",
+                                      formula: finStabDiffHitRateFormula,
+                                      setFormula: setFinStabDiffHitRateFormula,
+                                      formulaCode: finStabDiffHitRateFormulaCode,
+                                      setFormulaCode: setFinStabDiffHitRateFormulaCode,
+                                      weight: finStabDiffHitRateWeight,
+                                      setWeight: setFinStabDiffHitRateWeight,
+                                      others:
+                                        finStabDiffMfeWeight +
+                                        finStabDiffMaeWeight +
+                                        finStabDiffAirWeight +
+                                        finStabDiffStdWeight,
+                                    },
+                                    {
+                                      metric: "normDiffStd",
+                                      formula: finStabDiffStdFormula,
+                                      setFormula: setFinStabDiffStdFormula,
+                                      formulaCode: finStabDiffStdFormulaCode,
+                                      setFormulaCode: setFinStabDiffStdFormulaCode,
+                                      weight: finStabDiffStdWeight,
+                                      setWeight: setFinStabDiffStdWeight,
+                                      others:
+                                        finStabDiffMfeWeight +
+                                        finStabDiffMaeWeight +
+                                        finStabDiffAirWeight +
+                                        finStabDiffHitRateWeight,
+                                    },
+                                  ].map((row) => (
+                                    <tr key={row.metric} className="border-b border-[#303030]">
+                                      <td className="px-3 py-2 text-[#a6a6a6] align-top">{row.metric}</td>
+                                      <td className="px-3 py-2 w-32 align-top">
+                                        <select
+                                          value={row.formula}
+                                          onChange={(e) => {
+                                            const next = e.target.value;
+                                            row.setFormula(next);
+                                            const byTemplate = STABILITY_NORM_DIFF_FORMULA_CODE_BY_TEMPLATE[row.metric];
+                                            const code = byTemplate && byTemplate[next];
+                                            if (code) row.setFormulaCode(code);
+                                          }}
+                                          className={cx(ui.input, "h-8 text-[11px] w-full min-w-0")}
+                                        >
+                                          <option value="Formula 1">{row.metric}</option>
+                                          <option value="Formula 2">Fake formula</option>
+                                        </select>
+                                      </td>
+                                      <td className="px-3 py-2 align-top min-w-[200px]">
+                                        <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-8 overflow-hidden min-w-[200px]">
+                                          <div
+                                            data-formula-mirror
+                                            className="absolute left-0 top-0 bottom-0 right-8 pl-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden"
+                                            style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+                                            aria-hidden
+                                          >
+                                            <span className="inline-block min-w-full">
+                                              {row.formulaCode ? (
+                                                renderFormulaWithVariables(row.formulaCode)
+                                              ) : (
+                                                <span className="text-[#595959]">e.g. formula</span>
+                                              )}
+                                            </span>
+                                          </div>
+                                          <input
+                                            type="text"
+                                            value={row.formulaCode}
+                                            readOnly
+                                            onKeyDown={(e) => e.preventDefault()}
+                                            onPaste={(e) => e.preventDefault()}
+                                            onScroll={(e) => {
+                                              const m = e.target.parentElement?.querySelector("[data-formula-mirror]");
+                                              if (m) m.scrollLeft = e.target.scrollLeft;
+                                            }}
+                                            className="relative z-10 w-full h-full bg-transparent text-transparent caret-transparent select-none cursor-not-allowed rounded-md border-0 pl-3 pr-8 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset"
+                                          />
+                                          <button
+                                            type="button"
+                                            onClick={() => openFormulaEditor(row.formulaCode, row.setFormulaCode)}
+                                            className="absolute right-0 top-0 bottom-0 z-20 flex items-center justify-center w-8 h-full bg-emerald-600 text-white hover:bg-emerald-500 active:bg-emerald-700 rounded-r-md"
+                                            title="Формула"
+                                          >
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                                              <path
+                                                fillRule="nonzero"
+                                                d="M5 4.5C5 3.672 5.672 3 6.5 3h11c.828 0 1.5.672 1.5 1.5V5c0 .552-.448 1-1 1s-1-.448-1-1V5H7v.54l6.562 5.625c.512.44.512 1.232 0 1.671L7 18.46V19h10c.552 0 1 .448 1 1s-.448 1-1 1H6.5C5.672 21 5 20.328 5 19.5v-1.27c0-.438.191-.854.524-1.139l5.94-4.091L5.524 6.909C5.191 6.624 5 6.208 5 5.77V4.5z"
+                                              />
+                                            </svg>
+                                          </button>
+                                        </div>
+                                      </td>
+                                      <td className="px-3 py-2 align-top">
+                                        <div className="flex items-center gap-2">
+                                          <input
+                                            type="range"
+                                            min={0}
+                                            max={100}
+                                            step={1}
+                                            value={row.weight}
+                                            onChange={(e) => setWeightCapped(row.setWeight, e.target.value, row.others)}
+                                            className="flex-1 max-w-[120px] h-2 accent-emerald-500"
+                                          />
+                                          <span className="text-[#8c8c8c] w-7">{row.weight}%</span>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                                <tfoot>
+                                  <tr className="bg-[#1a1a1a]">
+                                    <td colSpan={3} className="px-3 py-2 text-right text-[11px] font-medium text-[#8c8c8c]">
+                                      Total
+                                    </td>
+                                    <td
+                                      className={cx(
+                                        "px-3 py-2 text-[11px] font-medium",
+                                        finStabDiffWeightsSum === 100
+                                          ? "text-emerald-500"
+                                          : finStabDiffWeightsSum > 100
+                                            ? "text-amber-500"
+                                            : "text-[#8c8c8c]"
+                                      )}
+                                    >
+                                      {finStabDiffWeightsSum}%
+                                    </td>
+                                  </tr>
+                                </tfoot>
+                              </table>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Block 2: Score formula (collapsible) */}
+                    <div className="rounded-lg border border-[#303030] overflow-hidden bg-[#0f0f0f]/50">
+                      <button
+                        type="button"
+                        onClick={() => toggleNormSection("post-score")}
+                        className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-[12px] font-medium text-[#d9d9d9] hover:bg-[#1a1a1a] transition-colors"
+                      >
+                        <span className="text-[#8c8c8c] text-[10px]">{collapsedNormSections.has("post-score") ? "▶" : "▼"}</span>
+                        <span>Score formula</span>
+                      </button>
+                      {!collapsedNormSections.has("post-score") && (
+                        <div className="px-3 pb-3 pt-0 space-y-3 border-t border-[#303030]">
+                          <div className="space-y-1.5 pt-3">
+                            <div className="text-[11px] font-medium text-[#d9d9d9]">Score formula</div>
+                            <div className="flex flex-wrap items-center gap-3 gap-y-2">
+                              <select
+                                value={finalScoreFormula}
+                                onChange={(e) => {
+                                  const next = e.target.value;
+                                  setFinalScoreFormula(next);
+                                  const code = FINAL_SCORE_CODE_BY_TEMPLATE[next];
+                                  if (code) setFinFinalFormulaCode(code);
+                                }}
+                                disabled={isEntryStage && signalHyperoptType === entryHyperoptType}
+                                className={cx(ui.input, "h-9 text-[12px] w-full max-w-[200px]")}
+                              >
+                                {FINAL_SCORE_FORMULA_OPTIONS.map((v) => (
+                                  <option key={v} value={v}>
+                                    {v}
+                                  </option>
+                                ))}
+                              </select>
+                              <div className="min-w-[200px] flex-1 max-w-[800px]">
+                                <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-9 overflow-hidden">
+                                  <div
+                                    data-formula-mirror
+                                    className="absolute left-0 top-0 bottom-0 right-8 pl-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden"
+                                    style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+                                    aria-hidden
+                                  >
+                                    <span className="inline-block min-w-full">
+                                      {finFinalFormulaCode ? (
+                                        renderFormulaWithVariables(finFinalFormulaCode)
+                                      ) : (
+                                        <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>
+                                      )}
+                                    </span>
+                                  </div>
+                                  <input
+                                    type="text"
+                                    value={finFinalFormulaCode}
+                                    readOnly
+                                    onKeyDown={(e) => e.preventDefault()}
+                                    onPaste={(e) => e.preventDefault()}
+                                    onScroll={(e) => {
+                                      const m = e.target.parentElement?.querySelector("[data-formula-mirror]");
+                                      if (m) m.scrollLeft = e.target.scrollLeft;
+                                    }}
+                                    placeholder="Formula code"
+                                    disabled={isEntryStage && signalHyperoptType === entryHyperoptType}
+                                    className="relative z-10 w-full h-full bg-transparent text-transparent caret-transparent select-none cursor-not-allowed rounded-md border-0 pl-3 pr-8 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => openFormulaEditor(finFinalFormulaCode, setFinFinalFormulaCode)}
+                                    disabled={isEntryStage && signalHyperoptType === entryHyperoptType}
+                                    className="absolute right-0 top-0 bottom-0 z-20 flex items-center justify-center w-8 h-full bg-emerald-600 text-white hover:bg-emerald-500 active:bg-emerald-700 rounded-r-md"
+                                    title="Формула"
+                                  >
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                                      <path
+                                        fillRule="nonzero"
+                                        d="M5 4.5C5 3.672 5.672 3 6.5 3h11c.828 0 1.5.672 1.5 1.5V5c0 .552-.448 1-1 1s-1-.448-1-1V5H7v.54l6.562 5.625c.512.44.512 1.232 0 1.671L7 18.46V19h10c.552 0 1 .448 1 1s-.448 1-1 1H6.5C5.672 21 5 20.328 5 19.5v-1.27c0-.438.191-.854.524-1.139l5.94-4.091L5.524 6.909C5.191 6.624 5 6.208 5 5.77V4.5z"
+                                      />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          {/* Normalization metrics formulas and weights */}
+                          <div>
+                            <div className="text-[11px] font-medium text-[#d9d9d9]">
+                              Normalization metrics formulas and weights
+                            </div>
+                            <div className="overflow-x-auto border border-[#303030] rounded-lg">
+                              <table className="w-full text-[11px] border-collapse">
+                                <thead>
+                                  <tr className="bg-[#1a1a1a] text-[#8c8c8c]">
+                                    <th className="px-3 py-2 text-left font-medium border-b border-[#303030] w-24">
+                                      Metrics
+                                    </th>
+                                    <th className="px-3 py-2 text-left font-medium border-b border-[#303030] w-32">
+                                      Formula
+                                    </th>
+                                    <th className="px-3 py-2 text-left font-medium border-b border-[#303030] min-w-[200px]">
+                                      Formula Code
+                                    </th>
+                                    <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">
+                                      Weight
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody className="text-[#d9d9d9]">
+                                  {[
+                                    {
+                                      metric: "normStability",
+                                      formula: finStabilityFormula,
+                                      setFormula: setFinStabilityFormula,
+                                      formulaCode: finStabilityFormulaCode,
+                                      setFormulaCode: setFinStabilityFormulaCode,
+                                      weight: finStabilityWeight,
+                                      setWeight: setFinStabilityWeight,
+                                      others: finMfeWeight + finMaeWeight + finAirWeight + finHitRateWeight,
+                                    },
+                                    {
+                                      metric: "normMFE",
+                                      formula: finMfeFormula,
+                                      setFormula: setFinMfeFormula,
+                                      formulaCode: finMfeFormulaCode,
+                                      setFormulaCode: setFinMfeFormulaCode,
+                                      weight: finMfeWeight,
+                                      setWeight: setFinMfeWeight,
+                                      others: finStabilityWeight + finMaeWeight + finAirWeight + finHitRateWeight,
+                                    },
+                                    {
+                                      metric: "normMAE",
+                                      formula: finMaeFormula,
+                                      setFormula: setFinMaeFormula,
+                                      formulaCode: finMaeFormulaCode,
+                                      setFormulaCode: setFinMaeFormulaCode,
+                                      weight: finMaeWeight,
+                                      setWeight: setFinMaeWeight,
+                                      others: finStabilityWeight + finMfeWeight + finAirWeight + finHitRateWeight,
+                                    },
+                                    {
+                                      metric: "normAIR",
+                                      formula: finAirFormula,
+                                      setFormula: setFinAirFormula,
+                                      formulaCode: finAirFormulaCode,
+                                      setFormulaCode: setFinAirFormulaCode,
+                                      weight: finAirWeight,
+                                      setWeight: setFinAirWeight,
+                                      others: finStabilityWeight + finMfeWeight + finMaeWeight + finHitRateWeight,
+                                    },
+                                    {
+                                      metric: "normHitRate",
+                                      formula: finHitRateFormula,
+                                      setFormula: setFinHitRateFormula,
+                                      formulaCode: finHitRateFormulaCode,
+                                      setFormulaCode: setFinHitRateFormulaCode,
+                                      weight: finHitRateWeight,
+                                      setWeight: setFinHitRateWeight,
+                                      others: finStabilityWeight + finMfeWeight + finMaeWeight + finAirWeight,
+                                    },
+                                  ].map((row) => (
+                                    <tr key={row.metric} className="border-b border-[#303030]">
+                                      <td className="px-3 py-2 text-[#a6a6a6] align-top">{row.metric}</td>
+                                      <td className="px-3 py-2 w-32 align-top">
+                                        <select
+                                          value={row.formula}
+                                          onChange={(e) => {
+                                            const next = e.target.value;
+                                            row.setFormula(next);
+                                            const byTemplate = METRIC_FORMULA_CODE_BY_TEMPLATE[row.metric];
+                                            const code = byTemplate && byTemplate[next];
+                                            if (code) row.setFormulaCode(code);
+                                          }}
+                                          className={cx(ui.input, "h-8 text-[11px] w-full min-w-0")}
+                                        >
+                                          <option value="Formula 1">{row.metric}</option>
+                                          <option value="Formula 2">Fake formula</option>
+                                        </select>
+                                      </td>
+                                      <td className="px-3 py-2 align-top min-w-[200px]">
+                                        <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-8 overflow-hidden min-w-[200px]">
+                                          <div
+                                            data-formula-mirror
+                                            className="absolute left-0 top-0 bottom-0 right-8 pl-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden"
+                                            style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+                                            aria-hidden
+                                          >
+                                            <span className="inline-block min-w-full">
+                                              {row.formulaCode ? (
+                                                renderFormulaWithVariables(row.formulaCode)
+                                              ) : (
+                                                <span className="text-[#595959]">e.g. formula</span>
+                                              )}
+                                            </span>
+                                          </div>
+                                          <input
+                                            type="text"
+                                            value={row.formulaCode}
+                                            readOnly
+                                            onKeyDown={(e) => e.preventDefault()}
+                                            onPaste={(e) => e.preventDefault()}
+                                            onScroll={(e) => {
+                                              const m = e.target.parentElement?.querySelector("[data-formula-mirror]");
+                                              if (m) m.scrollLeft = e.target.scrollLeft;
+                                            }}
+                                            className="relative z-10 w-full h-full bg-transparent text-transparent caret-transparent select-none cursor-not-allowed rounded-md border-0 pl-3 pr-8 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset"
+                                          />
+                                          <button
+                                            type="button"
+                                            onClick={() => openFormulaEditor(row.formulaCode, row.setFormulaCode)}
+                                            className="absolute right-0 top-0 bottom-0 z-20 flex items-center justify-center w-8 h-full bg-emerald-600 text-white hover:bg-emerald-500 active:bg-emerald-700 rounded-r-md"
+                                            title="Формула"
+                                          >
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                                              <path
+                                                fillRule="nonzero"
+                                                d="M5 4.5C5 3.672 5.672 3 6.5 3h11c.828 0 1.5.672 1.5 1.5V5c0 .552-.448 1-1 1s-1-.448-1-1V5H7v.54l6.562 5.625c.512.44.512 1.232 0 1.671L7 18.46V19h10c.552 0 1 .448 1 1s-.448 1-1 1H6.5C5.672 21 5 20.328 5 19.5v-1.27c0-.438.191-.854.524-1.139l5.94-4.091L5.524 6.909C5.191 6.624 5 6.208 5 5.77V4.5z"
+                                              />
+                                            </svg>
+                                          </button>
+                                        </div>
+                                      </td>
+                                      <td className="px-3 py-2 align-top">
+                                        <div className="flex items-center gap-2">
+                                          <input
+                                            type="range"
+                                            min={0}
+                                            max={100}
+                                            step={1}
+                                            value={row.weight}
+                                            onChange={(e) => setWeightCapped(row.setWeight, e.target.value, row.others)}
+                                            className="flex-1 max-w-[120px] h-2 accent-emerald-500"
+                                          />
+                                          <span className="text-[#8c8c8c] w-7">{row.weight}%</span>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                                <tfoot>
+                                  <tr className="bg-[#1a1a1a]">
+                                    <td colSpan={3} className="px-3 py-2 text-right text-[11px] font-medium text-[#8c8c8c]">
+                                      Total
+                                    </td>
+                                    <td
+                                      className={cx(
+                                        "px-3 py-2 text-[11px] font-medium",
+                                        finWeightsSum === 100
+                                          ? "text-emerald-500"
+                                          : finWeightsSum > 100
+                                            ? "text-amber-500"
+                                            : "text-[#8c8c8c]"
+                                      )}
+                                    >
+                                      {finWeightsSum}%
+                                    </td>
+                                  </tr>
+                                </tfoot>
+                              </table>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {hyperoptType !== "Brute Force" && (
+                <div className={cx(ui.radius, ui.panelMuted, "p-3", "hidden")}>
                   <div className="flex items-center justify-between mb-3">
                     <div className="text-[12px] font-medium text-[#d9d9d9]">
                       Intermediate formula (Score and normalization metrics)
@@ -3412,14 +2266,16 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                                         <input
                                           type="text"
                                           value={row.formulaCode}
-                                          onChange={(e) => row.setFormulaCode(e.target.value)}
+                                          readOnly
+                                          onKeyDown={(e) => e.preventDefault()}
+                                          onPaste={(e) => e.preventDefault()}
                                           onScroll={(e) => {
                                             const m = e.target.parentElement?.querySelector("[data-formula-mirror]");
                                             if (m) m.scrollLeft = e.target.scrollLeft;
                                           }}
                                           disabled={isEntryStage && signalHyperoptType === entryHyperoptType}
                                           className={cx(
-                                            "relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 pl-3 pr-8 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset",
+                                            "relative z-10 w-full h-full bg-transparent text-transparent caret-transparent select-none cursor-not-allowed rounded-md border-0 pl-3 pr-8 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset",
                                             isEntryStage && signalHyperoptType === entryHyperoptType && "cursor-not-allowed",
                                           )}
                                         />
@@ -3436,7 +2292,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                                           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
                                             <path
                                               fillRule="nonzero"
-                                              d="M5 4.5C5 3.672 5.672 3 6.5 3h11c.828 0 1.5.672 1.5 1.5V5c0 .552-.448 1-1 1s-1-.448-1-1V5H7v.54l6.562 5.625c.512.44.512 1.232 0 1.671L7 18.46V19h10c.552 0 1 .448 1 1s-.448 1-1 1H6.5C5.672 21 5 20.328 5 19.5v-1.27c0-.438.191-.854.524-1.139л5.94-4.091L5.524 6.909C5.191 6.624 5 6.208 5 5.77V4.5з"
+                                              d="M5 4.5C5 3.672 5.672 3 6.5 3h11c.828 0 1.5.672 1.5 1.5V5c0 .552-.448 1-1 1s-1-.448-1-1V5H7v.54l6.562 5.625c.512.44.512 1.232 0 1.671L7 18.46V19h10c.552 0 1 .448 1 1s-.448 1-1 1H6.5C5.672 21 5 20.328 5 19.5v-1.27c0-.438.191-.854.524-1.139l5.94-4.091L5.524 6.909C5.191 6.624 5 6.208 5 5.77V4.5z"
                                             />
                                           </svg>
                                         </button>
@@ -3564,7 +2420,6 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                           <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Pairs</th>
                           <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">TimeFrame</th>
                           <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">KnowRange</th>
-                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">UnknowRange</th>
                           <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Actions</th>
                         </tr>
                       </thead>
@@ -3586,24 +2441,25 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                               <td className="px-3 py-2">{row.pairs}</td>
                               <td className="px-3 py-2">{row.timeFrame}</td>
                               <td className="px-3 py-2 text-[#a6a6a6]">{row.knowRange}</td>
-                              <td className="px-3 py-2 text-[#a6a6a6]">{row.unknowRange}</td>
                               <td className="px-3 py-2">
-                                <button
-                                  type="button"
-                                  onClick={() => setShowNormalizationModal(true)}
-                                  className={cx(ui.btnPrimary, "h-7 px-2 text-[10px] whitespace-nowrap")}
-                                >
-                                  Run normalization
-                                </button>
+                                {hyperoptRun !== "Pipeline" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowNormalizationModal(true)}
+                                    className={cx(ui.btnPrimary, "h-7 px-2 text-[10px] whitespace-nowrap")}
+                                  >
+                                    Post-processing
+                                  </button>
+                                )}
                               </td>
                             </tr>
                             {hyperoptResultsExpanded.has(row.id) && row.children && row.children.length > 0 && (
                               <tr>
-                                <td colSpan={7} className="p-0 align-top bg-[#0f0f0f]">
+                                <td colSpan={6} className="p-0 align-top bg-[#0f0f0f]">
                                   {/* Block 2: Normalization result (nested per expanded row) */}
                                   <div className="ml-4 mt-2 mb-2 rounded-lg border border-[#303030] overflow-hidden border-l-4 border-l-sky-500">
                                     <div className="px-3 py-1.5 font-medium border-b border-[#303030] bg-sky-500/10 text-sky-200 text-[11px]">
-                                      Normalization result
+                                      Post-processing result
                                       <span className="ml-2 text-[#8c8c8c] font-normal">— {row.date} · {row.pairs}</span>
                                     </div>
                                     <div className="overflow-x-auto">
@@ -3612,7 +2468,10 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                                           <tr>
                                             <th className="px-2 py-1.5 text-left font-medium border-b border-[#303030] w-8"></th>
                                             <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030] w-24">Date</th>
-                                            <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Normalization formula info</th>
+                                            <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030] w-20">Min score</th>
+                                            <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030] w-20">AVG score</th>
+                                            <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030] w-20">Max score</th>
+                                            <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Post-processing formula info</th>
                                             <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Actions</th>
                                           </tr>
                                         </thead>
@@ -3639,29 +2498,115 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                                                     </button>
                                                   </td>
                                                   <td className="px-3 py-2 text-[#a6a6a6]">{sub.date}</td>
+                                                  <td className="px-3 py-2 tabular-nums text-[#d9d9d9]">{sub.minScore ?? "—"}</td>
+                                                  <td className="px-3 py-2 tabular-nums text-[#d9d9d9]">{sub.avgScore ?? "—"}</td>
+                                                  <td className="px-3 py-2 tabular-nums text-[#d9d9d9]">{sub.maxScore ?? "—"}</td>
                                                   <td className="px-3 py-2">
                                                     <HyperoptDetailsTooltip onShowDetails={() => setShowHyperoptDetailsModal(true)} />
                                                   </td>
                                                   <td className="px-3 py-2">
-                                                    <button
-                                                      type="button"
-                                                      onClick={() => {
-                                                        setSelectedNormalizationRow(sub);
-                                                        setShowTruncateModal(true);
-                                                      }}
-                                                      className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
-                                                    >
-                                                      Add truncate
-                                                    </button>
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => setHeatMapConfigModalId(heatMapId)}
+                                                        className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
+                                                      >
+                                                        Configure HeatMap
+                                                      </button>
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => setShowReportModal(true)}
+                                                        className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
+                                                      >
+                                                        Generate Report
+                                                      </button>
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                          setSelectedNormalizationRow(sub);
+                                                          setShowTruncateModal(true);
+                                                        }}
+                                                        className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
+                                                      >
+                                                        Add truncate
+                                                      </button>
+                                                    </div>
                                                   </td>
                                                 </tr>
                                                 {isDetailsExpanded && (
                                                   <tr>
-                                                    <td colSpan={4} className="p-0 align-top bg-[#0f0f0f]">
+                                                    <td colSpan={7} className="p-0 align-top bg-[#0f0f0f]">
+                                                      {/* Branch A: HeatMaps & Reports (full data scope) */}
+                                                      <div className="ml-4 mt-2 mb-2 rounded-lg border border-[#303030] overflow-hidden border-l-4 border-l-amber-500 bg-[#111111]">
+                                                        <div className="px-3 py-1.5 font-medium border-b border-[#303030] bg-amber-500/10 text-amber-200 text-[11px]">
+                                                          HeatMaps &amp; Reports
+                                                        </div>
+                                                        <div className="overflow-x-auto">
+                                                          <table className="w-full border-collapse text-[11px]">
+                                                            <thead className="bg-[#1a1a1a] text-[#8c8c8c]">
+                                                              <tr>
+                                                                <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030] w-24">
+                                                                  Date
+                                                                </th>
+                                                                <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">
+                                                                  Type
+                                                                </th>
+                                                                <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">
+                                                                  HeatMap details
+                                                                </th>
+                                                                <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">
+                                                                  Actions
+                                                                </th>
+                                                              </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                              {level3Items.map((item) => (
+                                                                <tr key={item.id} className="border-b border-[#303030]/30 hover:bg-[#141414]">
+                                                                  <td className="px-3 py-2 text-[#a6a6a6]">{item.date}</td>
+                                                                  <td className="px-3 py-2">{item.type}</td>
+                                                                  <td className="px-3 py-2">
+                                                                    <button
+                                                                      type="button"
+                                                                      title="info"
+                                                                      className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1 rounded inline-flex items-center justify-center"
+                                                                      aria-label="Info"
+                                                                    >
+                                                                      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                                                                        <circle cx="12" cy="12" r="10" />
+                                                                        <path d="M12 16v-4M12 8h.01" />
+                                                                      </svg>
+                                                                    </button>
+                                                                  </td>
+                                                                  <td className="px-3 py-2">
+                                                                    {item.type === "Heatmap" ? (
+                                                                      <button
+                                                                        type="button"
+                                                                        onClick={() => setHeatMapViewModalId(heatMapId)}
+                                                                        className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
+                                                                      >
+                                                                        Show heatmap
+                                                                      </button>
+                                                                    ) : (
+                                                                      <button
+                                                                        type="button"
+                                                                        onClick={() => setShowReportModal(true)}
+                                                                        className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
+                                                                      >
+                                                                        Download report
+                                                                      </button>
+                                                                    )}
+                                                                  </td>
+                                                                </tr>
+                                                              ))}
+                                                            </tbody>
+                                                          </table>
+                                                        </div>
+                                                      </div>
+
                                                       {/* Block 2.5: Normalization details (per normalization row) */}
                                                       <div className="ml-4 mt-2 mb-2 rounded-lg border border-[#303030] overflow-hidden border-l-4 border-l-emerald-500 bg-[#111111]">
                                                         <div className="px-3 py-1.5 font-medium border-b border-[#303030] bg-emerald-500/10 text-emerald-200 text-[11px]">
-                                                          Normalization details
+                                                          Post-processing trunk details
                                                         </div>
                                                         <div className="overflow-x-auto">
                                                           <table className="w-full border-collapse text-[11px]">
@@ -3669,7 +2614,6 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                                                               <tr>
                                                                 <th className="px-2 py-1.5 text-left font-medium border-b border-[#303030] w-8"></th>
                                                                 <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030] w-24">Date</th>
-                                                                <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Data period</th>
                                                                 <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Min score</th>
                                                                 <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">AVG score</th>
                                                                 <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Max score</th>
@@ -3679,15 +2623,6 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                                                             </thead>
                                                             <tbody>
                                                               {[
-                                                                {
-                                                                  id: `${sub.id}-full`,
-                                                                  label: "Full data",
-                                                                  scores: {
-                                                                    min: sub.minScore,
-                                                                    avg: sub.avgScore,
-                                                                    max: sub.maxScore,
-                                                                  },
-                                                                },
                                                                 hasTruncData && {
                                                                   id: `${sub.id}-trunc`,
                                                                   label: "Trunc data",
@@ -3714,13 +2649,10 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                                                                           )}
                                                                         </td>
                                                                       <td className="px-3 py-2 text-[#a6a6a6]">{sub.date}</td>
-                                                                      <td className="px-3 py-2">{detail.label}</td>
                                                                       <td className="px-3 py-2">{detail.scores?.min ?? "-"}</td>
                                                                       <td className="px-3 py-2">{detail.scores?.avg ?? "-"}</td>
                                                                       <td className="px-3 py-2">{detail.scores?.max ?? "-"}</td>
-                                                                      <td className="px-3 py-2">
-                                                                        {detail.label === "Trunc data" ? sub.foldSize ?? "-" : "-"}
-                                                                      </td>
+                                                                      <td className="px-3 py-2">{sub.foldSize ?? "-"}</td>
                                                                       <td className="px-3 py-2">
                                                                         <div className="flex items-center gap-2">
                                                                           <button
@@ -3742,7 +2674,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                                                                       </tr>
                                                                       {isLevel3ExpandedForRow && level3Items.length > 0 && (
                                                                         <tr>
-                                                                          <td colSpan={8} className="p-0 align-top bg-[#0a0a0a]">
+                                                                          <td colSpan={7} className="p-0 align-top bg-[#0a0a0a]">
                                                                           {/* Block 3: HeatMaps & Reports (child of Normalization details) */}
                                                                           <div className="ml-4 mt-2 mb-2 rounded-lg border border-[#303030] overflow-hidden border-l-4 border-l-amber-500">
                                                                             <div className="px-3 py-1.5 font-medium border-b border-[#303030] bg-amber-500/10 text-amber-200 text-[11px]">
@@ -3754,7 +2686,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                                                                                   <tr>
                                                                                     <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030] w-24">Date</th>
                                                                                     <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Type</th>
-                                                                                    <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Details</th>
+                                                                                    <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">HeatMap details</th>
                                                                                     <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Actions</th>
                                                                                   </tr>
                                                                                 </thead>
@@ -4164,10 +3096,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
               <button type="button" onClick={() => setShowNormalizationModal(false)} className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1">✕</button>
             </div>
             <div className="overflow-auto p-4">
-              <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
-                <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">Normalization formulas</div>
-                <div className="p-3 pt-0 space-y-3 border-t border-[#303030]">
-                  <>
+              <div className="space-y-3">
                   {/* Block 1: Stability formula (collapsible) */}
                   <div className="rounded-lg border border-[#303030] overflow-hidden bg-[#0f0f0f]/50">
                     <button
@@ -4245,7 +3174,18 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                                   <div data-formula-mirror className="absolute left-0 top-0 bottom-0 right-8 pl-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
                                     <span className="inline-block min-w-full">{row.formulaCode ? renderFormulaWithVariables(row.formulaCode) : <span className="text-[#595959]">e.g. formula</span>}</span>
                                   </div>
-                                  <input type="text" value={row.formulaCode} onChange={(e) => row.setFormulaCode(e.target.value)} onScroll={(e) => { const m = e.target.parentElement?.querySelector("[data-formula-mirror]"); if (m) m.scrollLeft = e.target.scrollLeft; }} className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 pl-3 pr-8 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset" />
+                                  <input
+                                    type="text"
+                                    value={row.formulaCode}
+                                    readOnly
+                                    onKeyDown={(e) => e.preventDefault()}
+                                    onPaste={(e) => e.preventDefault()}
+                                    onScroll={(e) => {
+                                      const m = e.target.parentElement?.querySelector("[data-formula-mirror]");
+                                      if (m) m.scrollLeft = e.target.scrollLeft;
+                                    }}
+                                    className="relative z-10 w-full h-full bg-transparent text-transparent caret-transparent select-none cursor-not-allowed rounded-md border-0 pl-3 pr-8 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset"
+                                  />
                                   <button type="button" onClick={() => openFormulaEditor(row.formulaCode, row.setFormulaCode)} className="absolute right-0 top-0 bottom-0 z-20 flex items-center justify-center w-8 h-full bg-emerald-600 text-white hover:bg-emerald-500 active:bg-emerald-700 rounded-r-md" title="Формула">
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
                                       <path fillRule="nonzero" d="M5 4.5C5 3.672 5.672 3 6.5 3h11c.828 0 1.5.672 1.5 1.5V5c0 .552-.448 1-1 1s-1-.448-1-1V5H7v.54l6.562 5.625c.512.44.512 1.232 0 1.671L7 18.46V19h10c.552 0 1 .448 1 1s-.448 1-1 1H6.5C5.672 21 5 20.328 5 19.5v-1.27c0-.438.191-.854.524-1.139l5.94-4.091L5.524 6.909C5.191 6.624 5 6.208 5 5.77V4.5z" />
@@ -4309,13 +3249,15 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                           <input
                             type="text"
                             value={finFinalFormulaCode}
-                            onChange={(e) => setFinFinalFormulaCode(e.target.value)}
+                            readOnly
+                            onKeyDown={(e) => e.preventDefault()}
+                            onPaste={(e) => e.preventDefault()}
                             onScroll={(e) => {
                               const m = e.target.parentElement?.querySelector("[data-formula-mirror]");
                               if (m) m.scrollLeft = e.target.scrollLeft;
                             }}
                             placeholder="Formula code"
-                            className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 pl-3 pr-8 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset"
+                            className="relative z-10 w-full h-full bg-transparent text-transparent caret-transparent select-none cursor-not-allowed rounded-md border-0 pl-3 pr-8 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset"
                           />
                           <button
                             type="button"
@@ -4409,7 +3351,18 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                                 <div data-formula-mirror className="absolute left-0 top-0 bottom-0 right-8 pl-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
                                   <span className="inline-block min-w-full">{row.formulaCode ? renderFormulaWithVariables(row.formulaCode) : <span className="text-[#595959]">e.g. 1 / (1 + exp(-k * ...))</span>}</span>
                                 </div>
-                                <input type="text" value={row.formulaCode} onChange={(e) => row.setFormulaCode(e.target.value)} onScroll={(e) => { const m = e.target.parentElement?.querySelector("[data-formula-mirror]"); if (m) m.scrollLeft = e.target.scrollLeft; }} className="relative z-10 w-full h-full bg-transparent text-transparent caret-[#d9d9d9] rounded-md border-0 pl-3 pr-8 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset" />
+                                <input
+                                  type="text"
+                                  value={row.formulaCode}
+                                  readOnly
+                                  onKeyDown={(e) => e.preventDefault()}
+                                  onPaste={(e) => e.preventDefault()}
+                                  onScroll={(e) => {
+                                    const m = e.target.parentElement?.querySelector("[data-formula-mirror]");
+                                    if (m) m.scrollLeft = e.target.scrollLeft;
+                                  }}
+                                  className="relative z-10 w-full h-full bg-transparent text-transparent caret-transparent select-none cursor-not-allowed rounded-md border-0 pl-3 pr-8 py-2 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset"
+                                />
                                 <button type="button" onClick={() => openFormulaEditor(row.formulaCode, row.setFormulaCode)} className="absolute right-0 top-0 bottom-0 z-20 flex items-center justify-center w-8 h-full bg-emerald-600 text-white hover:bg-emerald-500 active:bg-emerald-700 rounded-r-md" title="Формула">
                                   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
                                     <path fillRule="nonzero" d="M5 4.5C5 3.672 5.672 3 6.5 3h11c.828 0 1.5.672 1.5 1.5V5c0 .552-.448 1-1 1s-1-.448-1-1V5H7v.54l6.562 5.625c.512.44.512 1.232 0 1.671L7 18.46V19h10c.552 0 1 .448 1 1s-.448 1-1 1H6.5C5.672 21 5 20.328 5 19.5v-1.27c0-.438.191-.854.524-1.139l5.94-4.091L5.524 6.909C5.191 6.624 5 6.208 5 5.77V4.5z" />
@@ -4438,8 +3391,6 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                       </div>
                     )}
                   </div>
-                  </>
-                </div>
               </div>
             </div>
             <div className="px-4 py-3 border-t border-[#303030] flex justify-end">
@@ -4974,263 +3925,6 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
   );
 });
 
-/* ====================== Code Editor ====================== */
-
-const CodeEditor = memo(({ value, onChange, language = "python" }) => {
-  const lines = useMemo(() => {
-    const count = (value || "").split("\n").length;
-    return Array.from({ length: Math.max(1, count) }, (_, i) => i + 1);
-  }, [value]);
-
-  const copy = useCallback(() => {
-    try {
-      navigator.clipboard?.writeText(value || "");
-    } catch {
-      // no-op
-    }
-  }, [value]);
-
-  return (
-    <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
-      <div className={cx("flex items-center justify-between px-3 py-2", ui.panelMuted, "border-0 border-b", ui.divider)}>
-        <div className="flex items-center gap-2">
-          <span className="rounded-md border border-[#303030] bg-[#0f0f0f] px-2 py-0.5 text-[10px] text-[#a6a6a6]">{language}</span>
-          <span className="text-[10px] text-[#8c8c8c]">Monospace • Tabs preserved</span>
-        </div>
-        <button type="button" onClick={copy} className={cx(ui.btn, "px-2 py-1 text-[10px]")}>
-          Copy
-        </button>
-      </div>
-
-      <div className="relative">
-        <div className="pointer-events-none absolute inset-y-0 left-0 w-12 border-r border-[#303030] bg-[#0f0f0f] px-2 py-2 text-right text-[10px] text-[#595959] select-none">
-          {lines.map((n) => (
-            <div key={n} className="leading-5">
-              {n}
-            </div>
-          ))}
-        </div>
-        <textarea
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          spellCheck={false}
-          className="block w-full resize-none bg-[#0f0f0f] px-3 py-2 pl-14 text-[12px] font-mono leading-5 text-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-          rows={18}
-        />
-      </div>
-    </div>
-  );
-});
-
-/* ====================== Modals ====================== */
-
-
-const DEFAULT_CUSTOM_CODE = "import pandas as pd\n\ndef run(df: pd.DataFrame, **kwargs):\n    # Indicator implementation\n    return {}";
-
-const PARAM_TYPES = ["int", "float", "enum", "bool"];
-
-const INDICATOR_CATEGORIES = [
-  "Trend", "Momentum", "Volatility", "Volume", "Structure",
-  "Stat & Math", "Risk", "Liquidity", "Sentiment", "Composite", "Utility",
-];
-
-const AddIndicatorPageModal = memo(function AddIndicatorPageModal({ onClose, onAdd }) {
-  const [displayName, setDisplayName] = useState("");
-  const [description, setDescription] = useState("");
-  const [indicatorCategory, setIndicatorCategory] = useState("Trend");
-  const [code, setCode] = useState(DEFAULT_CUSTOM_CODE);
-  const [parameters, setParameters] = useState(() => [
-    { name: "", type: "int", default_value: "", min: "", max: "", step: "" },
-  ]);
-
-  const updateParam = (index, field, value) => {
-    setParameters((prev) => {
-      const next = [...prev];
-      next[index] = { ...next[index], [field]: value };
-      return next;
-    });
-  };
-
-  const addParam = () => {
-    setParameters((prev) => [...prev, { name: "", type: "int", default_value: "", min: "", max: "", step: "" }]);
-  };
-
-  const removeParam = (index) => {
-    setParameters((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const handleAdd = () => {
-    onAdd({
-      name: displayName,
-      description,
-      code,
-      parameters: parameters
-        .filter((p) => String(p.name ?? "").trim() !== "")
-        .map((p) => ({
-          name: String(p.name ?? "").trim(),
-          type: p.type ?? "int",
-          default_value: p.default_value ?? "",
-          min: p.min ?? "",
-          max: p.max ?? "",
-          step: p.step ?? "",
-        })),
-      group: indicatorCategory,
-    });
-    onClose();
-  };
-
-  return (
-    <ModalShell title="Add custom indicator" onClose={onClose}>
-      <div className="space-y-4 max-h-[70vh] overflow-auto">
-        <div>
-          <label className={cx("block mb-1 text-xs", ui.textMuted)}>Display name</label>
-          <input
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            className={ui.input}
-            placeholder="Display name"
-          />
-        </div>
-        <div>
-          <label className={cx("block mb-1 text-xs", ui.textMuted)}>Description</label>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className={cx(ui.input, "w-full min-h-[60px]")}
-            placeholder="Description"
-            rows={2}
-          />
-        </div>
-        <div>
-          <label className={cx("block mb-1 text-xs", ui.textMuted)}>Indicator category</label>
-          <select
-            value={indicatorCategory}
-            onChange={(e) => setIndicatorCategory(e.target.value)}
-            className={cx(ui.input, "h-9 w-full")}
-          >
-            {INDICATOR_CATEGORIES.map((cat) => (
-              <option key={cat} value={cat}>{cat}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Parameters (first) */}
-        <div>
-          <label className={cx("block mb-2 text-xs", ui.textMuted)}>Parameters</label>
-          <div className="border border-[#303030] rounded-lg overflow-hidden">
-            <table className="w-full text-[11px] border-collapse">
-              <thead className="bg-[#1f1f1f] text-[#8c8c8c]">
-                <tr>
-                  <th className="px-2 py-1.5 text-left font-medium">Param name</th>
-                  <th className="px-2 py-1.5 text-left font-medium">Param type</th>
-                  <th className="px-2 py-1.5 text-left font-medium">Default value</th>
-                  <th className="px-2 py-1.5 text-left font-medium">Min</th>
-                  <th className="px-2 py-1.5 text-left font-medium">Max</th>
-                  <th className="px-2 py-1.5 text-left font-medium">Step</th>
-                  <th className="px-2 py-1.5 w-8" />
-                </tr>
-              </thead>
-              <tbody className="text-[#d9d9d9]">
-                {parameters.map((p, idx) => (
-                  <tr key={idx} className="border-t border-[#303030]">
-                    <td className="px-2 py-1.5">
-                      <input
-                        type="text"
-                        value={p.name}
-                        onChange={(e) => updateParam(idx, "name", e.target.value)}
-                        placeholder="name"
-                        className={cx(ui.input, "h-7 min-w-[80px] text-[11px] font-mono")}
-                      />
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <select
-                        value={p.type}
-                        onChange={(e) => updateParam(idx, "type", e.target.value)}
-                        className={cx(ui.input, "h-7 text-[11px] min-w-[72px]")}
-                      >
-                        {PARAM_TYPES.map((t) => (
-                          <option key={t} value={t}>{t}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <input
-                        type="text"
-                        value={p.default_value}
-                        onChange={(e) => updateParam(idx, "default_value", e.target.value)}
-                        className={cx(ui.input, "h-7 w-16 text-[11px]")}
-                      />
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <input
-                        type="text"
-                        value={p.min}
-                        onChange={(e) => updateParam(idx, "min", e.target.value)}
-                        className={cx(ui.input, "h-7 w-14 text-[11px]")}
-                      />
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <input
-                        type="text"
-                        value={p.max}
-                        onChange={(e) => updateParam(idx, "max", e.target.value)}
-                        className={cx(ui.input, "h-7 w-14 text-[11px]")}
-                      />
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <input
-                        type="text"
-                        value={p.step}
-                        onChange={(e) => updateParam(idx, "step", e.target.value)}
-                        className={cx(ui.input, "h-7 w-14 text-[11px]")}
-                      />
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <button
-                        type="button"
-                        onClick={() => removeParam(idx)}
-                        className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1"
-                        title="Remove"
-                        aria-label="Remove"
-                      >
-                        ×
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="px-2 py-1.5 border-t border-[#303030] bg-[#1f1f1f]">
-              <button type="button" onClick={addParam} className={cx("text-[11px]", ui.textMuted, "hover:text-[#d9d9d9]")}>
-                + Add parameter
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Code (editable, second) */}
-        <div>
-          <label className={cx("block mb-1 text-xs", ui.textMuted)}>Code</label>
-          <textarea
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            className={cx("text-[11px] font-mono text-[#a6a6a6] p-3 rounded-lg bg-[#0f0f0f] border border-[#303030] w-full min-h-[140px] max-h-40 resize-y", ui.input)}
-            placeholder="Indicator code..."
-            spellCheck={false}
-          />
-        </div>
-
-        <div className="flex justify-end gap-2 pt-2">
-          <button onClick={onClose} className={ui.btn}>Cancel</button>
-          <button onClick={handleAdd} className={ui.btnPrimary} disabled={!displayName.trim()}>
-            Add indicator
-          </button>
-        </div>
-      </div>
-    </ModalShell>
-  );
-});
-
 /* ====================== Main App ====================== */
 
 export default function App() {
@@ -5336,49 +4030,6 @@ export default function App() {
   const [showAddIndicatorPage, setShowAddIndicatorPage] = useState(false);
 
   // Formulas (Settings → Formulas)
-  const FORMULA_HYPEROPT_TYPES = ["BIAS", "Brute Force"];
-  const FORMULA_TYPES = ["Score", "Metric", "Stability"];
-  const FORMULA_SUBTYPES = ["Intermediate score", "Final score", "Stability", "MFE", "MAE", "AIR", "HitRate"];
-  const FORMULA_MODAL_VARIABLES = [
-    "medMFE",
-    "medMAE",
-    "medAIR",
-    "medHitRate",
-    "medMFELow",
-    "medMFEHigh",
-    "medMAELow",
-    "medMAEHigh",
-    "medAIRLow",
-    "medAIRHigh",
-    "medHitRateLow",
-    "medHitRateHigh",
-    "valHitRate",
-    "valHitRateLow",
-    "valHitRateHigh",
-    "Stability",
-    "weightMFE", "normMFE", "weightMAE", "normMAE", "weightAIR", "normAIR", "weightHitRate", "normHitRate",
-    "midMFE", "midMAE", "midAIR", "midHitRate",
-    "normDiffMFE", "normDiffMAE", "normDiffAIR", "normDiffHitRate", "normDiffStd",
-    "diffMFE", "diffMFELow", "diffMFEHigh", "diffMAE", "diffMAELow", "diffMAEHigh",
-    "diffAIR", "diffAIRLow", "diffAIRHigh", "diffHitRate", "diffHitRateLow", "diffHitRateHigh",
-    "diffStd", "diffStdLow", "diffStdHigh",
-    "Z-scoreMedMFE", "Z-scoreMedMAE", "Z-scoreMedAIR", "Z-scoreValHitRate",
-    "stabilityScore", "stabilityLow", "stabilityHigh",
-    "weightStabilityMFE", "weightStabilityMAE", "weightStabilityAIR", "weightStabilityHitRate", "weightStabilityDiffStd",
-  ];
-  const FORMULA_MODAL_FUNCTIONS = [
-    { label: "IF", template: "IF(cond; a; b)" },
-    { label: "IFS", template: "IFS(c1; v1; c2; v2; default)" },
-    { label: "AND", template: "AND(a; b; c)" },
-    { label: "OR", template: "OR(a; b)" },
-    { label: "NOT", template: "NOT(a)" },
-    { label: "IFERROR", template: "IFERROR(expr; fallback)" },
-    { label: "ABS", template: "ABS(x)" },
-    { label: "MIN", template: "MIN(a; b; c)" },
-    { label: "MAX", template: "MAX(a; b; c)" },
-    { label: "ROUND", template: "ROUND(x; digits)" },
-  ];
-  const FORMULA_MODAL_OPERATORS = ["+", "-", "*", "/", "^", "=", "<>", "<", "<=", ">", ">="];
   const formulaModalFormulaRef = useRef(null);
   const formulaModalMirrorRef = useRef(null);
   const [formulaModalSelection, setFormulaModalSelection] = useState({ start: 0, end: 0 });

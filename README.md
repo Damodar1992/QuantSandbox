@@ -1,141 +1,136 @@
 # QuantSandbox CRM
 
-Веб-приложение для управления квантовыми торговыми стратегиями (Quant Trading Sandbox).
+Веб-приложение для управления квантовыми торговыми стратегиями (Quant Trading Sandbox): список стратегий, конструктор сигналов (Strategy Builder), оптимизация и HeatMap, мок-данные без бэкенда.
 
-## 🚀 Возможности
+**Доп. ориентация для разработки:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · для агентов Cursor: [AGENTS.md](AGENTS.md)
 
-- **Аутентификация**: Login + Forgot Password (mock)
-- **Управление стратегиями**: Список стратегий с версиями, фильтрация и поиск
-- **Strategy Builder**: Визуальный конструктор стратегий с 5 этапами
-- **Оптимизация**: Запуск оптимизации с HeatMap визуализацией результатов
-- **Редактор кода**: Встроенный редактор Python-кода стратегий
-- **Темная тема**: Современный UI с темной цветовой схемой
+## Возможности
 
-## 🛠 Технологии
+- **Аутентификация**: вход и восстановление пароля (mock)
+- **Стратегии**: список с версиями, фильтры, детальный просмотр, вкладки Builder / Code
+- **Strategy Builder**: поэтапный конструктор (активен в основном этап Signal; остальные этапы могут быть заблокированы в UI)
+- **Оптимизация / Hyperopt**: параметры запуска, таблица результатов, HeatMap, post-processing (нормализация / формулы)
+- **Редактор кода**: Monaco-подобное отображение Python-кода стратегий
+- **Пользователи и настройки**: секции в навигации (mock UI)
+- **Тёмная тема**: Tailwind CSS
 
-- **React 18** - UI библиотека
-- **Vite** - Быстрый сборщик и dev-сервер
-- **Tailwind CSS** - Utility-first CSS фреймворк
-- **JavaScript (ES6+)** - Современный JavaScript
+## Технологии
 
-## 📦 Установка
+- **React 18** — UI
+- **Vite 5** — сборка и dev-сервер
+- **Tailwind CSS 3** — стили
+- **@monaco-editor/react** — редактор кода в Builder
+- **JavaScript (ES modules)** — без TypeScript
 
-1. Установите зависимости:
-```bash
-npm install
-```
+## Требования
 
-2. Запустите dev-сервер:
-```bash
-npm run dev
-```
+- **Node.js** 18+ рекомендуется (как для Vite 5)
 
-Приложение откроется автоматически в браузере по адресу `http://localhost:3000`
-
-## 🏗 Сборка для продакшена
+## Команды
 
 ```bash
-npm run build
+npm install          # зависимости
+npm run dev          # dev-сервер (порт см. ниже)
+npm run build        # production-сборка → dist/
+npm run preview      # предпросмотр dist/
+npm run lint         # ESLint (js, jsx)
 ```
 
-Сборка будет создана в папке `dist/`
+## Dev-сервер и URL
 
-## 👀 Предварительный просмотр production-сборки
+Порт **3000** и автооткрытие браузера задаются в [`vite.config.js`](vite.config.js) (`server.port`, `server.open`).
 
-```bash
-npm run preview
-```
+Приложение: **http://localhost:3000**
 
-## 📁 Структура проекта
+## Структура репозитория
 
 ```
-Quant-sendbox/
+QuantSandbox/
 ├── src/
-│   ├── App.jsx          # Главный компонент приложения
-│   ├── main.jsx         # Точка входа React
-│   └── index.css        # Глобальные стили + Tailwind
-├── index.html           # HTML шаблон
-├── package.json         # Зависимости проекта
-├── vite.config.js       # Конфигурация Vite
-├── tailwind.config.js   # Конфигурация Tailwind CSS
-├── postcss.config.js    # Конфигурация PostCSS
-└── README.md            # Документация
-
+│   ├── main.jsx                 # Точка входа React
+│   ├── App.jsx                  # Корневой компонент: маршрутизация экранов, большой объём Builder/Hyperopt UI и состояния
+│   ├── index.css                # Глобальные стили + Tailwind
+│   ├── constants/               # Константы приложения, формул, индикаторов, heatmap, UI
+│   ├── utils/                   # Чистые хелперы (weights, builder, mock heatmap, pythonCode, …)
+│   ├── hooks/                   # Общие хуки (например useOutsideClose)
+│   ├── features/builder/        # Фича Builder: components/, utils/
+│   └── components/              # Переиспользуемые блоки по домену
+│       ├── auth/
+│       ├── common/
+│       ├── formulas/
+│       ├── heatmap/
+│       ├── indicators/
+│       ├── report/
+│       ├── shared/
+│       ├── strategies/
+│       └── users/
+├── docs/
+│   └── ARCHITECTURE.md          # Карта модулей и соглашения
+├── AGENTS.md                    # Краткие инструкции для ИИ/агентов
+├── index.html
+├── vite.config.js
+├── tailwind.config.js
+├── postcss.config.js
+└── README.md
 ```
 
-## 🎨 UI Компоненты
+ESLint: скрипт `npm run lint` в [`package.json`](package.json); при необходимости добавьте явный конфиг (`.eslintrc.cjs` / `eslint.config.js`) в корень.
 
-### Основные экраны:
-- **LoginScreen** - Экран входа с формой логина и восстановления пароля
-- **Header** - Навигация с секциями (Strategies, Backtesting, Users)
-- **Strategies List** - Список стратегий с фильтрами и версиями
-- **Strategy Detail** - Детальный просмотр стратегии с табами
+Новые компоненты **конкретно конструктора сигналов** предпочтительно размещать в `src/features/builder/`; общие и кросс-экранные — в `src/components/<домен>/`.
 
-### Вкладки стратегии:
-- **Strategy Builder** - Визуальный конструктор с 5 этапами:
-  - Signal Generator (активен)
-  - Entry Validation (заблокирован)
-  - Exit Logic (заблокирован)
-  - Risk Management (заблокирован)
-  - Final Validation (заблокирован)
-  
-- **Strategy Code** - Редактор Python-кода с подсветкой номеров строк
+## Где что искать
 
-### Модальные окна:
-- Create Strategy Modal
-- Edit Description Modal
-- Forgot Password Modal
+| Область | Где смотреть |
+|--------|----------------|
+| Точка входа | `src/main.jsx` → `App.jsx` |
+| Константы стратегий, пар, таймфреймов heatmap | `src/constants/app.js` |
+| Формулы и шаблоны для редакторов | `src/constants/formulas.js` |
+| Каталог индикаторов (TA-Lib-стиль) | `src/constants/indicators.js` |
+| Компоненты FormulaEditor, IndicatorLibrary, … | `src/features/builder/components/` |
+| Генерация мок-результатов HeatMap | `src/utils/mockResults.js` |
+| Подробности состояния и таблиц Hyperopt | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 
-## 🔧 Основные функции
+## Mock-данные
 
-### Builder (Stage 1):
-- Выбор индикаторов (bollinger_bands, macd, RSI, EMA)
-- Multi-select выбор торговых пар (BTC/USDT, ETH/USDT)
-- Настройка временного диапазона (5m, 10m, 15m, 30m, 1h)
-- Настройка периода (Time Frame)
-- Запуск оптимизации
-- Таблица результатов оптимизации с HeatMap
+- Стратегии и пользователь по умолчанию: **`src/constants/app.js`** (`INITIAL_STRATEGIES`, мок-логин)
+- Запуски оптимизации (список runs): **`MOCK_OPTIMIZATION_RUNS`** в том же файле
+- Таблица **Hyperopt / Post-processing results**: начальные строки задаются в **`src/App.jsx`** (`hyperoptResultsRows` и связанные `useState`)
+- Сетка HeatMap: **`generateMockResults`** в `src/utils/mockResults.js`
 
-### Фильтры стратегий:
-- Поиск по названию
-- Фильтр по статусу (Draft, Active, Disabled)
-- Фильтр по владельцу (для Admin)
+Бэкенда нет: данные живут в локальном состоянии React (`useState` / производные).
 
-## 💡 Mock данные
+## UI: основные экраны и модули
 
-Приложение использует mock данные для демонстрации:
-- 2 стратегии с несколькими версиями
-- 1 результат оптимизации с HeatMap
-- Пользователь: bogdan (Admin)
+- **LoginScreen** — вход (mock)
+- **Header** — навигация (Strategies, Users, Settings и т.д. по константам)
+- **Список стратегий / деталь** — вкладки список кода, Builder, модалки создания/редактирования
+- **Builder** — этапы, индикаторы, Hyperopt parameters, таблицы результатов, модалки нормализации / формул
+- Модалки пользователей, индикаторов, отчётов — под `src/components/users`, `indicators`, `report`, …
 
-## 🎯 Следующие шаги для продакшена
+## Builder (Signal): кратко
 
-1. Подключить реальный API backend
-2. Добавить настоящую аутентификацию (JWT tokens)
-3. Реализовать функционал Stage 2-5 в Builder
-4. Добавить реальные данные оптимизации
-5. Включить секции Backtesting и Users
-6. Добавить WebSocket для real-time данных
-7. Интегрировать библиотеки для графиков (Plotly, Chart.js)
+- Библиотека и карточки индикаторов, формулы (промежуточный score, post-processing при необходимости)
+- Таймфреймы для части UI: **`TIME_RANGES`** в `src/constants/app.js` (например `15m`, `30m`, `1h`, `4h`, `1d` — актуальный список смотреть в файле)
+- Пары: **`PAIR_OPTIONS`** в `src/constants/app.js`
 
-## 📝 Примечания
+## Ограничения и примечания
 
-- Все данные хранятся в локальном состоянии (useState)
-- Модальные окна используют portal-рендеринг
-- Используются React hooks (memo, useCallback, useMemo) для оптимизации
-- Responsive дизайн с mobile-навигацией
+- Состояние не вынесено в Redux/Zustand — только локальное в компонентах (если не оговорено иное в задаче)
+- Перед крупным рефакторингом имеет смысл прочитать [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- После заметных изменений в структуре — обновить этот README или ARCHITECTURE
 
-## 🐛 Отладка
+## Следующие шаги (продакшен)
 
-В приложении встроены sanity tests в консоли браузера:
-- Проверка структуры данных стратегий
-- Валидация уникальности ID
-- Проверка наличия disabled секций
+1. Подключить реальный API и аутентификацию (например JWT)
+2. Заменить моки Hyperopt/HeatMap данными с сервера
+3. Доработать этапы Builder по продуктовым требованиям
+4. Тесты (unit/e2e) по мере появления API
+
+## Отладка
+
+В приложении могут быть sanity-проверки в консоли браузера (структура стратегий, ID и т.п.) — смотрите код в `App.jsx` при необходимости.
 
 ---
 
-**Версия**: 0.1.0 (mock)
-
-**Автор**: bogdan
-
+**Версия**: 0.1.0 (mock)  
 **Лицензия**: Private
