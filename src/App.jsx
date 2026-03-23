@@ -2782,17 +2782,8 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                 </button>
                 {!collapsedSections.has(5) && (
                   <div className="p-3 space-y-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className={cx("text-[11px]", ui.textMuted)}>
-                        Choose the best values from the heatmap to apply in Stage 2 (Entry).
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setShowAddBestResultModal(true)}
-                        className={cx(ui.btnPrimary, "h-7 px-3 text-[11px] whitespace-nowrap")}
-                      >
-                        Select best score
-                      </button>
+                    <div className={cx("text-[11px]", ui.textMuted)}>
+                      Choose the best values from the heatmap to apply in Stage 2 (Entry).
                     </div>
                     {signalBestResults.length === 0 ? (
                       <div className={cx(ui.radius, ui.panelMuted, "p-3 text-[11px]", ui.textMuted)}>
