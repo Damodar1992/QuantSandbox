@@ -19,10 +19,10 @@ export const Header = memo(function Header({
   queueItems = [],
   onQueueReorder,
   onQueueRemove,
+  hyperoptRun = "Pipeline",
+  onHyperoptRunChange,
 }) {
   const queueRef = useOutsideClose(queueOpen, onQueueClose);
-  const [settingsDropdownOpen, setSettingsDropdownOpen] = useState(false);
-  const settingsDropdownRef = useOutsideClose(settingsDropdownOpen, () => setSettingsDropdownOpen(false));
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [panelEnter, setPanelEnter] = useState(false);
   useEffect(() => {
@@ -67,7 +67,7 @@ export const Header = memo(function Header({
   }, []);
 
   return (
-    <header className={cx("h-14", ui.panelMuted, "border-0 border-b", ui.divider)}>
+    <header className={cx("h-14 sticky top-0 z-40", ui.panelMuted, "border-0 border-b", ui.divider)}>
       <div className="h-full px-5 flex items-center justify-between gap-4">
         <div className="flex items-center gap-4 min-w-0">
           <div className="flex items-center gap-2 min-w-0">
@@ -77,50 +77,56 @@ export const Header = memo(function Header({
           {/* Desktop nav */}
           <nav className="hidden md:flex items-center gap-2" aria-label="Primary">
             {sections.map((item) => {
+              if (item === "Users" && hyperoptRun === "Pipeline") {
+                return null;
+              }
               const isDisabled = disabledSections.has(item);
               const active = !isDisabled && activeSection === item;
               const isSettings = item === "Settings";
 
               if (isSettings) {
+                const showFormulas = hyperoptRun !== "Pipeline";
+                const indicatorsActive = activeSection === "Settings" && settingsSubSection === "indicators";
+                const formulasActive = activeSection === "Settings" && settingsSubSection === "formulas";
                 return (
-                  <div key={item} ref={settingsDropdownRef} className="relative">
+                  <div key={item} className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => !isDisabled && (onSectionChange(item), setSettingsDropdownOpen((v) => !v))}
+                      onClick={() => !isDisabled && (onSectionChange("Settings"), onSettingsSubChange?.("indicators"))}
                       disabled={isDisabled}
                       aria-disabled={isDisabled}
-                      aria-expanded={settingsDropdownOpen}
                       className={cx(
                         "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] border transition",
-                        active
+                        indicatorsActive
                           ? "bg-emerald-500/10 text-emerald-200 border-emerald-500/40"
                           : isDisabled
                           ? "bg-transparent text-[#595959] border-transparent cursor-not-allowed opacity-70"
                           : "bg-transparent text-[#d9d9d9] border-transparent hover:bg-[#1f1f1f]"
                       )}
-                      title="Settings"
+                      title="Indicators"
                     >
-                      <MenuIcon name={item} active={active} />
-                      <span className="whitespace-nowrap">{item}</span>
-                      <span className="text-[10px]">{settingsDropdownOpen ? "▲" : "▼"}</span>
+                      <MenuIcon name="Indicators" active={indicatorsActive} />
+                      <span className="whitespace-nowrap">Indicators</span>
                     </button>
-                    {settingsDropdownOpen && (
-                      <div className="absolute left-0 top-full mt-1 min-w-[140px] rounded-lg border border-[#303030] bg-[#1a1a1a] shadow-lg py-1 z-50">
-                        <button
-                          type="button"
-                          onClick={() => { onSectionChange("Settings"); onSettingsSubChange?.("indicators"); setSettingsDropdownOpen(false); }}
-                          className={cx("w-full text-left px-3 py-2 text-[12px] hover:bg-[#252525]", settingsSubSection === "indicators" && "text-emerald-300 bg-emerald-500/10")}
-                        >
-                          Indicators
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => { onSectionChange("Settings"); onSettingsSubChange?.("formulas"); setSettingsDropdownOpen(false); }}
-                          className={cx("w-full text-left px-3 py-2 text-[12px] hover:bg-[#252525]", settingsSubSection === "formulas" && "text-emerald-300 bg-emerald-500/10")}
-                        >
-                          Formulas
-                        </button>
-                      </div>
+                    {showFormulas && (
+                      <button
+                        type="button"
+                        onClick={() => !isDisabled && (onSectionChange("Settings"), onSettingsSubChange?.("formulas"))}
+                        disabled={isDisabled}
+                        aria-disabled={isDisabled}
+                        className={cx(
+                          "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] border transition",
+                          formulasActive
+                            ? "bg-emerald-500/10 text-emerald-200 border-emerald-500/40"
+                            : isDisabled
+                            ? "bg-transparent text-[#595959] border-transparent cursor-not-allowed opacity-70"
+                            : "bg-transparent text-[#d9d9d9] border-transparent hover:bg-[#1f1f1f]"
+                        )}
+                        title="Formulas"
+                      >
+                        <MenuIcon name="Formulas" active={formulasActive} />
+                        <span className="whitespace-nowrap">Formulas</span>
+                      </button>
                     )}
                   </div>
                 );
@@ -162,6 +168,15 @@ export const Header = memo(function Header({
         </div>
 
         <div ref={queueRef} className="relative flex items-center gap-3">
+          <select
+            value={hyperoptRun}
+            onChange={(e) => onHyperoptRunChange?.(e.target.value)}
+            className={cx(ui.input, "h-8 text-[12px] w-[140px]")}
+            title="Hyperopt run"
+          >
+            <option value="Pipeline">Quant</option>
+            <option value="Admin run">Admin</option>
+          </select>
           <span className="hidden sm:inline-flex items-center gap-2 rounded-md border border-[#303030] bg-[#0f0f0f] px-2 py-1 text-[12px] text-[#d9d9d9]">
             <span className={ui.textMuted}>User:</span> <span className="font-medium">bogdan</span>
           </span>
@@ -270,8 +285,54 @@ export const Header = memo(function Header({
       <div className={cx("md:hidden border-0 border-t", ui.divider)}>
         <div className="px-3 py-2 flex items-center gap-2 overflow-auto">
           {sections.map((item) => {
+            if (item === "Users" && hyperoptRun === "Pipeline") {
+              return null;
+            }
             const isDisabled = disabledSections.has(item);
             const active = !isDisabled && activeSection === item;
+            if (item === "Settings") {
+              const showFormulas = hyperoptRun !== "Pipeline";
+              const indicatorsActive = activeSection === "Settings" && settingsSubSection === "indicators";
+              const formulasActive = activeSection === "Settings" && settingsSubSection === "formulas";
+              return (
+                <React.Fragment key={item}>
+                  <button
+                    type="button"
+                    onClick={() => !isDisabled && (onSectionChange("Settings"), onSettingsSubChange?.("indicators"))}
+                    disabled={isDisabled}
+                    className={cx(
+                      "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] border transition",
+                      indicatorsActive
+                        ? "bg-emerald-500/10 text-emerald-200 border-emerald-500/40"
+                        : isDisabled
+                        ? "bg-transparent text-[#595959] border-transparent cursor-not-allowed opacity-70"
+                        : "bg-transparent text-[#d9d9d9] border-transparent hover:bg-[#1f1f1f]"
+                    )}
+                  >
+                    <MenuIcon name="Indicators" active={indicatorsActive} />
+                    <span className="whitespace-nowrap">Indicators</span>
+                  </button>
+                  {showFormulas && (
+                    <button
+                      type="button"
+                      onClick={() => !isDisabled && (onSectionChange("Settings"), onSettingsSubChange?.("formulas"))}
+                      disabled={isDisabled}
+                      className={cx(
+                        "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] border transition",
+                        formulasActive
+                          ? "bg-emerald-500/10 text-emerald-200 border-emerald-500/40"
+                          : isDisabled
+                          ? "bg-transparent text-[#595959] border-transparent cursor-not-allowed opacity-70"
+                          : "bg-transparent text-[#d9d9d9] border-transparent hover:bg-[#1f1f1f]"
+                      )}
+                    >
+                      <MenuIcon name="Formulas" active={formulasActive} />
+                      <span className="whitespace-nowrap">Formulas</span>
+                    </button>
+                  )}
+                </React.Fragment>
+              );
+            }
             return (
               <button
                 key={item}

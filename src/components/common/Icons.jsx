@@ -57,6 +57,16 @@ const menuIconPaths = {
       <circle cx="14" cy="14" r="1.4" />
     </>
   ),
+  Formulas: (
+    <>
+      <path d="M5 6h5" />
+      <path d="M5 18h5" />
+      <path d="M7.5 4v4" />
+      <path d="M7.5 16v4" />
+      <path d="M13 7l6 10" />
+      <path d="M19 7l-6 10" />
+    </>
+  ),
   Settings: (
     <>
       <circle cx="12" cy="12" r="2.5" />

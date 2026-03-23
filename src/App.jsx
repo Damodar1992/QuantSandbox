@@ -95,6 +95,8 @@ const BuilderStepper = memo(function BuilderStepper({
   onTimeFrameStartChange,
   timeFrameEnd,
   onTimeFrameEndChange,
+  hyperoptRun,
+  onHyperoptRunChange,
 }) {
   // Indicators state (separate for Signal and Entry)
   const [signalIndicators, setSignalIndicators] = useState([]);
@@ -139,7 +141,6 @@ const BuilderStepper = memo(function BuilderStepper({
   const setUnknowTimeRangeEnd = isEntryStage ? setEntryUnknowTimeRangeEnd : setSignalUnknowTimeRangeEnd;
   const hyperoptType = isEntryStage ? entryHyperoptType : signalHyperoptType;
   const setHyperoptType = isEntryStage ? setEntryHyperoptType : setSignalHyperoptType;
-  const [hyperoptRun, setHyperoptRun] = useState("Pipeline");
   // Best results are tracked only for Signal stage
   const [signalBestResults, setSignalBestResults] = useState([]);
   const [selectedBestResult, setSelectedBestResult] = useState(null);
@@ -1332,17 +1333,6 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
               </button>
               {!collapsedSections.has(3) && (
               <div className="p-3 space-y-3">
-                <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
-                  <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">Hyperopt run</div>
-                  <select
-                    value={hyperoptRun}
-                    onChange={(e) => setHyperoptRun(e.target.value)}
-                    className={cx(ui.input, "h-9 text-[12px] w-full max-w-[260px]")}
-                  >
-                    <option value="Pipeline">Pipeline</option>
-                    <option value="Admin run">Admin run</option>
-                  </select>
-                </div>
                 <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
                   <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">Market configuration</div>
                   <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
@@ -3960,6 +3950,7 @@ export default function App() {
   const [builderTimeRange, setBuilderTimeRange] = useState("15m");
   const [builderTimeFrameStart, setBuilderTimeFrameStart] = useState("2020-01-01");
   const [builderTimeFrameEnd, setBuilderTimeFrameEnd] = useState("2023-12-31");
+  const [builderHyperoptRun, setBuilderHyperoptRun] = useState("Pipeline");
 
   // Edit description modal
   const [showEditDescription, setShowEditDescription] = useState(false);
@@ -4315,6 +4306,8 @@ export default function App() {
         queueItems={queueItems}
         onQueueReorder={handleQueueReorder}
         onQueueRemove={handleQueueRemove}
+        hyperoptRun={builderHyperoptRun}
+        onHyperoptRunChange={setBuilderHyperoptRun}
       />
 
       <main className="flex-1 overflow-auto p-6">
@@ -4547,6 +4540,8 @@ export default function App() {
                   onTimeFrameStartChange={setBuilderTimeFrameStart}
                   timeFrameEnd={builderTimeFrameEnd}
                   onTimeFrameEndChange={setBuilderTimeFrameEnd}
+                  hyperoptRun={builderHyperoptRun}
+                  onHyperoptRunChange={setBuilderHyperoptRun}
                 />
               </div>
             )}
