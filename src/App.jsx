@@ -2542,7 +2542,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                                                                   Type
                                                                 </th>
                                                                 <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">
-                                                                  HeatMap details
+                                                                  Details
                                                                 </th>
                                                                 <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">
                                                                   Actions
@@ -2676,7 +2676,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                                                                                   <tr>
                                                                                     <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030] w-24">Date</th>
                                                                                     <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Type</th>
-                                                                                    <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">HeatMap details</th>
+                                                                                    <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Details</th>
                                                                                     <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Actions</th>
                                                                                   </tr>
                                                                                 </thead>
@@ -3937,7 +3937,7 @@ export default function App() {
 
   // Builder fields (mock)
   const [builderStage, setBuilderStage] = useState(1);
-  const [builderPairs, setBuilderPairs] = useState(["BTC/USDT"]);
+  const [builderPairs, setBuilderPairs] = useState("BTC/USDT");
   const [builderTimeRange, setBuilderTimeRange] = useState("15m");
   const [builderTimeFrameStart, setBuilderTimeFrameStart] = useState("2020-01-01");
   const [builderTimeFrameEnd, setBuilderTimeFrameEnd] = useState("2023-12-31");
