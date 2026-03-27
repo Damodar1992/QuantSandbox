@@ -15,6 +15,7 @@ export const HeatMapView = memo(function HeatMapView({
   error = null,
   onRetry = null,
   onSaveBest = null,
+  saveBestLabel = "Select for Stage 2",
   bestCandidates = [],
   onRemoveCandidate = null,
 }) {
@@ -313,7 +314,7 @@ export const HeatMapView = memo(function HeatMapView({
               !onSaveBest && "opacity-50 cursor-not-allowed",
             )}
           >
-            Select for Stage 2
+            {saveBestLabel}
           </button>
           {Array.isArray(bestCandidates) && bestCandidates.length > 0 && (
             <div className="mt-2 w-full max-w-xs border border-[#303030] rounded bg-[#141414] p-2 space-y-1">

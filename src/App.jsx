@@ -101,9 +101,12 @@ const BuilderStepper = memo(function BuilderStepper({
   // Indicators state (separate for Signal and Entry)
   const [signalIndicators, setSignalIndicators] = useState([]);
   const [entryIndicators, setEntryIndicators] = useState([]);
+  const [exitIndicators, setExitIndicators] = useState([]);
   const isEntryStage = activeStage === 2;
-  const indicators = isEntryStage ? entryIndicators : signalIndicators;
-  const setIndicators = isEntryStage ? setEntryIndicators : setSignalIndicators;
+  const isExitStage = activeStage === 3;
+  const hasSourceBestScore = isEntryStage || isExitStage;
+  const indicators = isEntryStage ? entryIndicators : isExitStage ? exitIndicators : signalIndicators;
+  const setIndicators = isEntryStage ? setEntryIndicators : isExitStage ? setExitIndicators : setSignalIndicators;
   const [editingIndicator, setEditingIndicator] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [addModalType, setAddModalType] = useState("RSI");
@@ -127,27 +130,50 @@ const BuilderStepper = memo(function BuilderStepper({
   // Technical params (Market / Technical blocks)
   const [signalMaxPossibleStd, setSignalMaxPossibleStd] = useState("");
   const [entryMaxPossibleStd, setEntryMaxPossibleStd] = useState("");
+  const [exitMaxPossibleStd, setExitMaxPossibleStd] = useState("");
   const [signalUnknowTimeRangeStart, setSignalUnknowTimeRangeStart] = useState("");
   const [signalUnknowTimeRangeEnd, setSignalUnknowTimeRangeEnd] = useState("");
   const [entryUnknowTimeRangeStart, setEntryUnknowTimeRangeStart] = useState("");
   const [entryUnknowTimeRangeEnd, setEntryUnknowTimeRangeEnd] = useState("");
+  const [exitUnknowTimeRangeStart, setExitUnknowTimeRangeStart] = useState("");
+  const [exitUnknowTimeRangeEnd, setExitUnknowTimeRangeEnd] = useState("");
   const [signalHyperoptType, setSignalHyperoptType] = useState("BIAS");
   const [entryHyperoptType, setEntryHyperoptType] = useState("BIAS");
-  const maxPossibleStd = isEntryStage ? entryMaxPossibleStd : signalMaxPossibleStd;
-  const setMaxPossibleStd = isEntryStage ? setEntryMaxPossibleStd : setSignalMaxPossibleStd;
-  const unknowTimeRangeStart = isEntryStage ? entryUnknowTimeRangeStart : signalUnknowTimeRangeStart;
-  const setUnknowTimeRangeStart = isEntryStage ? setEntryUnknowTimeRangeStart : setSignalUnknowTimeRangeStart;
-  const unknowTimeRangeEnd = isEntryStage ? entryUnknowTimeRangeEnd : signalUnknowTimeRangeEnd;
-  const setUnknowTimeRangeEnd = isEntryStage ? setEntryUnknowTimeRangeEnd : setSignalUnknowTimeRangeEnd;
-  const hyperoptType = isEntryStage ? entryHyperoptType : signalHyperoptType;
-  const setHyperoptType = isEntryStage ? setEntryHyperoptType : setSignalHyperoptType;
-  // Best results are tracked only for Signal stage
+  const [exitHyperoptType, setExitHyperoptType] = useState("BIAS");
+  const maxPossibleStd = isEntryStage ? entryMaxPossibleStd : isExitStage ? exitMaxPossibleStd : signalMaxPossibleStd;
+  const setMaxPossibleStd = isEntryStage ? setEntryMaxPossibleStd : isExitStage ? setExitMaxPossibleStd : setSignalMaxPossibleStd;
+  const unknowTimeRangeStart = isEntryStage ? entryUnknowTimeRangeStart : isExitStage ? exitUnknowTimeRangeStart : signalUnknowTimeRangeStart;
+  const setUnknowTimeRangeStart = isEntryStage ? setEntryUnknowTimeRangeStart : isExitStage ? setExitUnknowTimeRangeStart : setSignalUnknowTimeRangeStart;
+  const unknowTimeRangeEnd = isEntryStage ? entryUnknowTimeRangeEnd : isExitStage ? exitUnknowTimeRangeEnd : signalUnknowTimeRangeEnd;
+  const setUnknowTimeRangeEnd = isEntryStage ? setEntryUnknowTimeRangeEnd : isExitStage ? setExitUnknowTimeRangeEnd : setSignalUnknowTimeRangeEnd;
+  const hyperoptType = isEntryStage ? entryHyperoptType : isExitStage ? exitHyperoptType : signalHyperoptType;
+  const setHyperoptType = isEntryStage ? setEntryHyperoptType : isExitStage ? setExitHyperoptType : setSignalHyperoptType;
+  // Best results are tracked independently per stage
   const [signalBestResults, setSignalBestResults] = useState([]);
+  const [entryBestResults, setEntryBestResults] = useState([]);
+  const [exitBestResults, setExitBestResults] = useState([]);
   const [selectedBestResult, setSelectedBestResult] = useState(null);
   const [showBestResultDetailsModal, setShowBestResultDetailsModal] = useState(false);
   const [showAddBestResultModal, setShowAddBestResultModal] = useState(false);
   const [manualBestResultSelectionKey, setManualBestResultSelectionKey] = useState("");
   const [signalBestCandidates, setSignalBestCandidates] = useState([]);
+  const [entryBestCandidates, setEntryBestCandidates] = useState([]);
+  const [exitBestCandidates, setExitBestCandidates] = useState([]);
+  const [entryBestSourceId, setEntryBestSourceId] = useState("");
+  const [entrySourceDropdownOpen, setEntrySourceDropdownOpen] = useState(false);
+  const entrySourceDropdownRef = useOutsideClose(entrySourceDropdownOpen, () => setEntrySourceDropdownOpen(false));
+  const [exitBestSourceId, setExitBestSourceId] = useState("");
+  const [exitSourceDropdownOpen, setExitSourceDropdownOpen] = useState(false);
+  const exitSourceDropdownRef = useOutsideClose(exitSourceDropdownOpen, () => setExitSourceDropdownOpen(false));
+  const bestResults = isEntryStage ? entryBestResults : isExitStage ? exitBestResults : signalBestResults;
+  const setBestResults = isEntryStage ? setEntryBestResults : isExitStage ? setExitBestResults : setSignalBestResults;
+  const bestCandidates = isEntryStage ? entryBestCandidates : isExitStage ? exitBestCandidates : signalBestCandidates;
+  const setBestCandidates = isEntryStage ? setEntryBestCandidates : isExitStage ? setExitBestCandidates : setSignalBestCandidates;
+  const formatBestMetric = useCallback((value) => {
+    if (value == null || value === "") return "-";
+    const num = Number(value);
+    return Number.isFinite(num) ? num.toFixed(3) : "-";
+  }, []);
   
   // Normalization formulas: Intermediate + Final (tables shown after dropdown selection)
   const [signalIntermediateScoreFormula, setSignalIntermediateScoreFormula] = useState("Base formula");
@@ -652,6 +678,13 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
 # You can use:
 # - Normalized metrics: FinalScore, Stability, median_MFE, median_MAE, median_AIR
 # - Logic: AND, OR, NOT`);
+  const [exitFormula, setExitFormula] = useState(`# Define your exit logic
+# Example:
+IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
+
+# You can use:
+# - Normalized metrics: FinalScore, Stability, median_MFE, median_MAE, median_AIR
+# - Logic: AND, OR, NOT`);
   
   // HeatMap state
   const [showHeatMapConfig, setShowHeatMapConfig] = useState(false);
@@ -688,6 +721,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
     });
   }, []);
   const [showHyperoptDetailsModal, setShowHyperoptDetailsModal] = useState(false);
+  const [hyperoptDetailsModalType, setHyperoptDetailsModalType] = useState("post-processing");
   // Hyperopt Results: which level-1 rows are expanded (collapse/expand)
   const [hyperoptResultsExpanded, setHyperoptResultsExpanded] = useState(() => new Set(["hr1", "hr2"]));
   const toggleHyperoptRow = useCallback((id) => {
@@ -726,6 +760,47 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
       ]},
     ]},
   ]);
+  const selectedSourceBestResults = isEntryStage ? signalBestResults : isExitStage ? exitBestResults : [];
+  const selectedSourceId = isEntryStage ? entryBestSourceId : isExitStage ? exitBestSourceId : "";
+  const setSelectedSourceId = isEntryStage ? setEntryBestSourceId : isExitStage ? setExitBestSourceId : () => {};
+  const sourceDropdownOpen = isEntryStage ? entrySourceDropdownOpen : isExitStage ? exitSourceDropdownOpen : false;
+  const setSourceDropdownOpen = isEntryStage ? setEntrySourceDropdownOpen : isExitStage ? setExitSourceDropdownOpen : () => {};
+  const sourceDropdownRef = isEntryStage ? entrySourceDropdownRef : isExitStage ? exitSourceDropdownRef : null;
+  const selectedStageSource = useMemo(
+    () => selectedSourceBestResults.find((best) => best.id === selectedSourceId) || null,
+    [selectedSourceBestResults, selectedSourceId],
+  );
+  const parseKnownRange = useCallback((value) => {
+    if (!value || typeof value !== "string") return null;
+    const parts = value.split("–").map((part) => part.trim());
+    if (parts.length !== 2) return null;
+    return { start: parts[0] || "", end: parts[1] || "" };
+  }, []);
+  const selectedStageSourceKnownRange = useMemo(() => {
+    if (!selectedStageSource?.meta?.rowId) return null;
+    const row = hyperoptResultsRows.find((item) => item.id === selectedStageSource.meta.rowId);
+    return parseKnownRange(row?.knowRange);
+  }, [selectedStageSource, hyperoptResultsRows, parseKnownRange]);
+  const selectedStagePairs = selectedStageSource?.pairs || "";
+  const selectedStageTimeRangeStart =
+    selectedStageSourceKnownRange?.start || selectedStageSource?.meta?.timeFrameStart || "";
+  const selectedStageTimeRangeEnd =
+    selectedStageSourceKnownRange?.end || selectedStageSource?.meta?.timeFrameEnd || "";
+  const entryAllowedTimeFrames = useMemo(() => {
+    if (!hasSourceBestScore || !selectedStageSource?.timeRange) return TIME_RANGES;
+    const sourceIdx = TIME_RANGES.indexOf(selectedStageSource.timeRange);
+    if (sourceIdx === -1) return TIME_RANGES;
+    return TIME_RANGES.slice(0, sourceIdx + 1);
+  }, [hasSourceBestScore, selectedStageSource]);
+  useEffect(() => {
+    if (!hasSourceBestScore || !selectedStageSource) return;
+    if (entryAllowedTimeFrames.includes(timeRange)) return;
+    const fallback =
+      (selectedStageSource.timeRange && entryAllowedTimeFrames.includes(selectedStageSource.timeRange)
+        ? selectedStageSource.timeRange
+        : entryAllowedTimeFrames[entryAllowedTimeFrames.length - 1]) || timeRange;
+    onTimeRangeChange(fallback);
+  }, [hasSourceBestScore, selectedStageSource, entryAllowedTimeFrames, timeRange, onTimeRangeChange]);
   
   // Collapsed sections in Strategy Builder (1–5)
   const [collapsedSections, setCollapsedSections] = useState(() => new Set());
@@ -830,7 +905,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
     (cell, runId) => {
       if (!cell || !cell.count) return;
       // For leaf cells (n=1) add candidate(s) for Save as Best instead of drilldown
-      if (!isEntryStage && cell.count === 1 && Array.isArray(cell.results) && cell.results.length === 1) {
+      if (cell.count === 1 && Array.isArray(cell.results) && cell.results.length === 1) {
         const result = cell.results[0];
         const rawParams = result.params || {};
         const params = {};
@@ -860,8 +935,9 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
           params[friendlyKey] = value;
         });
         const zoomLevel = generatedHeatMap?.zoomStack?.length || 0;
-        const candidateKey = `${runId}:${zoomLevel}:${cell.xi}:${cell.yi}`;
-        setSignalBestCandidates((prev) => {
+        const stagePrefix = isEntryStage ? "entry" : "signal";
+        const candidateKey = `${stagePrefix}:${runId}:${zoomLevel}:${cell.xi}:${cell.yi}`;
+        setBestCandidates((prev) => {
           if (prev.some((c) => c.key === candidateKey)) return prev;
           const score = typeof result.score === "number" ? result.score : cell.avgScore ?? null;
           const candidate = {
@@ -892,7 +968,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
         };
       });
     },
-    [generatedHeatMap?.zoomStack, isEntryStage],
+    [generatedHeatMap?.zoomStack, isEntryStage, setBestCandidates],
   );
 
   const handleHeatMapZoomOut = useCallback((runId) => {
@@ -918,26 +994,25 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
     if (!generatedHeatMap?.fullResults || !generatedHeatMap?.config) return null;
     return buildHeatMap(generatedHeatMap.fullResults, generatedHeatMap.config, heatMapZoomRanges);
   }, [generatedHeatMap?.fullResults, generatedHeatMap?.config, heatMapZoomRanges]);
-  const buildSignalBestResult = useCallback(
+  const buildBestResult = useCallback(
     (params) =>
       buildSignalBestResultFromUtils(params, {
-        signalIndicators,
+        signalIndicators: indicators,
         pairs,
         timeRange,
-        signalHyperoptType,
+        signalHyperoptType: hyperoptType,
       }),
-    [signalIndicators, pairs, timeRange, signalHyperoptType],
+    [indicators, pairs, timeRange, hyperoptType],
   );
 
-  const handleSaveSignalBestResultFromDetail = useCallback(
+  const handleSaveBestResultFromDetail = useCallback(
     ({ row, sub, detail, source }) => {
-      if (isEntryStage) return;
       if (!detail) return;
       const scores = detail.scores || null;
-      setSignalBestResults((prev) => {
+      setBestResults((prev) => {
         const label =
           `Result #${prev.length + 1} • ${row.pairs || pairs || ""} • ${row.timeFrame || ""} • ${detail.label || ""}`.trim();
-        const best = buildSignalBestResult({
+        const best = buildBestResult({
           label,
           source,
           scores,
@@ -953,11 +1028,10 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
         return [...prev, best];
       });
     },
-    [isEntryStage, setSignalBestResults, buildSignalBestResult, pairs],
+    [setBestResults, buildBestResult, pairs],
   );
-  const handleSaveSignalBestResultFromHeatMap = useCallback(() => {
+  const handleSaveBestResultFromHeatMap = useCallback(() => {
     if (!heatMapViewModalId) return;
-    if (isEntryStage) return;
     const id = String(heatMapViewModalId);
     const prefix = "hyperopt-";
     if (!id.startsWith(prefix)) return;
@@ -988,16 +1062,16 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
         max: foundSub.maxScore,
       },
     };
-    handleSaveSignalBestResultFromDetail({
+    handleSaveBestResultFromDetail({
       row: foundRow,
       sub: foundSub,
       detail,
       source: "heatmap",
     });
-  }, [heatMapViewModalId, isEntryStage, hyperoptResultsRows, handleSaveSignalBestResultFromDetail]);
+  }, [heatMapViewModalId, hyperoptResultsRows, handleSaveBestResultFromDetail]);
 
-  const handleSaveSignalBestCandidates = useCallback(() => {
-    if (isEntryStage || signalBestCandidates.length === 0) return;
+  const handleSaveBestCandidates = useCallback(() => {
+    if (bestCandidates.length === 0) return;
     let heatMapTimeFrame = null;
     if (heatMapViewModalId) {
       const id = String(heatMapViewModalId);
@@ -1017,10 +1091,10 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
         }
       }
     }
-    setSignalBestResults((prev) => {
+    setBestResults((prev) => {
       const startIndex = prev.length;
-      const added = signalBestCandidates.map((cand, idx) =>
-        buildSignalBestResult({
+      const added = bestCandidates.map((cand, idx) =>
+        buildBestResult({
           label: `Heatmap cell #${startIndex + idx + 1}`,
           source: "heatmap",
           scores: { avg: cand.score },
@@ -1033,12 +1107,15 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
       );
       return [...prev, ...added];
     });
-    setSignalBestCandidates([]);
-  }, [isEntryStage, signalBestCandidates, buildSignalBestResult, setSignalBestResults, heatMapViewModalId, hyperoptResultsRows]);
+    setBestCandidates([]);
+  }, [bestCandidates, buildBestResult, setBestResults, setBestCandidates, heatMapViewModalId, hyperoptResultsRows]);
 
-  const handleRemoveSignalBestCandidate = useCallback((id) => {
-    setSignalBestCandidates((prev) => prev.filter((c) => c.id !== id));
-  }, []);
+  const handleRemoveBestCandidate = useCallback(
+    (id) => {
+      setBestCandidates((prev) => prev.filter((c) => c.id !== id));
+    },
+    [setBestCandidates],
+  );
 
   const handleLoadBestResultIntoSignal = useCallback(
     (best) => {
@@ -1053,6 +1130,26 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
     },
     [isEntryStage, setSignalIndicators],
   );
+  const formatIndicatorRangeParams = useCallback((ind) => {
+    const list = Array.isArray(ind?.params) ? ind.params : [];
+    if (!list.length) return "{}";
+    return list
+      .map((p) => {
+        const name = p?.label || p?.key || p?.name || "param";
+        if (p?.min != null && p?.max != null) {
+          const hasStep = p?.step != null && p.step !== "";
+          return `${name}: ${p.min}..${p.max}${hasStep ? ` (step ${p.step})` : ""}`;
+        }
+        if (Array.isArray(p?.values) && p.values.length > 0) {
+          return `${name}: [${p.values.join(", ")}]`;
+        }
+        if (p?.value != null) return `${name}: ${p.value}`;
+        if (p?.default != null) return `${name}: ${p.default}`;
+        if (p?.defaultValue != null) return `${name}: ${p.defaultValue}`;
+        return `${name}: -`;
+      })
+      .join(", ");
+  }, []);
   const stages = useMemo(
     () => [
       {
@@ -1089,7 +1186,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
         id: 3,
         label: "Exit",
         title: "STAGE 3: EXIT LOGIC",
-        locked: true,
+        locked: false,
         icon: (
           <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
             <path d="M20 12H10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -1131,7 +1228,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
   const [openRunId, setOpenRunId] = useState(null);
 
   return (
-    <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
+    <div className={cx(ui.radius, ui.panel, "overflow-visible")}>
       <div className={cx("flex items-center justify-between px-3 py-2", ui.panelMuted, "border-0 border-b", ui.divider)}>
         <div className="flex items-center gap-2">
           <StageIcon>
@@ -1147,7 +1244,13 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
       </div>
 
       {/* Horizontal stepper */}
-      <div className={cx("px-3 py-3", ui.panelMuted, "border-0 border-b", ui.divider)}>
+      <div
+        className={cx(
+          "sticky top-14 z-30 px-3 py-3",
+          ui.panelMuted,
+          "border-0 border-b border-[#303030] bg-[#1a1a1a]/95 backdrop-blur supports-[backdrop-filter]:bg-[#1a1a1a]/80",
+        )}
+      >
         <div className="grid grid-cols-5 gap-2">
           {stages.map((s) => {
             const isActive = s.id === activeStage;
@@ -1189,7 +1292,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
 
       {/* Stage content */}
       <div className="p-3">
-        {active.id === 1 || active.id === 2 ? (
+        {active.id === 1 || active.id === 2 || active.id === 3 ? (
           <div className="space-y-4">
             {/* 1. INDICATORS */}
             <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
@@ -1200,7 +1303,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
               >
                 <div>
                   <div className="text-[12px] font-medium text-[#d9d9d9]">
-                    1. Indicators {isEntryStage ? "(Entry)" : "(Signal)"}
+                    1. Indicators {isEntryStage ? "(Entry)" : isExitStage ? "(Exit)" : "(Signal)"}
                   </div>
                   <div className={cx("text-[11px]", ui.textMuted)}>
                     Indicator Library and Selected Indicators
@@ -1297,10 +1400,10 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
               >
                 <div>
                   <div className="text-[12px] font-medium text-[#d9d9d9]">
-                    {isEntryStage ? "2. Entry formulas" : "2. Signal Formulas"}
+                    {isEntryStage ? "2. Entry formulas" : isExitStage ? "2. Exit formulas" : "2. Signal Formulas"}
                   </div>
                   <div className={cx("text-[11px]", ui.textMuted)}>
-                    Define {isEntryStage ? "entry validation" : "trading"} signals using python formula or builder
+                    Define {isEntryStage ? "entry validation" : isExitStage ? "exit" : "trading"} signals using python formula or builder
                   </div>
                 </div>
                 <span className="text-[#8c8c8c] text-[10px]">{collapsedSections.has(2) ? "▶" : "▼"}</span>
@@ -1308,11 +1411,11 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
               {!collapsedSections.has(2) && (
                 <div className="p-3">
                   <FormulaEditor
-                    key={isEntryStage ? "entry-formulas" : "signal-formulas"}
-                    value={isEntryStage ? entryFormula : signalFormula}
-                    onChange={isEntryStage ? setEntryFormula : setSignalFormula}
+                    key={isEntryStage ? "entry-formulas" : isExitStage ? "exit-formulas" : "signal-formulas"}
+                    value={isEntryStage ? entryFormula : isExitStage ? exitFormula : signalFormula}
+                    onChange={isEntryStage ? setEntryFormula : isExitStage ? setExitFormula : setSignalFormula}
                     indicators={indicators}
-                    mode={isEntryStage ? "entry" : "signal"}
+                    mode={hasSourceBestScore ? "entry" : "signal"}
                   />
                 </div>
               )}
@@ -1336,35 +1439,153 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                 <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
                   <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">Market configuration</div>
                   <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                    <PairsDropdown value={pairs} onChange={onPairsChange} />
+                    {hasSourceBestScore ? (
+                      <div ref={sourceDropdownRef} className="relative">
+                        <label className={cx("block mb-1 text-xs", ui.textMuted)}>Source best score</label>
+                        <button
+                          type="button"
+                          disabled={selectedSourceBestResults.length === 0}
+                          onClick={() => setSourceDropdownOpen((prev) => !prev)}
+                          className={cx(
+                            ui.input,
+                            "h-9 text-[12px] w-full flex items-center justify-between gap-2",
+                            selectedSourceBestResults.length === 0 && "opacity-60 cursor-not-allowed",
+                          )}
+                          aria-haspopup="listbox"
+                          aria-expanded={sourceDropdownOpen}
+                        >
+                          <span className="truncate text-left">
+                            {selectedStageSource
+                              ? `${selectedStageSource.label || "Best result"} · S:${formatBestMetric(selectedStageSource.score)} · MFE:${formatBestMetric(selectedStageSource.mfe)} · MAE:${formatBestMetric(selectedStageSource.mae)} · AIR:${formatBestMetric(selectedStageSource.air)} · normStability:${formatBestMetric(selectedStageSource.stability)}`
+                              : "Select best score..."}
+                          </span>
+                          <span className="text-[#8c8c8c] text-[10px] shrink-0">{sourceDropdownOpen ? "▲" : "▼"}</span>
+                        </button>
+                        {sourceDropdownOpen && selectedSourceBestResults.length > 0 && (
+                          <div
+                            role="listbox"
+                            className="absolute z-30 mt-2 w-[900px] max-w-[calc(100vw-120px)] overflow-hidden rounded-md border border-[#303030] bg-[#141414] shadow-[0_10px_30px_rgba(0,0,0,0.55)]"
+                          >
+                            <div className="max-h-72 overflow-auto">
+                              <table className="w-full border-collapse text-[11px]">
+                                <thead className="bg-[#1a1a1a] text-[#8c8c8c] sticky top-0">
+                                  <tr>
+                                    <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Label</th>
+                                    <th className="px-3 py-2 text-left font-medium border-b border-[#303030] w-20">Score</th>
+                                    <th className="px-3 py-2 text-left font-medium border-b border-[#303030] w-20">MFE</th>
+                                    <th className="px-3 py-2 text-left font-medium border-b border-[#303030] w-20">MAE</th>
+                                    <th className="px-3 py-2 text-left font-medium border-b border-[#303030] w-20">AIR</th>
+                                    <th className="px-3 py-2 text-left font-medium border-b border-[#303030] w-28">normStability</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="text-[#d9d9d9]">
+                                  {selectedSourceBestResults.map((best) => {
+                                    const active = selectedSourceId === best.id;
+                                    return (
+                                      <tr
+                                        key={best.id}
+                                        role="option"
+                                        aria-selected={active}
+                                        onClick={() => {
+                                          setSelectedSourceId(best.id);
+                                          setSourceDropdownOpen(false);
+                                        }}
+                                        className={cx(
+                                          "border-b border-[#303030]/60 cursor-pointer hover:bg-[#1a1a1a]",
+                                          active && "bg-emerald-500/10 text-emerald-200",
+                                        )}
+                                      >
+                                        <td className="px-3 py-2">
+                                          <div className="truncate max-w-[420px]">{best.label || "Best result"}</div>
+                                        </td>
+                                        <td className="px-3 py-2 tabular-nums">{formatBestMetric(best.score)}</td>
+                                        <td className="px-3 py-2 tabular-nums">{formatBestMetric(best.mfe)}</td>
+                                        <td className="px-3 py-2 tabular-nums">{formatBestMetric(best.mae)}</td>
+                                        <td className="px-3 py-2 tabular-nums">{formatBestMetric(best.air)}</td>
+                                        <td className="px-3 py-2 tabular-nums">{formatBestMetric(best.stability)}</td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <PairsDropdown value={pairs} onChange={onPairsChange} />
+                    )}
                     <div>
                       <label className={cx("block mb-1 text-xs", ui.textMuted)}>Time Frame</label>
-                      <select value={timeRange} onChange={(e) => onTimeRangeChange(e.target.value)} className={cx(ui.input, "h-9 text-[12px] w-full")}>
-                        {TIME_RANGES.map((v) => (
+                      <select
+                        value={timeRange}
+                        onChange={(e) => onTimeRangeChange(e.target.value)}
+                        disabled={hasSourceBestScore && !selectedSourceId}
+                        className={cx(
+                          ui.input,
+                          "h-9 text-[12px] w-full",
+                          hasSourceBestScore && !selectedSourceId && "opacity-60 cursor-not-allowed",
+                        )}
+                      >
+                        {(hasSourceBestScore ? entryAllowedTimeFrames : TIME_RANGES).map((v) => (
                           <option key={v} value={v}>{v}</option>
                         ))}
                       </select>
                     </div>
-                    <div className="space-y-1.5">
-                      <label className={cx("block mb-1 text-xs", ui.textMuted)}>Time Range</label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="date"
-                          value={timeFrameStart}
-                          onChange={(e) => onTimeFrameStartChange(e.target.value)}
-                          className={cx(ui.input, "h-9 text-[12px] flex-1 min-w-0")}
-                          title="From"
-                        />
-                        <input
-                          type="date"
-                          value={timeFrameEnd}
-                          onChange={(e) => onTimeFrameEndChange(e.target.value)}
-                          className={cx(ui.input, "h-9 text-[12px] flex-1 min-w-0")}
-                          title="To"
-                        />
-                      </div>
-                    </div>
+                    {(!hasSourceBestScore || selectedSourceId) && (
+                      <>
+                        {hasSourceBestScore && (
+                          <div>
+                            <label className={cx("block mb-1 text-xs", ui.textMuted)}>Pairs</label>
+                            <input
+                              type="text"
+                              value={selectedStagePairs || "-"}
+                              readOnly
+                              className={cx(ui.input, "h-9 text-[12px] w-full opacity-80 cursor-not-allowed")}
+                            />
+                          </div>
+                        )}
+                        <div className="space-y-1.5">
+                          <label className={cx("block mb-1 text-xs", ui.textMuted)}>Time Range</label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="date"
+                              value={hasSourceBestScore ? selectedStageTimeRangeStart : timeFrameStart}
+                              onChange={(e) => onTimeFrameStartChange(e.target.value)}
+                              readOnly={hasSourceBestScore}
+                              disabled={hasSourceBestScore}
+                              className={cx(
+                                ui.input,
+                                "h-9 text-[12px] flex-1 min-w-0",
+                                hasSourceBestScore && "opacity-80 cursor-not-allowed",
+                              )}
+                              title="From"
+                            />
+                            <input
+                              type="date"
+                              value={hasSourceBestScore ? selectedStageTimeRangeEnd : timeFrameEnd}
+                              onChange={(e) => onTimeFrameEndChange(e.target.value)}
+                              readOnly={hasSourceBestScore}
+                              disabled={hasSourceBestScore}
+                              className={cx(
+                                ui.input,
+                                "h-9 text-[12px] flex-1 min-w-0",
+                                hasSourceBestScore && "opacity-80 cursor-not-allowed",
+                              )}
+                              title="To"
+                            />
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
+                  {hasSourceBestScore && selectedSourceBestResults.length === 0 && (
+                    <div className={cx("mt-3 text-[11px]", ui.textMuted)}>
+                      {isEntryStage
+                        ? "No Stage 1 best scores found. Add results in Stage 1 first to unlock Entry market configuration."
+                        : "No Stage 3 best scores found. Add results in Stage 3 first to unlock Exit market configuration."}
+                    </div>
+                  )}
                 </div>
                 <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
                   <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">
@@ -1380,7 +1601,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                   </select>
                 </div>
 
-                {/* Intermediate formula — скрыт только для Brute Force; Post-processing ниже показывается для всех типов */}
+                {/* Intermediate formula and Post-processing are hidden for Brute Force */}
                 {hyperoptType !== "Brute Force" && (
                 <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
                   <div className="flex items-center justify-between mb-3">
@@ -1579,6 +1800,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                 )}
 
                 {/* Post-processing */}
+                {hyperoptType !== "Brute Force" && (
                 <div className={cx(ui.radius, ui.panelMuted, "p-3", hyperoptRun !== "Pipeline" && "hidden")}>
                   <div className="flex items-center justify-between mb-3">
                     <div className="text-[12px] font-medium text-[#d9d9d9]">Post-processing</div>
@@ -2123,6 +2345,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                     </div>
                   </div>
                 </div>
+                )}
 
                 {hyperoptType !== "Brute Force" && (
                 <div className={cx(ui.radius, ui.panelMuted, "p-3", "hidden")}>
@@ -2348,7 +2571,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                         }
                       }, interval);
                     }}
-                    disabled={indicators.length === 0}
+                    disabled={indicators.length === 0 || (hasSourceBestScore && !selectedSourceId)}
                   >
                     ⚡ Run Hyperoptimization
                   </button>
@@ -2410,6 +2633,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                           <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Pairs</th>
                           <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">TimeFrame</th>
                           <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">KnowRange</th>
+                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Indicators</th>
                           <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Actions</th>
                         </tr>
                       </thead>
@@ -2432,6 +2656,14 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                               <td className="px-3 py-2">{row.timeFrame}</td>
                               <td className="px-3 py-2 text-[#a6a6a6]">{row.knowRange}</td>
                               <td className="px-3 py-2">
+                                <HyperoptDetailsTooltip
+                                  onShowDetails={() => {
+                                    setHyperoptDetailsModalType("hyperopt");
+                                    setShowHyperoptDetailsModal(true);
+                                  }}
+                                />
+                              </td>
+                              <td className="px-3 py-2">
                                 {hyperoptRun !== "Pipeline" && (
                                   <button
                                     type="button"
@@ -2445,7 +2677,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                             </tr>
                             {hyperoptResultsExpanded.has(row.id) && row.children && row.children.length > 0 && (
                               <tr>
-                                <td colSpan={6} className="p-0 align-top bg-[#0f0f0f]">
+                                <td colSpan={7} className="p-0 align-top bg-[#0f0f0f]">
                                   {/* Block 2: Normalization result (nested per expanded row) */}
                                   <div className="ml-4 mt-2 mb-2 rounded-lg border border-[#303030] overflow-hidden border-l-4 border-l-sky-500">
                                     <div className="px-3 py-1.5 font-medium border-b border-[#303030] bg-sky-500/10 text-sky-200 text-[11px]">
@@ -2492,7 +2724,12 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                                                   <td className="px-3 py-2 tabular-nums text-[#d9d9d9]">{sub.avgScore ?? "—"}</td>
                                                   <td className="px-3 py-2 tabular-nums text-[#d9d9d9]">{sub.maxScore ?? "—"}</td>
                                                   <td className="px-3 py-2">
-                                                    <HyperoptDetailsTooltip onShowDetails={() => setShowHyperoptDetailsModal(true)} />
+                                                    <HyperoptDetailsTooltip
+                                                      onShowDetails={() => {
+                                                        setHyperoptDetailsModalType("post-processing");
+                                                        setShowHyperoptDetailsModal(true);
+                                                      }}
+                                                    />
                                                   </td>
                                                   <td className="px-3 py-2">
                                                     <div className="flex items-center gap-2 flex-wrap">
@@ -2510,16 +2747,18 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                                                       >
                                                         Generate Report
                                                       </button>
-                                                      <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                          setSelectedNormalizationRow(sub);
-                                                          setShowTruncateModal(true);
-                                                        }}
-                                                        className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
-                                                      >
-                                                        Add truncate
-                                                      </button>
+                                                      {!isEntryStage && (
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => {
+                                                            setSelectedNormalizationRow(sub);
+                                                            setShowTruncateModal(true);
+                                                          }}
+                                                          className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
+                                                        >
+                                                          Add truncate
+                                                        </button>
+                                                      )}
                                                     </div>
                                                   </td>
                                                 </tr>
@@ -2593,6 +2832,8 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                                                         </div>
                                                       </div>
 
+                                                      {!isEntryStage && (
+                                                      <>
                                                       {/* Block 2.5: Normalization details (per normalization row) */}
                                                       <div className="ml-4 mt-2 mb-2 rounded-lg border border-[#303030] overflow-hidden border-l-4 border-l-emerald-500 bg-[#111111]">
                                                         <div className="px-3 py-1.5 font-medium border-b border-[#303030] bg-emerald-500/10 text-emerald-200 text-[11px]">
@@ -2730,6 +2971,8 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                                                           </table>
                                                         </div>
                                                       </div>
+                                                      </>
+                                                      )}
                                                     </td>
                                                   </tr>
                                                 )}
@@ -2753,8 +2996,8 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
               )}
             </div>
 
-            {/* 5. BEST RESULTS (Signal only) */}
-            {!isEntryStage && (
+            {/* 5. BEST RESULTS */}
+            {
               <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
                 <button
                   type="button"
@@ -2768,14 +3011,20 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                   )}
                 >
                   <div>
-                    <div className="text-[12px] font-medium text-[#d9d9d9]">5. Best scores for Stage 2</div>
+                    <div className="text-[12px] font-medium text-[#d9d9d9]">
+                      {isEntryStage ? "5. Best scores for Stage 3" : isExitStage ? "5. Best scores for Stage 4" : "5. Best scores for Stage 2"}
+                    </div>
                     <div className={cx("text-[11px]", ui.textMuted)}>
-                      Select scores from the heatmap or enter manually for Stage 2
+                      {isEntryStage
+                        ? "Select scores from the heatmap or enter manually for Stage 3"
+                        : isExitStage
+                          ? "Select scores from the heatmap or enter manually for Stage 4"
+                          : "Select scores from the heatmap or enter manually for Stage 2"}
                     </div>
                   </div>
                   <span className="flex items-center gap-2">
                     <span className="rounded-md border border-[#303030] bg-[#0f0f0f] px-2 py-0.5 text-[10px] text-[#8c8c8c]">
-                      {signalBestResults.length} saved
+                      {bestResults.length} saved
                     </span>
                     <span className="text-[#8c8c8c] text-[10px]">{collapsedSections.has(5) ? "▶" : "▼"}</span>
                   </span>
@@ -2783,11 +3032,19 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                 {!collapsedSections.has(5) && (
                   <div className="p-3 space-y-3">
                     <div className={cx("text-[11px]", ui.textMuted)}>
-                      Choose the best values from the heatmap to apply in Stage 2 (Entry).
+                      {isEntryStage
+                        ? "Choose the best values from the heatmap to apply in Stage 3."
+                        : isExitStage
+                          ? "Choose the best values from the heatmap to apply in Stage 4."
+                          : "Choose the best values from the heatmap to apply in Stage 2 (Entry)."}
                     </div>
-                    {signalBestResults.length === 0 ? (
+                    {bestResults.length === 0 ? (
                       <div className={cx(ui.radius, ui.panelMuted, "p-3 text-[11px]", ui.textMuted)}>
-                        No best scores for Stage 2 yet. Use "☆ Save as Best" in Hyperopt Results or add manually.
+                        {isEntryStage
+                          ? 'No best scores for Stage 3 yet. Use "☆ Save as Best" in Hyperopt Results or add manually.'
+                          : isExitStage
+                            ? 'No best scores for Stage 4 yet. Use "☆ Save as Best" in Hyperopt Results or add manually.'
+                            : 'No best scores for Stage 2 yet. Use "☆ Save as Best" in Hyperopt Results or add manually.'}
                       </div>
                     ) : (
                       <div className="overflow-x-auto border border-[#303030] rounded-lg">
@@ -2807,7 +3064,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                             </tr>
                           </thead>
                           <tbody className="text-[#d9d9d9]">
-                            {signalBestResults.map((best) => (
+                            {bestResults.map((best) => (
                               <tr key={best.id} className="border-b border-[#303030]/60 hover:bg-[#141414]">
                                 <td className="px-3 py-2 align-middle">
                                   <span title={best.timestamp} className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
@@ -2870,7 +3127,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                                       type="button"
                                       onClick={() => {
                                         if (!confirm("Remove this Best result?")) return;
-                                        setSignalBestResults((prev) =>
+                                        setBestResults((prev) =>
                                           prev.filter((item) => item.id !== best.id),
                                         );
                                       }}
@@ -2892,7 +3149,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                   </div>
                 )}
               </div>
-            )}
+            }
 
           </div>
         ) : (
@@ -3465,8 +3722,8 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
           </div>
         </div>
       )}
-      {/* Add Best result manually (Signal only) */}
-      {!isEntryStage && showAddBestResultModal && (
+      {/* Add Best result manually (stage-dependent) */}
+      {showAddBestResultModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
           onClick={() => {
@@ -3482,7 +3739,9 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-[#303030]">
-              <span className="text-[14px] font-medium text-[#d9d9d9]">Add Best result (Signal)</span>
+              <span className="text-[14px] font-medium text-[#d9d9d9]">
+                Add Best result {isEntryStage ? "(Entry)" : "(Signal)"}
+              </span>
               <button
                 type="button"
                 onClick={() => {
@@ -3583,7 +3842,7 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                     if (foundRow) break;
                   }
                   if (foundRow && foundSub && detail) {
-                    handleSaveSignalBestResultFromDetail({
+                    handleSaveBestResultFromDetail({
                       row: foundRow,
                       sub: foundSub,
                       detail,
@@ -3606,10 +3865,15 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={() => setShowHyperoptDetailsModal(false)}>
           <div className={cx(ui.radius, "bg-[#141414] border border-[#303030] max-w-[720px] w-full max-h-[90vh] overflow-hidden flex flex-col shadow-xl")} onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-[#303030]">
-              <span className="text-[14px] font-medium text-[#d9d9d9]">Formulas info (read-only)</span>
+              <span className="text-[14px] font-medium text-[#d9d9d9]">
+                {hyperoptDetailsModalType === "hyperopt"
+                  ? "Indicators snapshot (read-only)"
+                  : "Normalization formulas (read-only)"}
+              </span>
               <button type="button" onClick={() => setShowHyperoptDetailsModal(false)} className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1">✕</button>
             </div>
             <div className="overflow-auto p-4">
+              {hyperoptDetailsModalType !== "hyperopt" && (
               <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
                 <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">Normalization formulas</div>
                 <div className="p-3 pt-0 space-y-3 border-t border-[#303030]">
@@ -3698,6 +3962,40 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                   </div>
                 </div>
               </div>
+              )}
+              {hyperoptDetailsModalType === "hyperopt" && (
+              <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
+                <div className="text-[12px] font-medium text-[#d9d9d9] mb-2">Indicators snapshot</div>
+                {(indicators || []).length === 0 ? (
+                  <div className={cx("text-[11px]", ui.textMuted)}>No indicators configured for the current stage.</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-[11px] border-collapse">
+                      <thead className="bg-[#1a1a1a] text-[#8c8c8c]">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Type</th>
+                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Display name</th>
+                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Params</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-[#d9d9d9]">
+                        {indicators.map((ind) => (
+                          <tr key={ind.id} className="border-b border-[#303030]/60">
+                            <td className="px-3 py-2 align-top">{ind.type || "-"}</td>
+                            <td className="px-3 py-2 align-top">{ind.displayName || getDefaultDisplayName(ind.type || "") || "-"}</td>
+                            <td className="px-3 py-2 align-top">
+                              <code className="text-[10px] bg-[#0f0f0f] px-2 py-1 rounded block overflow-x-auto">
+                                {formatIndicatorRangeParams(ind)}
+                              </code>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+              )}
             </div>
             <div className="px-4 py-3 border-t border-[#303030] flex justify-end">
               <button type="button" onClick={() => setShowHyperoptDetailsModal(false)} className={cx(ui.btn, "h-8 px-3 text-[11px]")}>Close</button>
@@ -3874,14 +4172,13 @@ IF FinalScore > 0.5 AND Stability > 0.7 THEN VALIDATE_ENTRY
                   zoomLevel={generatedHeatMap.zoomStack.length}
                   zoomLevelLabel={generatedHeatMap.zoomStack.length > 0 ? generatedHeatMap.zoomStack[generatedHeatMap.zoomStack.length - 1].label : "Full heatmap"}
                   onSaveBest={
-                    !isEntryStage
-                      ? signalBestCandidates.length > 0
-                        ? handleSaveSignalBestCandidates
-                        : handleSaveSignalBestResultFromHeatMap
-                      : null
+                    bestCandidates.length > 0
+                      ? handleSaveBestCandidates
+                      : handleSaveBestResultFromHeatMap
                   }
-                  bestCandidates={!isEntryStage ? signalBestCandidates : []}
-                  onRemoveCandidate={!isEntryStage ? handleRemoveSignalBestCandidate : null}
+                  saveBestLabel={isEntryStage ? "Select for Stage 3" : isExitStage ? "Select for Stage 4" : "Select for Stage 2"}
+                  bestCandidates={bestCandidates}
+                  onRemoveCandidate={handleRemoveBestCandidate}
                 />
               ) : (
                 <div className="py-8 text-center text-[#8c8c8c] text-[13px]">
@@ -4301,7 +4598,7 @@ export default function App() {
         onHyperoptRunChange={setBuilderHyperoptRun}
       />
 
-      <main className="flex-1 overflow-auto p-6">
+      <main className="flex-1 overflow-visible p-6">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <h1 className="text-[16px] font-semibold text-[#f5f5f5]">{activeSection === "Settings" ? `${activeSection} · ${settingsSubSection === "indicators" ? "Indicators" : "Formulas"}` : activeSection}</h1>
