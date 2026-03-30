@@ -1246,7 +1246,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
       {/* Horizontal stepper */}
       <div
         className={cx(
-          "sticky top-14 z-30 px-3 py-3",
+          "sticky top-14 z-10 px-3 py-3",
           ui.panelMuted,
           "border-0 border-b border-[#303030] bg-[#1a1a1a]/95 backdrop-blur supports-[backdrop-filter]:bg-[#1a1a1a]/80",
         )}
