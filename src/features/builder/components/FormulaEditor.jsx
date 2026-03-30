@@ -338,9 +338,10 @@ export const FormulaEditor = memo(({ value, onChange, indicators, mode = "signal
   }, []);
   
   // Generate Python code for Freqtrade from table rules
-  // mode: "signal" | "entry" — для Entry оставляем старый шаблон populate_entry_trend
+  // mode: "signal" | "entry" | "exit"
   const generatePythonSignalCode = useCallback((rules, mode = "signal") => {
     const isEntryMode = mode === "entry";
+    const isExitMode = mode === "exit";
 
     if (!rules || rules.length === 0) {
       if (isEntryMode) {
@@ -348,6 +349,18 @@ export const FormulaEditor = memo(({ value, onChange, indicators, mode = "signal
         return `def populate_entry_trend(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
     """
     Populate entry trend signals.
+    Add your signal conditions here.
+    """
+    # Initialize signal column
+    dataframe.loc[:, 'signal'] = False
+    
+    return dataframe
+`;
+      }
+      if (isExitMode) {
+        return `def populate_exit_trend(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
+    """
+    Populate exit trend signals.
     Add your signal conditions here.
     """
     # Initialize signal column
@@ -381,6 +394,12 @@ export const FormulaEditor = memo(({ value, onChange, indicators, mode = "signal
       code = `def populate_entry_trend(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
     """
     Populate entry trend signals.
+    Based on the following conditions:
+`;
+    } else if (isExitMode) {
+      code = `def populate_exit_trend(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
+    """
+    Populate exit trend signals.
     Based on the following conditions:
 `;
     } else {
@@ -548,7 +567,7 @@ export const FormulaEditor = memo(({ value, onChange, indicators, mode = "signal
       <div className={cx("flex items-center justify-between px-3 py-2", ui.panelMuted, "border-0 border-b", ui.divider)}>
         <div className="flex-1">
           <div className="text-[12px] font-medium text-[#d9d9d9]">
-            {mode === "entry" ? "Entry formulas" : "Signal Formulas"}
+            {mode === "entry" ? "Entry formulas" : mode === "exit" ? "Exit formulas" : "Signal Formulas"}
           </div>
         </div>
         <div className="flex items-center gap-2">

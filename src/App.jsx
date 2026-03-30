@@ -1282,7 +1282,6 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                   <div className={cx("text-[12px] font-medium truncate", isActive ? "text-emerald-100" : "text-[#d9d9d9]")}>
                     {s.label}
                   </div>
-                  <div className={cx("text-[10px] truncate", ui.textMuted)}>{isLocked ? "locked" : "active"}</div>
                 </div>
               </div>
             );
@@ -1415,7 +1414,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                     value={isEntryStage ? entryFormula : isExitStage ? exitFormula : signalFormula}
                     onChange={isEntryStage ? setEntryFormula : isExitStage ? setExitFormula : setSignalFormula}
                     indicators={indicators}
-                    mode={hasSourceBestScore ? "entry" : "signal"}
+                    mode={isEntryStage ? "entry" : isExitStage ? "exit" : "signal"}
                   />
                 </div>
               )}
@@ -2747,7 +2746,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                       >
                                                         Generate Report
                                                       </button>
-                                                      {!isEntryStage && (
+                                                      {!isEntryStage && !isExitStage && (
                                                         <button
                                                           type="button"
                                                           onClick={() => {
@@ -2832,7 +2831,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                         </div>
                                                       </div>
 
-                                                      {!isEntryStage && (
+                                                      {!isEntryStage && !isExitStage && (
                                                       <>
                                                       {/* Block 2.5: Normalization details (per normalization row) */}
                                                       <div className="ml-4 mt-2 mb-2 rounded-lg border border-[#303030] overflow-hidden border-l-4 border-l-emerald-500 bg-[#111111]">
