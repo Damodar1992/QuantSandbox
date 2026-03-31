@@ -140,6 +140,8 @@ const BuilderStepper = memo(function BuilderStepper({
   const [signalHyperoptType, setSignalHyperoptType] = useState("BIAS");
   const [entryHyperoptType, setEntryHyperoptType] = useState("BIAS");
   const [exitHyperoptType, setExitHyperoptType] = useState("BIAS");
+  const [signalFoldSize, setSignalFoldSize] = useState("");
+  const [includeIncompleteFold, setIncludeIncompleteFold] = useState(false);
   const maxPossibleStd = isEntryStage ? entryMaxPossibleStd : isExitStage ? exitMaxPossibleStd : signalMaxPossibleStd;
   const setMaxPossibleStd = isEntryStage ? setEntryMaxPossibleStd : isExitStage ? setExitMaxPossibleStd : setSignalMaxPossibleStd;
   const unknowTimeRangeStart = isEntryStage ? entryUnknowTimeRangeStart : isExitStage ? exitUnknowTimeRangeStart : signalUnknowTimeRangeStart;
@@ -786,6 +788,13 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
     selectedStageSourceKnownRange?.start || selectedStageSource?.meta?.timeFrameStart || "";
   const selectedStageTimeRangeEnd =
     selectedStageSourceKnownRange?.end || selectedStageSource?.meta?.timeFrameEnd || "";
+  const isSignalStage = !isEntryStage && !isExitStage;
+  const totalCandles = 43848;
+  const signalFoldSizeValue = Number.parseInt(signalFoldSize, 10);
+  const hasValidFoldSize = Number.isFinite(signalFoldSizeValue) && signalFoldSizeValue > 0;
+  const isSignalTimeRangeFilled = Boolean(String(timeFrameStart || "").trim() && String(timeFrameEnd || "").trim());
+  const completedFolds = hasValidFoldSize ? Math.floor(totalCandles / signalFoldSizeValue) : 0;
+  const remainingCandles = hasValidFoldSize ? totalCandles % signalFoldSizeValue : 0;
   const entryAllowedTimeFrames = useMemo(() => {
     if (!hasSourceBestScore || !selectedStageSource?.timeRange) return TIME_RANGES;
     const sourceIdx = TIME_RANGES.indexOf(selectedStageSource.timeRange);
@@ -801,6 +810,11 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
         : entryAllowedTimeFrames[entryAllowedTimeFrames.length - 1]) || timeRange;
     onTimeRangeChange(fallback);
   }, [hasSourceBestScore, selectedStageSource, entryAllowedTimeFrames, timeRange, onTimeRangeChange]);
+  useEffect(() => {
+    if (!isSignalStage) return;
+    if (remainingCandles > 0) return;
+    setIncludeIncompleteFold(false);
+  }, [isSignalStage, remainingCandles]);
   
   // Collapsed sections in Strategy Builder (1–5)
   const [collapsedSections, setCollapsedSections] = useState(() => new Set());
@@ -1437,9 +1451,14 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
               <div className="p-3 space-y-3">
                 <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
                   <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">Market configuration</div>
-                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                  <div
+                    className={cx(
+                      "grid gap-2",
+                      isSignalStage ? "grid-cols-1 xl:grid-cols-12" : "grid-cols-1 sm:grid-cols-4",
+                    )}
+                  >
                     {hasSourceBestScore ? (
-                      <div ref={sourceDropdownRef} className="relative">
+                      <div ref={sourceDropdownRef} className={cx("relative", isSignalStage && "xl:col-span-4")}>
                         <label className={cx("block mb-1 text-xs", ui.textMuted)}>Source best score</label>
                         <button
                           type="button"
@@ -1512,9 +1531,11 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                         )}
                       </div>
                     ) : (
-                      <PairsDropdown value={pairs} onChange={onPairsChange} />
+                      <div className={cx(isSignalStage && "xl:col-span-4")}>
+                        <PairsDropdown value={pairs} onChange={onPairsChange} />
+                      </div>
                     )}
-                    <div>
+                    <div className={cx(isSignalStage && "xl:col-span-2")}>
                       <label className={cx("block mb-1 text-xs", ui.textMuted)}>Time Frame</label>
                       <select
                         value={timeRange}
@@ -1544,37 +1565,72 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                             />
                           </div>
                         )}
-                        <div className="space-y-1.5">
+                        <div className={cx("space-y-1.5", isSignalStage && "xl:col-span-3")}>
                           <label className={cx("block mb-1 text-xs", ui.textMuted)}>Time Range</label>
-                          <div className="flex items-center gap-2">
+                          <div
+                            className={cx(
+                              ui.input,
+                              "h-8 w-full px-1.5 grid grid-cols-[1fr_auto_1fr] items-center gap-1",
+                              hasSourceBestScore && "opacity-80 cursor-not-allowed",
+                            )}
+                          >
                             <input
                               type="date"
                               value={hasSourceBestScore ? selectedStageTimeRangeStart : timeFrameStart}
                               onChange={(e) => onTimeFrameStartChange(e.target.value)}
                               readOnly={hasSourceBestScore}
                               disabled={hasSourceBestScore}
-                              className={cx(
-                                ui.input,
-                                "h-9 text-[12px] flex-1 min-w-0",
-                                hasSourceBestScore && "opacity-80 cursor-not-allowed",
-                              )}
+                              className="h-7 min-w-0 bg-transparent border-0 px-1 text-[11px] leading-7 [color-scheme:dark] focus:outline-none"
                               title="From"
                             />
+                            <span className={cx("text-[12px] text-center", ui.textMuted)}>-</span>
                             <input
                               type="date"
                               value={hasSourceBestScore ? selectedStageTimeRangeEnd : timeFrameEnd}
                               onChange={(e) => onTimeFrameEndChange(e.target.value)}
                               readOnly={hasSourceBestScore}
                               disabled={hasSourceBestScore}
-                              className={cx(
-                                ui.input,
-                                "h-9 text-[12px] flex-1 min-w-0",
-                                hasSourceBestScore && "opacity-80 cursor-not-allowed",
-                              )}
+                              className="h-7 min-w-0 bg-transparent border-0 px-1 text-[11px] leading-7 [color-scheme:dark] focus:outline-none"
                               title="To"
                             />
                           </div>
                         </div>
+                        {isSignalStage && isSignalTimeRangeFilled && (
+                          <div className={cx("space-y-1", isSignalStage && "xl:col-span-3")}>
+                            <div className="space-y-1">
+                              <label className={cx("block mb-1 text-xs", ui.textMuted)}>Fold size (candles)</label>
+                              <input
+                                type="number"
+                                min={1}
+                                step={1}
+                                value={signalFoldSize}
+                                onChange={(e) => setSignalFoldSize(e.target.value)}
+                                className={cx(ui.input, "h-8 text-[11px] w-full")}
+                                placeholder="e.g. 100"
+                              />
+                              <div className={cx("text-[10px]", ui.textMuted)}>Total candles: {totalCandles}</div>
+                            </div>
+                            {hasValidFoldSize && (
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                                <div className="text-[10px] text-emerald-300">
+                                  Completed: {completedFolds}
+                                </div>
+                                <div className="text-[10px] text-orange-300">Remaining: {remainingCandles}</div>
+                                {remainingCandles > 0 && (
+                                  <label className="inline-flex items-center gap-1.5 text-[10px] text-[#d9d9d9]">
+                                    <input
+                                      type="checkbox"
+                                      checked={includeIncompleteFold}
+                                      onChange={(e) => setIncludeIncompleteFold(e.target.checked)}
+                                      className="h-3 w-3 accent-emerald-500"
+                                    />
+                                    Include incomplete fold
+                                  </label>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </>
                     )}
                   </div>
