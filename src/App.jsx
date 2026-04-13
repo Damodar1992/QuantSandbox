@@ -1,4 +1,5 @@
 import React, { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Editor from "@monaco-editor/react";
 
 // Import constants from separate files
@@ -745,8 +746,43 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
     });
   }, []);
   // Hyperopt Results three-level table data (level 1: runs; level 2: normalization results; level 3: HeatMaps & Reports)
+  const [hyperoptMetaModalRowId, setHyperoptMetaModalRowId] = useState(null);
+  const [hyperoptMetaDraft, setHyperoptMetaDraft] = useState({
+    tags: [],
+    comment: "",
+    tagInput: "",
+  });
+  const openHyperoptMetaModal = useCallback((row) => {
+    setHyperoptMetaModalRowId(row.id);
+    setHyperoptMetaDraft({
+      tags: Array.isArray(row.tags) ? [...row.tags] : [],
+      comment: typeof row.comment === "string" ? row.comment : "",
+      tagInput: "",
+    });
+  }, []);
+  const closeHyperoptMetaModal = useCallback(() => {
+    setHyperoptMetaModalRowId(null);
+    setHyperoptMetaDraft({ tags: [], comment: "", tagInput: "" });
+  }, []);
+  const commitHyperoptMetaDraftTag = useCallback(() => {
+    setHyperoptMetaDraft((prev) => {
+      const t = prev.tagInput.trim();
+      if (!t) return prev;
+      if (prev.tags.includes(t)) return { ...prev, tagInput: "" };
+      return { ...prev, tags: [...prev.tags, t], tagInput: "" };
+    });
+  }, []);
   const [hyperoptResultsRows, setHyperoptResultsRows] = useState(() => [
-    { id: "hr1", date: "2024-01-15", pairs: "BTC/USDT", timeFrame: "1h", knowRange: "2020-01-01 – 2023-06-01", unknowRange: "2023-06-01 – 2023-12-31", children: [
+    {
+      id: "hr1",
+      date: "2024-01-15",
+      pairs: "BTC/USDT",
+      timeFrame: "1h",
+      knowRange: "2020-01-01 – 2023-06-01",
+      unknowRange: "2023-06-01 – 2023-12-31",
+      tags: ["baseline", "btc"],
+      comment: "First production sweep; watch drawdown in unknow range.",
+      children: [
       { id: "hr1-1", date: "2024-01-15", minScore: "0.20", avgScore: "0.55", maxScore: "0.99", foldSize: "24", truncScores: { min: "-0.14", avg: "-0.45", max: "0.84" }, heatmapsAndReports: [
         { id: "hr1-1-h1", date: "2024-01-15", type: "Heatmap" },
         { id: "hr1-1-r1", date: "2024-01-15", type: "Report" },
@@ -755,13 +791,33 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
         { id: "hr1-2-h1", date: "2024-01-16", type: "Heatmap" },
       ]},
     ]},
-    { id: "hr2", date: "2024-01-14", pairs: "ETH/USDT", timeFrame: "4h", knowRange: "2021-01-01 – 2023-09-01", unknowRange: "2023-09-01 – 2024-01-01", children: [
+    {
+      id: "hr2",
+      date: "2024-01-14",
+      pairs: "ETH/USDT",
+      timeFrame: "4h",
+      knowRange: "2021-01-01 – 2023-09-01",
+      unknowRange: "2023-09-01 – 2024-01-01",
+      tags: ["eth", "4h"],
+      comment: "Needs re-run after fee model update.",
+      children: [
       { id: "hr2-1", date: "2024-01-14", minScore: "0.22", avgScore: "0.58", maxScore: "0.91", heatmapsAndReports: [
         { id: "hr2-1-h1", date: "2024-01-14", type: "Heatmap" },
         { id: "hr2-1-r1", date: "2024-01-14", type: "Report" },
       ]},
     ]},
   ]);
+  const saveHyperoptMetaModal = useCallback(() => {
+    if (!hyperoptMetaModalRowId) return;
+    setHyperoptResultsRows((rows) =>
+      rows.map((r) =>
+        r.id === hyperoptMetaModalRowId
+          ? { ...r, tags: [...hyperoptMetaDraft.tags], comment: hyperoptMetaDraft.comment }
+          : r
+      )
+    );
+    closeHyperoptMetaModal();
+  }, [hyperoptMetaModalRowId, hyperoptMetaDraft.tags, hyperoptMetaDraft.comment, closeHyperoptMetaModal]);
   const selectedSourceBestResults = isEntryStage ? signalBestResults : isExitStage ? exitBestResults : [];
   const selectedSourceId = isEntryStage ? entryBestSourceId : isExitStage ? exitBestSourceId : "";
   const setSelectedSourceId = isEntryStage ? setEntryBestSourceId : isExitStage ? setExitBestSourceId : () => {};
@@ -2685,9 +2741,14 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                         <tr>
                           <th className="px-2 py-2 text-left font-medium border-b border-[#303030] w-8"></th>
                           <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Date</th>
+                          {(isEntryStage || isExitStage) && (
+                            <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Source</th>
+                          )}
                           <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Pairs</th>
                           <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">TimeFrame</th>
                           <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">KnowRange</th>
+                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Tags</th>
+                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Comment</th>
                           <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Indicators</th>
                           <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Actions</th>
                         </tr>
@@ -2707,9 +2768,56 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                 </button>
                               </td>
                               <td className="px-3 py-2">{row.date}</td>
+                              {(isEntryStage || isExitStage) && (
+                                <td
+                                  className="px-3 py-2 max-w-[260px]"
+                                  title={
+                                    selectedStageSource
+                                      ? `${selectedStageSource.label || "Best result"} · S:${formatBestMetric(selectedStageSource.score)} · MFE:${formatBestMetric(selectedStageSource.mfe)} · MAE:${formatBestMetric(selectedStageSource.mae)} · AIR:${formatBestMetric(selectedStageSource.air)} · normStability:${formatBestMetric(selectedStageSource.stability)}`
+                                      : "—"
+                                  }
+                                >
+                                  <div className="truncate">
+                                    {selectedStageSource ? (selectedStageSource.label || "Best result") : "—"}
+                                  </div>
+                                </td>
+                              )}
                               <td className="px-3 py-2">{row.pairs}</td>
                               <td className="px-3 py-2">{row.timeFrame}</td>
                               <td className="px-3 py-2 text-[#a6a6a6]">{row.knowRange}</td>
+                              <td
+                                className="px-3 py-2 max-w-[200px] align-top"
+                                title={row.tags?.length ? row.tags.join(", ") : undefined}
+                              >
+                                {row.tags?.length ? (
+                                  <div className="flex flex-wrap gap-1">
+                                    {row.tags.slice(0, 3).map((t) => (
+                                      <span
+                                        key={t}
+                                        className="rounded border border-[#303030] bg-[#0f0f0f] px-1.5 py-0.5 text-[10px] text-[#a6a6a6]"
+                                      >
+                                        {t}
+                                      </span>
+                                    ))}
+                                    {row.tags.length > 3 && (
+                                      <span className="self-center text-[10px] text-[#8c8c8c]">
+                                        +{row.tags.length - 3}
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  "—"
+                                )}
+                              </td>
+                              <td className="px-3 py-2 max-w-[220px] align-top">
+                                {row.comment?.trim() ? (
+                                  <div className="truncate text-[#a6a6a6]" title={row.comment}>
+                                    {row.comment}
+                                  </div>
+                                ) : (
+                                  "—"
+                                )}
+                              </td>
                               <td className="px-3 py-2">
                                 <HyperoptDetailsTooltip
                                   onShowDetails={() => {
@@ -2719,20 +2827,29 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                 />
                               </td>
                               <td className="px-3 py-2">
-                                {hyperoptRun !== "Pipeline" && (
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {hyperoptRun !== "Pipeline" && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowNormalizationModal(true)}
+                                      className={cx(ui.btnPrimary, "h-7 px-2 text-[10px] whitespace-nowrap")}
+                                    >
+                                      Post-processing
+                                    </button>
+                                  )}
                                   <button
                                     type="button"
-                                    onClick={() => setShowNormalizationModal(true)}
+                                    onClick={() => openHyperoptMetaModal(row)}
                                     className={cx(ui.btnPrimary, "h-7 px-2 text-[10px] whitespace-nowrap")}
                                   >
-                                    Post-processing
+                                    Tags & comments
                                   </button>
-                                )}
+                                </div>
                               </td>
                             </tr>
                             {hyperoptResultsExpanded.has(row.id) && row.children && row.children.length > 0 && (
                               <tr>
-                                <td colSpan={7} className="p-0 align-top bg-[#0f0f0f]">
+                                <td colSpan={(isEntryStage || isExitStage) ? 10 : 9} className="p-0 align-top bg-[#0f0f0f]">
                                   {/* Block 2: Normalization result (nested per expanded row) */}
                                   <div className="ml-4 mt-2 mb-2 rounded-lg border border-[#303030] overflow-hidden border-l-4 border-l-sky-500">
                                     <div className="px-3 py-1.5 font-medium border-b border-[#303030] bg-sky-500/10 text-sky-200 text-[11px]">
@@ -2802,18 +2919,16 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                       >
                                                         Generate Report
                                                       </button>
-                                                      {!isEntryStage && !isExitStage && (
-                                                        <button
-                                                          type="button"
-                                                          onClick={() => {
-                                                            setSelectedNormalizationRow(sub);
-                                                            setShowTruncateModal(true);
-                                                          }}
-                                                          className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
-                                                        >
-                                                          Add truncate
-                                                        </button>
-                                                      )}
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                          setSelectedNormalizationRow(sub);
+                                                          setShowTruncateModal(true);
+                                                        }}
+                                                        className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
+                                                      >
+                                                        Add truncate
+                                                      </button>
                                                     </div>
                                                   </td>
                                                 </tr>
@@ -2887,7 +3002,6 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                         </div>
                                                       </div>
 
-                                                      {!isEntryStage && !isExitStage && (
                                                       <>
                                                       {/* Block 2.5: Normalization details (per normalization row) */}
                                                       <div className="ml-4 mt-2 mb-2 rounded-lg border border-[#303030] overflow-hidden border-l-4 border-l-emerald-500 bg-[#111111]">
@@ -3027,7 +3141,6 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                         </div>
                                                       </div>
                                                       </>
-                                                      )}
                                                     </td>
                                                   </tr>
                                                 )}
@@ -3515,12 +3628,12 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                       className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-[12px] font-medium text-[#d9d9d9] hover:bg-[#1a1a1a] transition-colors"
                     >
                       <span className="text-[#8c8c8c] text-[10px]">{normModalCollapsedSections.has("score") ? "▶" : "▼"}</span>
-                      <span>Score formula</span>
+                      <span>Final score formula</span>
                     </button>
                     {!normModalCollapsedSections.has("score") && (
                       <div className="px-3 pb-3 pt-0 space-y-3 border-t border-[#303030]">
                         <div className="space-y-1.5 pt-3">
-                          <div className="text-[11px] font-medium text-[#d9d9d9]">Score formula</div>
+                          <div className="text-[11px] font-medium text-[#d9d9d9]">Final score formula</div>
                           <div className="flex flex-wrap items-center gap-3 gap-y-2">
                             <select
                               value={finalScoreFormula}
@@ -3777,6 +3890,189 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
           </div>
         </div>
       )}
+      {hyperoptMetaModalRowId &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/70"
+            onClick={closeHyperoptMetaModal}
+          >
+            <div
+              className={cx(
+                ui.radius,
+                "bg-[#141414] border border-[#303030] max-w-[480px] w-full max-h-[90vh] overflow-hidden flex flex-col shadow-xl",
+              )}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-4 py-3 border-b border-[#303030]">
+                <span className="text-[14px] font-medium text-[#d9d9d9] flex items-center gap-2">
+                  <svg
+                    viewBox="0 0 16 16"
+                    className="h-4 w-4 shrink-0 text-emerald-400"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    aria-hidden
+                  >
+                    <path
+                      fillRule="evenodd"
+                      clipRule="evenodd"
+                      d="M16 8L8 0H0V8L8 16L16 8ZM4.5 6C5.32843 6 6 5.32843 6 4.5C6 3.67157 5.32843 3 4.5 3C3.67157 3 3 3.67157 3 4.5C3 5.32843 3.67157 6 4.5 6Z"
+                      fill="currentColor"
+                    />
+                  </svg>
+                  Tags & comments
+                </span>
+                <button
+                  type="button"
+                  onClick={closeHyperoptMetaModal}
+                  className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1"
+                  aria-label="Close"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="overflow-auto p-4 space-y-4">
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-medium text-[#d9d9d9]">Tags</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={hyperoptMetaDraft.tagInput}
+                      onChange={(e) =>
+                        setHyperoptMetaDraft((prev) => ({ ...prev, tagInput: e.target.value }))
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          commitHyperoptMetaDraftTag();
+                        }
+                      }}
+                      className={cx(ui.input, "h-8 flex-1 text-[12px]")}
+                      placeholder="Add tag, press Enter"
+                    />
+                    <button
+                      type="button"
+                      onClick={commitHyperoptMetaDraftTag}
+                      title="Add tag"
+                      aria-label="Add tag"
+                      className={cx(
+                        ui.btn,
+                        "h-8 w-8 p-0 inline-flex items-center justify-center shrink-0",
+                      )}
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="h-4 w-4"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        aria-hidden
+                      >
+                        <path d="M12 5v14M5 12h14" />
+                      </svg>
+                    </button>
+                  </div>
+                  {hyperoptMetaDraft.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {hyperoptMetaDraft.tags.map((t, i) => (
+                        <span
+                          key={`${t}-${i}`}
+                          className="inline-flex items-center gap-1 rounded border border-[#303030] bg-[#0f0f0f] pl-2 pr-0.5 py-0.5 text-[11px] text-[#d9d9d9]"
+                        >
+                          {t}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setHyperoptMetaDraft((prev) => ({
+                                ...prev,
+                                tags: prev.tags.filter((_, idx) => idx !== i),
+                              }))
+                            }
+                            className="p-0.5 rounded text-[#8c8c8c] hover:text-[#d9d9d9]"
+                            aria-label={`Remove tag ${t}`}
+                          >
+                            <svg
+                              viewBox="0 0 24 24"
+                              className="h-3.5 w-3.5"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              aria-hidden
+                            >
+                              <path d="M18 6 6 18M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-medium text-[#d9d9d9]">Comment</label>
+                  <textarea
+                    value={hyperoptMetaDraft.comment}
+                    onChange={(e) =>
+                      setHyperoptMetaDraft((prev) => ({ ...prev, comment: e.target.value }))
+                    }
+                    rows={4}
+                    className={cx(ui.input, "w-full text-[12px] resize-y min-h-[96px] py-2")}
+                    placeholder="Notes for this run…"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-2 border-t border-[#303030] px-4 py-3 bg-[#101010]">
+                <button
+                  type="button"
+                  onClick={closeHyperoptMetaModal}
+                  className={cx(
+                    ui.btnGhost,
+                    "h-8 w-8 p-0 inline-flex items-center justify-center",
+                  )}
+                  title="Cancel"
+                  aria-label="Cancel"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    aria-hidden
+                  >
+                    <path d="M18 6 6 18M6 6l12 12" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={saveHyperoptMetaModal}
+                  className={cx(
+                    ui.btnPrimary,
+                    "h-8 w-8 p-0 inline-flex items-center justify-center",
+                  )}
+                  title="Save"
+                  aria-label="Save"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
       {/* Add Best result manually (stage-dependent) */}
       {showAddBestResultModal && (
         <div
@@ -4053,7 +4349,23 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
               )}
             </div>
             <div className="px-4 py-3 border-t border-[#303030] flex justify-end">
-              <button type="button" onClick={() => setShowHyperoptDetailsModal(false)} className={cx(ui.btn, "h-8 px-3 text-[11px]")}>Close</button>
+              {hyperoptDetailsModalType === "hyperopt" ? (
+                <button
+                  type="button"
+                  onClick={() => setShowHyperoptDetailsModal(false)}
+                  className={cx(ui.btnPrimary, "h-8 px-3 text-[11px]")}
+                >
+                  Apply ranges to strategy
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowHyperoptDetailsModal(false)}
+                  className={cx(ui.btn, "h-8 px-3 text-[11px]")}
+                >
+                  Close
+                </button>
+              )}
             </div>
           </div>
         </div>
