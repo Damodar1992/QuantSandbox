@@ -141,6 +141,12 @@ const BuilderStepper = memo(function BuilderStepper({
   const [signalHyperoptType, setSignalHyperoptType] = useState("BIAS");
   const [entryHyperoptType, setEntryHyperoptType] = useState("BIAS");
   const [exitHyperoptType, setExitHyperoptType] = useState("BIAS");
+  const [signalExchange, setSignalExchange] = useState("binance");
+  const [entryExchange, setEntryExchange] = useState("binance");
+  const [exitExchange, setExitExchange] = useState("binance");
+  const [signalTradingMode, setSignalTradingMode] = useState("futures");
+  const [entryTradingMode, setEntryTradingMode] = useState("futures");
+  const [exitTradingMode, setExitTradingMode] = useState("futures");
   const [signalFoldSize, setSignalFoldSize] = useState("");
   const [includeIncompleteFold, setIncludeIncompleteFold] = useState(false);
   const maxPossibleStd = isEntryStage ? entryMaxPossibleStd : isExitStage ? exitMaxPossibleStd : signalMaxPossibleStd;
@@ -151,6 +157,10 @@ const BuilderStepper = memo(function BuilderStepper({
   const setUnknowTimeRangeEnd = isEntryStage ? setEntryUnknowTimeRangeEnd : isExitStage ? setExitUnknowTimeRangeEnd : setSignalUnknowTimeRangeEnd;
   const hyperoptType = isEntryStage ? entryHyperoptType : isExitStage ? exitHyperoptType : signalHyperoptType;
   const setHyperoptType = isEntryStage ? setEntryHyperoptType : isExitStage ? setExitHyperoptType : setSignalHyperoptType;
+  const exchange = isEntryStage ? entryExchange : isExitStage ? exitExchange : signalExchange;
+  const setExchange = isEntryStage ? setEntryExchange : isExitStage ? setExitExchange : setSignalExchange;
+  const tradingMode = isEntryStage ? entryTradingMode : isExitStage ? exitTradingMode : signalTradingMode;
+  const setTradingMode = isEntryStage ? setEntryTradingMode : isExitStage ? setExitTradingMode : setSignalTradingMode;
   // Best results are tracked independently per stage
   const [signalBestResults, setSignalBestResults] = useState([]);
   const [entryBestResults, setEntryBestResults] = useState([]);
@@ -807,6 +817,20 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
       ]},
     ]},
   ]);
+  const [hyperoptTagFilter, setHyperoptTagFilter] = useState([]);
+  const [hyperoptTagFilterOpen, setHyperoptTagFilterOpen] = useState(false);
+  const hyperoptTagFilterRef = useOutsideClose(hyperoptTagFilterOpen, () => setHyperoptTagFilterOpen(false));
+  const hyperoptAvailableTags = useMemo(() => {
+    const tags = new Set();
+    for (const row of hyperoptResultsRows) {
+      for (const tag of row.tags || []) tags.add(tag);
+    }
+    return Array.from(tags).sort((a, b) => a.localeCompare(b));
+  }, [hyperoptResultsRows]);
+  const filteredHyperoptResultsRows = useMemo(() => {
+    if (hyperoptTagFilter.length === 0) return hyperoptResultsRows;
+    return hyperoptResultsRows.filter((row) => (row.tags || []).some((tag) => hyperoptTagFilter.includes(tag)));
+  }, [hyperoptResultsRows, hyperoptTagFilter]);
   const saveHyperoptMetaModal = useCallback(() => {
     if (!hyperoptMetaModalRowId) return;
     setHyperoptResultsRows((rows) =>
@@ -1702,14 +1726,41 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                   <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">
                     Hyperopt type {isEntryStage ? "(Entry)" : "(Signal)"}
                   </div>
-                  <select
-                    value={hyperoptType}
-                    onChange={(e) => setHyperoptType(e.target.value)}
-                    className={cx(ui.input, "h-9 text-[12px] w-full max-w-[200px]")}
-                  >
-                    <option value="BIAS">BIAS</option>
-                    <option value="Brute Force">Brute Force</option>
-                  </select>
+                  <div className="flex flex-wrap items-end gap-3">
+                    <div className="space-y-1">
+                      <label className={cx("block text-[11px]", ui.textMuted)}>Hyperopt type</label>
+                      <select
+                        value={hyperoptType}
+                        onChange={(e) => setHyperoptType(e.target.value)}
+                        className={cx(ui.input, "h-9 text-[12px] w-full min-w-[170px]")}
+                      >
+                        <option value="BIAS">BIAS</option>
+                        <option value="Brute Force">Brute Force</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className={cx("block text-[11px]", ui.textMuted)}>Exchange</label>
+                      <select
+                        value={exchange}
+                        onChange={(e) => setExchange(e.target.value)}
+                        className={cx(ui.input, "h-9 text-[12px] w-full min-w-[170px]")}
+                      >
+                        <option value="binance">binance</option>
+                        <option value="htx">htx</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className={cx("block text-[11px]", ui.textMuted)}>Trading mode</label>
+                      <select
+                        value={tradingMode}
+                        onChange={(e) => setTradingMode(e.target.value)}
+                        className={cx(ui.input, "h-9 text-[12px] w-full min-w-[170px]")}
+                      >
+                        <option value="futures">futures</option>
+                        <option value="spot">spot</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Intermediate formula and Post-processing are hidden for Brute Force */}
@@ -2735,6 +2786,52 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                   <div className="px-3 py-2 font-medium border-b border-[#303030] bg-emerald-500/10 text-emerald-200 text-[12px]">
                     Hyperopt result
                   </div>
+                  <div className="px-3 py-2 border-b border-[#303030] bg-[#141414]">
+                    <div className="flex items-center justify-end">
+                      <div className="relative" ref={hyperoptTagFilterRef}>
+                        <button
+                          type="button"
+                          onClick={() => setHyperoptTagFilterOpen((prev) => !prev)}
+                          className={cx(ui.input, "h-7 px-2 text-[10px] min-w-[220px] inline-flex items-center justify-between gap-2")}
+                          aria-expanded={hyperoptTagFilterOpen}
+                        >
+                          <span className="truncate text-left">
+                            {hyperoptTagFilter.length === 0 ? "Tags: All" : `Tags: ${hyperoptTagFilter.join(", ")}`}
+                          </span>
+                          <span className="text-[#8c8c8c]">{hyperoptTagFilterOpen ? "▲" : "▼"}</span>
+                        </button>
+                        {hyperoptTagFilterOpen && (
+                          <div className="absolute right-0 z-30 mt-1 w-[260px] rounded-md border border-[#303030] bg-[#0f0f0f] shadow-lg p-1.5 space-y-1">
+                            <button
+                              type="button"
+                              onClick={() => setHyperoptTagFilter([])}
+                              className="w-full h-7 px-2 rounded text-left text-[10px] text-[#d9d9d9] hover:bg-[#1a1a1a]"
+                            >
+                              All
+                            </button>
+                            {hyperoptAvailableTags.map((tag) => {
+                              const checked = hyperoptTagFilter.includes(tag);
+                              return (
+                                <label key={tag} className="flex items-center gap-2 h-7 px-2 rounded text-[10px] text-[#d9d9d9] hover:bg-[#1a1a1a] cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() =>
+                                      setHyperoptTagFilter((prev) =>
+                                        prev.includes(tag) ? prev.filter((item) => item !== tag) : [...prev, tag]
+                                      )
+                                    }
+                                    className="h-3 w-3 accent-emerald-500"
+                                  />
+                                  <span className="truncate">{tag}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                   <div className="overflow-x-auto">
                     <table className="w-full border-collapse text-[11px]">
                       <thead className="bg-[#1a1a1a] text-[#8c8c8c]">
@@ -2754,7 +2851,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                         </tr>
                       </thead>
                       <tbody className="text-[#d9d9d9]">
-                        {hyperoptResultsRows.map((row) => (
+                        {filteredHyperoptResultsRows.map((row) => (
                           <React.Fragment key={row.id}>
                             <tr className="border-b border-[#303030] bg-[#141414] hover:bg-[#1f1f1f]">
                               <td className="px-2 py-2 align-middle">
