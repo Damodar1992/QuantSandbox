@@ -40,6 +40,9 @@ import {
   FORMULA_TYPES,
   FORMULA_SUBTYPES,
 } from "./constants/formulas";
+import { DEFAULT_RISK_STOPLOSS_RANGES, RISK_STOPLOSS_LABELS } from "./constants/risk";
+import { pickByStage, getBuilderStageCopy } from "./features/builder/utils/stageSelect";
+import { countRiskCombinations } from "./features/builder/utils/riskCombinations";
 import { clamp, lerp, quantile, computeRanges, normalizeParam, buildHeatMap, formatScore, heatmapScoreToColor, HEATMAP_LEGEND_STOPS, HEATMAP_CELL_PX, HEATMAP_GAP_PX, EMPTY_CELL_BG } from "./utils/heatmap";
 import { setWeightCapped } from "./utils/weights";
 import { buildIndicatorSnapshot, buildSignalBestResult as buildSignalBestResultFromUtils } from "./utils/builder";
@@ -52,7 +55,14 @@ import { LoginScreen, ForgotPasswordModal } from "./components/auth";
 import { Header } from "./components/shared";
 import { CreateStrategyModal, EditDescriptionModal, StrategyRow } from "./components/strategies";
 import { GenerateReportModal } from "./components/report";
-import { HeatMapView, HeatMapConfigurator, PairsDropdown, HeatMapGrid, HyperoptDetailsTooltip } from "./components/heatmap";
+import {
+  HeatMapView,
+  HeatMapConfigurator,
+  PairsDropdown,
+  HeatMapGrid,
+  HyperoptDetailsTooltip,
+  HeatmapFiltersReadOnlyModal,
+} from "./components/heatmap";
 import { FormulaActionsMenu } from "./components/formulas";
 import { UserActionsMenu, CreateUserModal, EditUserModal, ChangePasswordModal, ResetPasswordModal } from "./components/users";
 import { IndicatorActionsMenu, AddIndicatorPageModal } from "./components/indicators";
@@ -62,10 +72,12 @@ import {
   IndicatorItem,
   AddIndicatorModal,
   EditIndicatorModal,
+  IndicatorRangesPanel,
   CollapsibleSelect,
   TableBasedEditor,
   FormulaEditor,
   CodeEditor,
+  RiskStagePanel,
 } from "./features/builder/components";
 import { getDefaultDisplayName, formatIndicatorSnapshot } from "./features/builder/utils/indicatorHelpers";
 
@@ -103,27 +115,51 @@ const BuilderStepper = memo(function BuilderStepper({
   const [signalIndicators, setSignalIndicators] = useState([]);
   const [entryIndicators, setEntryIndicators] = useState([]);
   const [exitIndicators, setExitIndicators] = useState([]);
+  const [riskStoplossRanges, setRiskStoplossRanges] = useState(() => ({
+    ...DEFAULT_RISK_STOPLOSS_RANGES,
+    stoploss: { ...DEFAULT_RISK_STOPLOSS_RANGES.stoploss },
+    trailing_activation: { ...DEFAULT_RISK_STOPLOSS_RANGES.trailing_activation },
+    trailing_distance: { ...DEFAULT_RISK_STOPLOSS_RANGES.trailing_distance },
+  }));
   const isEntryStage = activeStage === 2;
   const isExitStage = activeStage === 3;
-  const hasSourceBestScore = isEntryStage || isExitStage;
-  const indicators = isEntryStage ? entryIndicators : isExitStage ? exitIndicators : signalIndicators;
-  const setIndicators = isEntryStage ? setEntryIndicators : isExitStage ? setExitIndicators : setSignalIndicators;
+  const isRiskStage = activeStage === 4;
+  const isSignalStage = activeStage === 1;
+  const hasSourceBestScore = isEntryStage || isExitStage || isRiskStage;
+  const stageCopy = getBuilderStageCopy(activeStage);
+  const indicators = pickByStage(activeStage, {
+    signal: signalIndicators,
+    entry: entryIndicators,
+    exit: exitIndicators,
+    risk: signalIndicators,
+  });
+  const setIndicators = pickByStage(activeStage, {
+    signal: setSignalIndicators,
+    entry: setEntryIndicators,
+    exit: setExitIndicators,
+    risk: setSignalIndicators,
+  });
   const [editingIndicator, setEditingIndicator] = useState(null);
+  const [editIndicatorModalRangesOnly, setEditIndicatorModalRangesOnly] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [addModalType, setAddModalType] = useState("RSI");
   const [libraryQuery, setLibraryQuery] = useState("");
   const [libraryGroup, setLibraryGroup] = useState("All");
   const [selectedTab, setSelectedTab] = useState("list"); // list or code
 
-  // Total combinations from indicator params (product of param value counts per enabled indicator)
   const totalCombinations = useMemo(() => {
+    if (isRiskStage) return countRiskCombinations(riskStoplossRanges);
     if (indicators.length === 0) return 0;
     return indicators.reduce((product, ind) => {
       if (!ind.enabled || !Array.isArray(ind.params)) return product;
       const perIndicator = ind.params.reduce((p, param) => p * getParamValuesFromDef(param).length, 1);
       return product * Math.max(1, perIndicator);
     }, 1);
-  }, [indicators]);
+  }, [isRiskStage, riskStoplossRanges, indicators]);
+
+  const hyperoptSectionNum = isRiskStage ? 3 : 4;
+  const resultsSectionNum = isRiskStage ? 4 : 5;
+  const favoritesSectionNum = isRiskStage ? 5 : 6;
   
   // Hyperoptimization progress
   const [isRunningOptimization, setIsRunningOptimization] = useState(false);
@@ -138,29 +174,95 @@ const BuilderStepper = memo(function BuilderStepper({
   const [entryUnknowTimeRangeEnd, setEntryUnknowTimeRangeEnd] = useState("");
   const [exitUnknowTimeRangeStart, setExitUnknowTimeRangeStart] = useState("");
   const [exitUnknowTimeRangeEnd, setExitUnknowTimeRangeEnd] = useState("");
-  const [signalHyperoptType, setSignalHyperoptType] = useState("BIAS");
-  const [entryHyperoptType, setEntryHyperoptType] = useState("BIAS");
-  const [exitHyperoptType, setExitHyperoptType] = useState("BIAS");
+  const [signalHyperoptType, setSignalHyperoptType] = useState("Brute Force");
+  const [entryHyperoptType, setEntryHyperoptType] = useState("Brute Force");
+  const [exitHyperoptType, setExitHyperoptType] = useState("Brute Force");
   const [signalExchange, setSignalExchange] = useState("binance");
   const [entryExchange, setEntryExchange] = useState("binance");
   const [exitExchange, setExitExchange] = useState("binance");
   const [signalTradingMode, setSignalTradingMode] = useState("futures");
   const [entryTradingMode, setEntryTradingMode] = useState("futures");
   const [exitTradingMode, setExitTradingMode] = useState("futures");
+  const [riskMaxPossibleStd, setRiskMaxPossibleStd] = useState("");
+  const [riskUnknowTimeRangeStart, setRiskUnknowTimeRangeStart] = useState("");
+  const [riskUnknowTimeRangeEnd, setRiskUnknowTimeRangeEnd] = useState("");
+  const [riskHyperoptType, setRiskHyperoptType] = useState("Brute Force");
+  const [riskExchange, setRiskExchange] = useState("binance");
+  const [riskTradingMode, setRiskTradingMode] = useState("futures");
   const [signalFoldSize, setSignalFoldSize] = useState("");
   const [includeIncompleteFold, setIncludeIncompleteFold] = useState(false);
-  const maxPossibleStd = isEntryStage ? entryMaxPossibleStd : isExitStage ? exitMaxPossibleStd : signalMaxPossibleStd;
-  const setMaxPossibleStd = isEntryStage ? setEntryMaxPossibleStd : isExitStage ? setExitMaxPossibleStd : setSignalMaxPossibleStd;
-  const unknowTimeRangeStart = isEntryStage ? entryUnknowTimeRangeStart : isExitStage ? exitUnknowTimeRangeStart : signalUnknowTimeRangeStart;
-  const setUnknowTimeRangeStart = isEntryStage ? setEntryUnknowTimeRangeStart : isExitStage ? setExitUnknowTimeRangeStart : setSignalUnknowTimeRangeStart;
-  const unknowTimeRangeEnd = isEntryStage ? entryUnknowTimeRangeEnd : isExitStage ? exitUnknowTimeRangeEnd : signalUnknowTimeRangeEnd;
-  const setUnknowTimeRangeEnd = isEntryStage ? setEntryUnknowTimeRangeEnd : isExitStage ? setExitUnknowTimeRangeEnd : setSignalUnknowTimeRangeEnd;
-  const hyperoptType = isEntryStage ? entryHyperoptType : isExitStage ? exitHyperoptType : signalHyperoptType;
-  const setHyperoptType = isEntryStage ? setEntryHyperoptType : isExitStage ? setExitHyperoptType : setSignalHyperoptType;
-  const exchange = isEntryStage ? entryExchange : isExitStage ? exitExchange : signalExchange;
-  const setExchange = isEntryStage ? setEntryExchange : isExitStage ? setExitExchange : setSignalExchange;
-  const tradingMode = isEntryStage ? entryTradingMode : isExitStage ? exitTradingMode : signalTradingMode;
-  const setTradingMode = isEntryStage ? setEntryTradingMode : isExitStage ? setExitTradingMode : setSignalTradingMode;
+  const maxPossibleStd = pickByStage(activeStage, {
+    signal: signalMaxPossibleStd,
+    entry: entryMaxPossibleStd,
+    exit: exitMaxPossibleStd,
+    risk: riskMaxPossibleStd,
+  });
+  const setMaxPossibleStd = pickByStage(activeStage, {
+    signal: setSignalMaxPossibleStd,
+    entry: setEntryMaxPossibleStd,
+    exit: setExitMaxPossibleStd,
+    risk: setRiskMaxPossibleStd,
+  });
+  const unknowTimeRangeStart = pickByStage(activeStage, {
+    signal: signalUnknowTimeRangeStart,
+    entry: entryUnknowTimeRangeStart,
+    exit: exitUnknowTimeRangeStart,
+    risk: riskUnknowTimeRangeStart,
+  });
+  const setUnknowTimeRangeStart = pickByStage(activeStage, {
+    signal: setSignalUnknowTimeRangeStart,
+    entry: setEntryUnknowTimeRangeStart,
+    exit: setExitUnknowTimeRangeStart,
+    risk: setRiskUnknowTimeRangeStart,
+  });
+  const unknowTimeRangeEnd = pickByStage(activeStage, {
+    signal: signalUnknowTimeRangeEnd,
+    entry: entryUnknowTimeRangeEnd,
+    exit: exitUnknowTimeRangeEnd,
+    risk: riskUnknowTimeRangeEnd,
+  });
+  const setUnknowTimeRangeEnd = pickByStage(activeStage, {
+    signal: setSignalUnknowTimeRangeEnd,
+    entry: setEntryUnknowTimeRangeEnd,
+    exit: setExitUnknowTimeRangeEnd,
+    risk: setRiskUnknowTimeRangeEnd,
+  });
+  const hyperoptType = pickByStage(activeStage, {
+    signal: signalHyperoptType,
+    entry: entryHyperoptType,
+    exit: exitHyperoptType,
+    risk: riskHyperoptType,
+  });
+  const setHyperoptType = pickByStage(activeStage, {
+    signal: setSignalHyperoptType,
+    entry: setEntryHyperoptType,
+    exit: setExitHyperoptType,
+    risk: setRiskHyperoptType,
+  });
+  const exchange = pickByStage(activeStage, {
+    signal: signalExchange,
+    entry: entryExchange,
+    exit: exitExchange,
+    risk: riskExchange,
+  });
+  const setExchange = pickByStage(activeStage, {
+    signal: setSignalExchange,
+    entry: setEntryExchange,
+    exit: setExitExchange,
+    risk: setRiskExchange,
+  });
+  const tradingMode = pickByStage(activeStage, {
+    signal: signalTradingMode,
+    entry: entryTradingMode,
+    exit: exitTradingMode,
+    risk: riskTradingMode,
+  });
+  const setTradingMode = pickByStage(activeStage, {
+    signal: setSignalTradingMode,
+    entry: setEntryTradingMode,
+    exit: setExitTradingMode,
+    risk: setRiskTradingMode,
+  });
   // Best results are tracked independently per stage
   const [signalBestResults, setSignalBestResults] = useState([]);
   const [entryBestResults, setEntryBestResults] = useState([]);
@@ -172,16 +274,41 @@ const BuilderStepper = memo(function BuilderStepper({
   const [signalBestCandidates, setSignalBestCandidates] = useState([]);
   const [entryBestCandidates, setEntryBestCandidates] = useState([]);
   const [exitBestCandidates, setExitBestCandidates] = useState([]);
+  const [riskBestResults, setRiskBestResults] = useState([]);
+  const [riskBestCandidates, setRiskBestCandidates] = useState([]);
   const [entryBestSourceId, setEntryBestSourceId] = useState("");
   const [entrySourceDropdownOpen, setEntrySourceDropdownOpen] = useState(false);
   const entrySourceDropdownRef = useOutsideClose(entrySourceDropdownOpen, () => setEntrySourceDropdownOpen(false));
   const [exitBestSourceId, setExitBestSourceId] = useState("");
   const [exitSourceDropdownOpen, setExitSourceDropdownOpen] = useState(false);
   const exitSourceDropdownRef = useOutsideClose(exitSourceDropdownOpen, () => setExitSourceDropdownOpen(false));
-  const bestResults = isEntryStage ? entryBestResults : isExitStage ? exitBestResults : signalBestResults;
-  const setBestResults = isEntryStage ? setEntryBestResults : isExitStage ? setExitBestResults : setSignalBestResults;
-  const bestCandidates = isEntryStage ? entryBestCandidates : isExitStage ? exitBestCandidates : signalBestCandidates;
-  const setBestCandidates = isEntryStage ? setEntryBestCandidates : isExitStage ? setExitBestCandidates : setSignalBestCandidates;
+  const [riskBestSourceId, setRiskBestSourceId] = useState("");
+  const [riskSourceDropdownOpen, setRiskSourceDropdownOpen] = useState(false);
+  const riskSourceDropdownRef = useOutsideClose(riskSourceDropdownOpen, () => setRiskSourceDropdownOpen(false));
+  const bestResults = pickByStage(activeStage, {
+    signal: signalBestResults,
+    entry: entryBestResults,
+    exit: exitBestResults,
+    risk: riskBestResults,
+  });
+  const setBestResults = pickByStage(activeStage, {
+    signal: setSignalBestResults,
+    entry: setEntryBestResults,
+    exit: setExitBestResults,
+    risk: setRiskBestResults,
+  });
+  const bestCandidates = pickByStage(activeStage, {
+    signal: signalBestCandidates,
+    entry: entryBestCandidates,
+    exit: exitBestCandidates,
+    risk: riskBestCandidates,
+  });
+  const setBestCandidates = pickByStage(activeStage, {
+    signal: setSignalBestCandidates,
+    entry: setEntryBestCandidates,
+    exit: setExitBestCandidates,
+    risk: setRiskBestCandidates,
+  });
   const formatBestMetric = useCallback((value) => {
     if (value == null || value === "") return "-";
     const num = Number(value);
@@ -698,7 +825,21 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
 # You can use:
 # - Normalized metrics: FinalScore, Stability, median_MFE, median_MAE, median_AIR
 # - Logic: AND, OR, NOT`);
-  
+  const stageFormula = isRiskStage
+    ? ""
+    : pickByStage(activeStage, {
+        signal: signalFormula,
+        entry: entryFormula,
+        exit: exitFormula,
+        risk: "",
+      });
+  const setStageFormula = pickByStage(activeStage, {
+    signal: setSignalFormula,
+    entry: setEntryFormula,
+    exit: setExitFormula,
+    risk: () => {},
+  });
+
   // HeatMap state
   const [showHeatMapConfig, setShowHeatMapConfig] = useState(false);
   const [heatMapConfigModalId, setHeatMapConfigModalId] = useState(null);
@@ -735,6 +876,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
   }, []);
   const [showHyperoptDetailsModal, setShowHyperoptDetailsModal] = useState(false);
   const [hyperoptDetailsModalType, setHyperoptDetailsModalType] = useState("post-processing");
+  const [heatmapItemFiltersModalItem, setHeatmapItemFiltersModalItem] = useState(null);
   // Hyperopt Results: which level-1 rows are expanded (collapse/expand)
   const [hyperoptResultsExpanded, setHyperoptResultsExpanded] = useState(() => new Set(["hr1", "hr2"]));
   const toggleHyperoptRow = useCallback((id) => {
@@ -842,12 +984,42 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
     );
     closeHyperoptMetaModal();
   }, [hyperoptMetaModalRowId, hyperoptMetaDraft.tags, hyperoptMetaDraft.comment, closeHyperoptMetaModal]);
-  const selectedSourceBestResults = isEntryStage ? signalBestResults : isExitStage ? exitBestResults : [];
-  const selectedSourceId = isEntryStage ? entryBestSourceId : isExitStage ? exitBestSourceId : "";
-  const setSelectedSourceId = isEntryStage ? setEntryBestSourceId : isExitStage ? setExitBestSourceId : () => {};
-  const sourceDropdownOpen = isEntryStage ? entrySourceDropdownOpen : isExitStage ? exitSourceDropdownOpen : false;
-  const setSourceDropdownOpen = isEntryStage ? setEntrySourceDropdownOpen : isExitStage ? setExitSourceDropdownOpen : () => {};
-  const sourceDropdownRef = isEntryStage ? entrySourceDropdownRef : isExitStage ? exitSourceDropdownRef : null;
+  const selectedSourceBestResults = pickByStage(activeStage, {
+    signal: [],
+    entry: signalBestResults,
+    exit: entryBestResults,
+    risk: exitBestResults,
+  });
+  const selectedSourceId = pickByStage(activeStage, {
+    signal: "",
+    entry: entryBestSourceId,
+    exit: exitBestSourceId,
+    risk: riskBestSourceId,
+  });
+  const setSelectedSourceId = pickByStage(activeStage, {
+    signal: () => {},
+    entry: setEntryBestSourceId,
+    exit: setExitBestSourceId,
+    risk: setRiskBestSourceId,
+  });
+  const sourceDropdownOpen = pickByStage(activeStage, {
+    signal: false,
+    entry: entrySourceDropdownOpen,
+    exit: exitSourceDropdownOpen,
+    risk: riskSourceDropdownOpen,
+  });
+  const setSourceDropdownOpen = pickByStage(activeStage, {
+    signal: () => {},
+    entry: setEntrySourceDropdownOpen,
+    exit: setExitSourceDropdownOpen,
+    risk: setRiskSourceDropdownOpen,
+  });
+  const sourceDropdownRef = pickByStage(activeStage, {
+    signal: null,
+    entry: entrySourceDropdownRef,
+    exit: exitSourceDropdownRef,
+    risk: riskSourceDropdownRef,
+  });
   const selectedStageSource = useMemo(
     () => selectedSourceBestResults.find((best) => best.id === selectedSourceId) || null,
     [selectedSourceBestResults, selectedSourceId],
@@ -868,7 +1040,6 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
     selectedStageSourceKnownRange?.start || selectedStageSource?.meta?.timeFrameStart || "";
   const selectedStageTimeRangeEnd =
     selectedStageSourceKnownRange?.end || selectedStageSource?.meta?.timeFrameEnd || "";
-  const isSignalStage = !isEntryStage && !isExitStage;
   const totalCandles = 43848;
   const signalFoldSizeValue = Number.parseInt(signalFoldSize, 10);
   const hasValidFoldSize = Number.isFinite(signalFoldSizeValue) && signalFoldSizeValue > 0;
@@ -955,7 +1126,10 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
   const handleDeleteIndicator = useCallback((id) => {
     if (confirm("Delete this indicator?")) {
       setIndicators(prev => prev.filter(ind => ind.id !== id));
-      if (editingIndicator?.id === id) setEditingIndicator(null);
+      if (editingIndicator?.id === id) {
+        setEditingIndicator(null);
+        setEditIndicatorModalRangesOnly(false);
+      }
     }
   }, [editingIndicator]);
   
@@ -995,6 +1169,23 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
     }
   }, []);
 
+  const handleApplyHeatMapFilters = useCallback(
+    ({ filters, filterPreset }) => {
+      setGeneratedHeatMap((prev) => {
+        if (!prev) return prev;
+        const config = { ...prev.config, filters, filterPreset };
+        try {
+          const fullResults = generateMockResults(config, prev.runId);
+          return { ...prev, config, fullResults, zoomStack: [] };
+        } catch (err) {
+          console.error("HeatMap filter apply failed:", err);
+          return prev;
+        }
+      });
+    },
+    [],
+  );
+
   const handleHeatMapCellClick = useCallback(
     (cell, runId) => {
       if (!cell || !cell.count) return;
@@ -1003,33 +1194,61 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
         const result = cell.results[0];
         const rawParams = result.params || {};
         const params = {};
-        const indicatorsFromConfig = generatedHeatMap?.config?.indicators || [];
-        const prettifyParamName = (raw) => {
-          const s = String(raw || "").trim();
-          if (!s) return "";
-          const lower = s.toLowerCase();
-          const m = lower.match(/^(fast|slow|signal)(?:_|-)?period$/);
-          if (m) return `${m[1][0].toUpperCase()}${m[1].slice(1)}Period`;
-          if (lower === "stddev" || lower === "std_dev" || lower === "std-dev") return "StdDev";
-          if (lower === "timeframe" || lower === "time_frame" || lower === "time-frame") return "TimeFrame";
-          const chunks = s.split(/[_-]+/g).filter(Boolean);
-          const title = (w) => (w ? `${w[0].toUpperCase()}${w.slice(1)}` : w);
-          const out = chunks.map((c) => title(String(c))).join("");
-          return out || s;
-        };
+        const isRiskHeatmap = generatedHeatMap?.config?.heatmapVariant === "risk";
 
-        Object.entries(rawParams).forEach(([key, value]) => {
-          const parts = String(key).split("_");
-          const indicatorIdPart = parts[0];
-          const paramRaw = parts.length >= 2 ? parts.slice(1).join("_") : parts[0];
-          const ind = indicatorsFromConfig.find((i) => String(i.id) === String(indicatorIdPart));
-          const indicatorPrefix = ind ? ind.shortName || ind.displayName || ind.name || ind.type || "" : "";
-          const paramName = prettifyParamName(paramRaw) || paramRaw;
-          const friendlyKey = indicatorPrefix ? `${indicatorPrefix}.${paramName}` : paramName;
-          params[friendlyKey] = value;
-        });
+        if (isRiskHeatmap) {
+          const formatRiskValue = (key, value) => {
+            if (key === "drawdown" && typeof value === "number" && value > 0 && value <= 1) {
+              return `${(value * 100).toFixed(1)}%`;
+            }
+            if (typeof value === "number" && Number.isFinite(value)) {
+              return value % 1 === 0 ? String(value) : value.toFixed(3);
+            }
+            return value;
+          };
+          const riskLabels = {
+            profit_factor: "Profit factor",
+            drawdown: "Drawdown",
+            ...RISK_STOPLOSS_LABELS,
+          };
+          Object.entries(rawParams).forEach(([key, value]) => {
+            const label = riskLabels[key] || key;
+            params[label] = formatRiskValue(key, value);
+          });
+        } else {
+          const indicatorsFromConfig = generatedHeatMap?.config?.indicators || [];
+          const prettifyParamName = (raw) => {
+            const s = String(raw || "").trim();
+            if (!s) return "";
+            const lower = s.toLowerCase();
+            const m = lower.match(/^(fast|slow|signal)(?:_|-)?period$/);
+            if (m) return `${m[1][0].toUpperCase()}${m[1].slice(1)}Period`;
+            if (lower === "stddev" || lower === "std_dev" || lower === "std-dev") return "StdDev";
+            if (lower === "timeframe" || lower === "time_frame" || lower === "time-frame") return "TimeFrame";
+            const chunks = s.split(/[_-]+/g).filter(Boolean);
+            const title = (w) => (w ? `${w[0].toUpperCase()}${w.slice(1)}` : w);
+            const out = chunks.map((c) => title(String(c))).join("");
+            return out || s;
+          };
+
+          Object.entries(rawParams).forEach(([key, value]) => {
+            const parts = String(key).split("_");
+            const indicatorIdPart = parts[0];
+            const paramRaw = parts.length >= 2 ? parts.slice(1).join("_") : parts[0];
+            const ind = indicatorsFromConfig.find((i) => String(i.id) === String(indicatorIdPart));
+            const indicatorPrefix = ind ? ind.shortName || ind.displayName || ind.name || ind.type || "" : "";
+            const paramName = prettifyParamName(paramRaw) || paramRaw;
+            const friendlyKey = indicatorPrefix ? `${indicatorPrefix}.${paramName}` : paramName;
+            params[friendlyKey] = value;
+          });
+        }
         const zoomLevel = generatedHeatMap?.zoomStack?.length || 0;
-        const stagePrefix = isEntryStage ? "entry" : "signal";
+        const stagePrefix = pickByStage(activeStage, {
+          signal: "signal",
+          entry: "entry",
+          exit: "exit",
+          risk: "risk",
+        });
         const candidateKey = `${stagePrefix}:${runId}:${zoomLevel}:${cell.xi}:${cell.yi}`;
         setBestCandidates((prev) => {
           if (prev.some((c) => c.key === candidateKey)) return prev;
@@ -1062,7 +1281,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
         };
       });
     },
-    [generatedHeatMap?.zoomStack, isEntryStage, setBestCandidates],
+    [generatedHeatMap?.zoomStack, generatedHeatMap?.config?.heatmapVariant, isEntryStage, setBestCandidates, activeStage],
   );
 
   const handleHeatMapZoomOut = useCallback((runId) => {
@@ -1089,14 +1308,19 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
     return buildHeatMap(generatedHeatMap.fullResults, generatedHeatMap.config, heatMapZoomRanges);
   }, [generatedHeatMap?.fullResults, generatedHeatMap?.config, heatMapZoomRanges]);
   const buildBestResult = useCallback(
-    (params) =>
-      buildSignalBestResultFromUtils(params, {
-        signalIndicators: indicators,
+    (params) => {
+      const best = buildSignalBestResultFromUtils(params, {
+        signalIndicators: isRiskStage ? signalIndicators : indicators,
         pairs,
         timeRange,
         signalHyperoptType: hyperoptType,
-      }),
-    [indicators, pairs, timeRange, hyperoptType],
+      });
+      if (isRiskStage && best?.meta) {
+        best.meta.riskStoplossRanges = { ...riskStoplossRanges };
+      }
+      return best;
+    },
+    [indicators, signalIndicators, isRiskStage, riskStoplossRanges, pairs, timeRange, hyperoptType],
   );
 
   const handleSaveBestResultFromDetail = useCallback(
@@ -1293,7 +1517,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
         id: 4,
         label: "Risk",
         title: "STAGE 4: RISK MANAGEMENT",
-        locked: true,
+        locked: false,
         icon: (
           <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
             <path d="M12 2l9 5v10l-9 5-9-5V7l9-5z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
@@ -1385,8 +1609,22 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
 
       {/* Stage content */}
       <div className="p-3">
-        {active.id === 1 || active.id === 2 || active.id === 3 ? (
+        {active.id === 1 || active.id === 2 || active.id === 3 || active.id === 4 ? (
           <div className="space-y-4">
+            {isRiskStage && (
+              <RiskStagePanel
+                collapsedSections={collapsedSections}
+                toggleSection={toggleSection}
+                riskStoplossRanges={riskStoplossRanges}
+                onRiskStoplossRangesChange={setRiskStoplossRanges}
+                signalIndicators={signalIndicators}
+                entryFormula={entryFormula}
+                exitFormula={exitFormula}
+                timeRange={timeRange}
+              />
+            )}
+            {!isRiskStage && (
+            <>
             {/* 1. INDICATORS */}
             <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
               <button
@@ -1396,7 +1634,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
               >
                 <div>
                   <div className="text-[12px] font-medium text-[#d9d9d9]">
-                    1. Indicators {isEntryStage ? "(Entry)" : isExitStage ? "(Exit)" : "(Signal)"}
+                    1. Indicators ({stageCopy.stageTag})
                   </div>
                   <div className={cx("text-[11px]", ui.textMuted)}>
                     Indicator Library and Selected Indicators
@@ -1427,12 +1665,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="text-[12px] font-medium text-[#d9d9d9] mb-1">Selected Indicators</div>
-                      </div>
-                      <div className={cx(
-                        "text-[11px] shrink-0 rounded-md border px-2 py-1.5",
-                        totalCombinations > 10_000_000 ? "border-red-500/50 bg-red-500/10 text-red-400" : totalCombinations > 0 ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-400" : "border-[#303030] bg-[#0f0f0f] text-[#8c8c8c]"
-                      )}>
-                        Total combinations: <span className="font-medium">{totalCombinations.toLocaleString()}</span>
+                        <div className={cx("text-[10px]", ui.textMuted)}>Ranges are edited in section 3.</div>
                       </div>
                     </div>
                   </div>
@@ -1446,12 +1679,12 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                       ) : (
                         <div className="space-y-2">
                           {indicators.map((ind, idx) => (
-                            <IndicatorItem 
-                              key={ind.id} 
+                            <IndicatorItem
+                              key={ind.id}
                               indicator={ind}
                               index={idx}
                               total={indicators.length}
-                              onEdit={() => setEditingIndicator(ind)}
+                              variant="summary"
                               onDelete={() => handleDeleteIndicator(ind.id)}
                             />
                           ))}
@@ -1493,10 +1726,10 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
               >
                 <div>
                   <div className="text-[12px] font-medium text-[#d9d9d9]">
-                    {isEntryStage ? "2. Entry formulas" : isExitStage ? "2. Exit formulas" : "2. Signal Formulas"}
+                    2. {stageCopy.formulaTitle}
                   </div>
                   <div className={cx("text-[11px]", ui.textMuted)}>
-                    Define {isEntryStage ? "entry validation" : isExitStage ? "exit" : "trading"} signals using python formula or builder
+                    Define {stageCopy.formulaKind} signals using python formula or builder
                   </div>
                 </div>
                 <span className="text-[#8c8c8c] text-[10px]">{collapsedSections.has(2) ? "▶" : "▼"}</span>
@@ -1504,30 +1737,70 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
               {!collapsedSections.has(2) && (
                 <div className="p-3">
                   <FormulaEditor
-                    key={isEntryStage ? "entry-formulas" : isExitStage ? "exit-formulas" : "signal-formulas"}
-                    value={isEntryStage ? entryFormula : isExitStage ? exitFormula : signalFormula}
-                    onChange={isEntryStage ? setEntryFormula : isExitStage ? setExitFormula : setSignalFormula}
+                    key={stageCopy.formulaEditorKey}
+                    value={stageFormula}
+                    onChange={setStageFormula}
                     indicators={indicators}
-                    mode={isEntryStage ? "entry" : isExitStage ? "exit" : "signal"}
+                    mode={stageCopy.formulaMode}
                   />
                 </div>
               )}
             </div>
 
-            {/* 3. HYPEROPTIMIZATION PARAMETERS */}
+            {/* 3. INDICATOR RANGES */}
             <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
               <button
                 type="button"
                 onClick={() => toggleSection(3)}
-                className={cx("w-full px-3 py-2 flex items-center justify-between gap-2 text-left", ui.panelMuted, "border-0 border-b", ui.divider, "hover:bg-[#1a1a1a] transition-colors")}
+                className={cx(
+                  "w-full px-3 py-2 flex items-center justify-between gap-2 text-left",
+                  ui.panelMuted,
+                  "border-0 border-b",
+                  ui.divider,
+                  "hover:bg-[#1a1a1a] transition-colors",
+                )}
               >
                 <div>
-                  <div className="text-[12px] font-medium text-[#d9d9d9]">3. Hyperoptimization Parameters</div>
-                  <div className={cx("text-[11px]", ui.textMuted)}>Set trading pairs and time parameters</div>
+                  <div className="text-[12px] font-medium text-[#d9d9d9]">
+                    3. Indicator Ranges ({stageCopy.stageTag})
+                  </div>
+                  <div className={cx("text-[11px]", ui.textMuted)}>
+                    Min, max, and step for each selected indicator. Remove indicators in section 1.
+                  </div>
                 </div>
                 <span className="text-[#8c8c8c] text-[10px]">{collapsedSections.has(3) ? "▶" : "▼"}</span>
               </button>
               {!collapsedSections.has(3) && (
+                <div className="p-3">
+                  <IndicatorRangesPanel
+                    indicators={indicators}
+                    totalCombinations={totalCombinations}
+                    onEditRanges={(ind) => {
+                      setEditingIndicator(ind);
+                      setEditIndicatorModalRangesOnly(true);
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+
+            </>
+            )}
+
+            {/* Hyperoptimization Parameters */}
+            <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
+              <button
+                type="button"
+                onClick={() => toggleSection(hyperoptSectionNum)}
+                className={cx("w-full px-3 py-2 flex items-center justify-between gap-2 text-left", ui.panelMuted, "border-0 border-b", ui.divider, "hover:bg-[#1a1a1a] transition-colors")}
+              >
+                <div>
+                  <div className="text-[12px] font-medium text-[#d9d9d9]">{hyperoptSectionNum}. Hyperoptimization Parameters</div>
+                  <div className={cx("text-[11px]", ui.textMuted)}>Set trading pairs and time parameters</div>
+                </div>
+                <span className="text-[#8c8c8c] text-[10px]">{collapsedSections.has(hyperoptSectionNum) ? "▶" : "▼"}</span>
+              </button>
+              {!collapsedSections.has(hyperoptSectionNum) && (
               <div className="p-3 space-y-3">
                 <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
                   <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">Market configuration</div>
@@ -1718,13 +1991,15 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                     <div className={cx("mt-3 text-[11px]", ui.textMuted)}>
                       {isEntryStage
                         ? "No Stage 1 best scores found. Add results in Stage 1 first to unlock Entry market configuration."
-                        : "No Stage 3 best scores found. Add results in Stage 3 first to unlock Exit market configuration."}
+                        : isExitStage
+                          ? "No Stage 2 best scores found. Add results in Stage 2 first to unlock Exit market configuration."
+                          : "No Stage 3 best scores found. Add results in Stage 3 first to unlock Risk market configuration."}
                     </div>
                   )}
                 </div>
                 <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
                   <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">
-                    Hyperopt type {isEntryStage ? "(Entry)" : "(Signal)"}
+                    Hyperopt type ({stageCopy.stageTag})
                   </div>
                   <div className="flex flex-wrap items-end gap-3">
                     <div className="space-y-1">
@@ -1734,7 +2009,6 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                         onChange={(e) => setHyperoptType(e.target.value)}
                         className={cx(ui.input, "h-9 text-[12px] w-full min-w-[170px]")}
                       >
-                        <option value="BIAS">BIAS</option>
                         <option value="Brute Force">Brute Force</option>
                       </select>
                     </div>
@@ -1763,8 +2037,8 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                   </div>
                 </div>
 
-                {/* Intermediate formula and Post-processing are hidden for Brute Force */}
-                {hyperoptType !== "Brute Force" && (
+                {/* Intermediate formula and Post-processing are hidden for Brute Force (and on Risk stage) */}
+                {hyperoptType !== "Brute Force" && !isRiskStage && (
                 <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
                   <div className="flex items-center justify-between mb-3">
                     <div className="text-[12px] font-medium text-[#d9d9d9]">
@@ -1962,7 +2236,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                 )}
 
                 {/* Post-processing */}
-                {hyperoptType !== "Brute Force" && (
+                {hyperoptType !== "Brute Force" && !isRiskStage && (
                 <div className={cx(ui.radius, ui.panelMuted, "p-3", hyperoptRun !== "Pipeline" && "hidden")}>
                   <div className="flex items-center justify-between mb-3">
                     <div className="text-[12px] font-medium text-[#d9d9d9]">Post-processing</div>
@@ -2509,7 +2783,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                 </div>
                 )}
 
-                {hyperoptType !== "Brute Force" && (
+                {hyperoptType !== "Brute Force" && !isRiskStage && (
                 <div className={cx(ui.radius, ui.panelMuted, "p-3", "hidden")}>
                   <div className="flex items-center justify-between mb-3">
                     <div className="text-[12px] font-medium text-[#d9d9d9]">
@@ -2733,7 +3007,10 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                         }
                       }, interval);
                     }}
-                    disabled={indicators.length === 0 || (hasSourceBestScore && !selectedSourceId)}
+                    disabled={
+                      (isRiskStage ? totalCombinations === 0 : indicators.length === 0) ||
+                      (hasSourceBestScore && !selectedSourceId)
+                    }
                   >
                     ⚡ Run Hyperoptimization
                   </button>
@@ -2759,27 +3036,27 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
               )}
             </div>
 
-            {/* 4. HYPEROPT RESULTS (two-level table + Run normalization modal) */}
+            {/* Optimization Results */}
             <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
               <button
                 type="button"
-                onClick={() => toggleSection(4)}
+                onClick={() => toggleSection(resultsSectionNum)}
                 className={cx("w-full px-3 py-2 flex items-center justify-between gap-2 text-left", ui.panelMuted, "border-0 border-b", ui.divider, "hover:bg-[#1a1a1a] transition-colors")}
               >
                 <div>
-                  <div className="text-[12px] font-medium text-[#d9d9d9]">4. Hyperopt Results</div>
+                  <div className="text-[12px] font-medium text-[#d9d9d9]">{resultsSectionNum}. Optimization Results</div>
                   <div className={cx("text-[11px]", ui.textMuted)}>
-                    Analyze hyperoptimization results, normalize scores by formula, and generate heatmaps and reports.
+                    Analyze optimization results, normalize scores by formula, and generate heatmaps and reports.
                   </div>
                 </div>
                 <span className="flex items-center gap-2">
                   <span className="rounded-md border border-[#303030] bg-[#0f0f0f] px-2 py-0.5 text-[10px] text-[#8c8c8c]">
                     {hyperoptResultsRows.length} runs
                   </span>
-                  <span className="text-[#8c8c8c] text-[10px]">{collapsedSections.has(4) ? "▶" : "▼"}</span>
+                  <span className="text-[#8c8c8c] text-[10px]">{collapsedSections.has(resultsSectionNum) ? "▶" : "▼"}</span>
                 </span>
               </button>
-              {!collapsedSections.has(4) && (
+              {!collapsedSections.has(resultsSectionNum) && (
               <div className="overflow-auto p-3 space-y-4">
                 {/* Block 1: Hyperopt result */}
                 <div className="rounded-lg border border-[#303030] overflow-hidden border-l-4 border-l-emerald-500">
@@ -2838,7 +3115,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                         <tr>
                           <th className="px-2 py-2 text-left font-medium border-b border-[#303030] w-8"></th>
                           <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Date</th>
-                          {(isEntryStage || isExitStage) && (
+                          {(isEntryStage || isExitStage || isRiskStage) && (
                             <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Source</th>
                           )}
                           <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Pairs</th>
@@ -2865,7 +3142,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                 </button>
                               </td>
                               <td className="px-3 py-2">{row.date}</td>
-                              {(isEntryStage || isExitStage) && (
+                              {(isEntryStage || isExitStage || isRiskStage) && (
                                 <td
                                   className="px-3 py-2 max-w-[260px]"
                                   title={
@@ -2946,7 +3223,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                             </tr>
                             {hyperoptResultsExpanded.has(row.id) && row.children && row.children.length > 0 && (
                               <tr>
-                                <td colSpan={(isEntryStage || isExitStage) ? 10 : 9} className="p-0 align-top bg-[#0f0f0f]">
+                                <td colSpan={(isEntryStage || isExitStage || isRiskStage) ? 10 : 9} className="p-0 align-top bg-[#0f0f0f]">
                                   {/* Block 2: Normalization result (nested per expanded row) */}
                                   <div className="ml-4 mt-2 mb-2 rounded-lg border border-[#303030] overflow-hidden border-l-4 border-l-sky-500">
                                     <div className="px-3 py-1.5 font-medium border-b border-[#303030] bg-sky-500/10 text-sky-200 text-[11px]">
@@ -3061,17 +3338,11 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                                   <td className="px-3 py-2 text-[#a6a6a6]">{item.date}</td>
                                                                   <td className="px-3 py-2">{item.type}</td>
                                                                   <td className="px-3 py-2">
-                                                                    <button
-                                                                      type="button"
-                                                                      title="info"
-                                                                      className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1 rounded inline-flex items-center justify-center"
-                                                                      aria-label="Info"
-                                                                    >
-                                                                      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-                                                                        <circle cx="12" cy="12" r="10" />
-                                                                        <path d="M12 16v-4M12 8h.01" />
-                                                                      </svg>
-                                                                    </button>
+                                                                    <HyperoptDetailsTooltip
+                                                                      title="Filters (read-only)"
+                                                                      ariaLabel="Show filters snapshot"
+                                                                      onShowDetails={() => setHeatmapItemFiltersModalItem(item)}
+                                                                    />
                                                                   </td>
                                                                   <td className="px-3 py-2">
                                                                     {item.type === "Heatmap" ? (
@@ -3193,14 +3464,11 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                                                       <td className="px-3 py-2 text-[#a6a6a6]">{item.date}</td>
                                                                                       <td className="px-3 py-2">{item.type}</td>
                                                                                       <td className="px-3 py-2">
-                                                                                        <button
-                                                                                          type="button"
-                                                                                          title="info"
-                                                                                          className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1 rounded inline-flex items-center justify-center"
-                                                                                          aria-label="Info"
-                                                                                        >
-                                                                                          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" /></svg>
-                                                                                        </button>
+                                                                                        <HyperoptDetailsTooltip
+                                                                                          title="Filters (read-only)"
+                                                                                          ariaLabel="Show filters snapshot"
+                                                                                          onShowDetails={() => setHeatmapItemFiltersModalItem(item)}
+                                                                                        />
                                                                                       </td>
                                                                                       <td className="px-3 py-2">
                                                                                         {item.type === "Heatmap" ? (
@@ -3261,12 +3529,12 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
               )}
             </div>
 
-            {/* 5. BEST RESULTS */}
+            {/* Favorite Epochs */}
             {
               <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
                 <button
                   type="button"
-                  onClick={() => toggleSection(5)}
+                  onClick={() => toggleSection(favoritesSectionNum)}
                   className={cx(
                     "w-full px-3 py-2 flex items-center justify-between gap-2 text-left",
                     ui.panelMuted,
@@ -3277,39 +3545,27 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                 >
                   <div>
                     <div className="text-[12px] font-medium text-[#d9d9d9]">
-                      {isEntryStage ? "5. Best scores for Stage 3" : isExitStage ? "5. Best scores for Stage 4" : "5. Best scores for Stage 2"}
+                      {`${favoritesSectionNum}. Favorite Epochs (Stage ${stageCopy.favoriteEpochsNext})`}
                     </div>
                     <div className={cx("text-[11px]", ui.textMuted)}>
-                      {isEntryStage
-                        ? "Select scores from the heatmap or enter manually for Stage 3"
-                        : isExitStage
-                          ? "Select scores from the heatmap or enter manually for Stage 4"
-                          : "Select scores from the heatmap or enter manually for Stage 2"}
+                      {`Select scores from the heatmap or enter manually for Stage ${stageCopy.favoriteEpochsNext}`}
                     </div>
                   </div>
                   <span className="flex items-center gap-2">
                     <span className="rounded-md border border-[#303030] bg-[#0f0f0f] px-2 py-0.5 text-[10px] text-[#8c8c8c]">
                       {bestResults.length} saved
                     </span>
-                    <span className="text-[#8c8c8c] text-[10px]">{collapsedSections.has(5) ? "▶" : "▼"}</span>
+                    <span className="text-[#8c8c8c] text-[10px]">{collapsedSections.has(favoritesSectionNum) ? "▶" : "▼"}</span>
                   </span>
                 </button>
-                {!collapsedSections.has(5) && (
+                {!collapsedSections.has(favoritesSectionNum) && (
                   <div className="p-3 space-y-3">
                     <div className={cx("text-[11px]", ui.textMuted)}>
-                      {isEntryStage
-                        ? "Choose the best values from the heatmap to apply in Stage 3."
-                        : isExitStage
-                          ? "Choose the best values from the heatmap to apply in Stage 4."
-                          : "Choose the best values from the heatmap to apply in Stage 2 (Entry)."}
+                      {`Choose the best values from the heatmap to apply in Stage ${stageCopy.favoriteEpochsNext}.`}
                     </div>
                     {bestResults.length === 0 ? (
                       <div className={cx(ui.radius, ui.panelMuted, "p-3 text-[11px]", ui.textMuted)}>
-                        {isEntryStage
-                          ? 'No best scores for Stage 3 yet. Use "☆ Save as Best" in Hyperopt Results or add manually.'
-                          : isExitStage
-                            ? 'No best scores for Stage 4 yet. Use "☆ Save as Best" in Hyperopt Results or add manually.'
-                            : 'No best scores for Stage 2 yet. Use "☆ Save as Best" in Hyperopt Results or add manually.'}
+                        {`No favorite epochs for Stage ${stageCopy.favoriteEpochsNext} yet. Use "☆ Save as Best" in Optimization Results or add manually.`}
                       </div>
                     ) : (
                       <div className="overflow-x-auto border border-[#303030] rounded-lg">
@@ -3594,7 +3850,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
           <div className={cx(ui.radius, "bg-[#141414] border border-[#303030] max-w-[720px] w-full max-h-[90vh] overflow-hidden flex flex-col shadow-xl")} onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-[#303030]">
               <span className="text-[14px] font-medium text-[#d9d9d9]">
-                Run normalization {isEntryStage ? "(Entry)" : "(Signal)"}
+                Run normalization ({stageCopy.stageTag})
               </span>
               <button type="button" onClick={() => setShowNormalizationModal(false)} className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1">✕</button>
             </div>
@@ -4188,7 +4444,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-[#303030]">
               <span className="text-[14px] font-medium text-[#d9d9d9]">
-                Add Best result {isEntryStage ? "(Entry)" : "(Signal)"}
+                Add Best result ({stageCopy.stageTag})
               </span>
               <button
                 type="button"
@@ -4307,6 +4563,9 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
             </div>
           </div>
         </div>
+      )}
+      {heatmapItemFiltersModalItem && (
+        <HeatmapFiltersReadOnlyModal item={heatmapItemFiltersModalItem} onClose={() => setHeatmapItemFiltersModalItem(null)} />
       )}
       {/* Formulas info modal (read-only) — opens when Details ⓘ is clicked */}
       {showHyperoptDetailsModal && (
@@ -4601,7 +4860,9 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
             </div>
             <div className="overflow-auto p-4">
               <HeatMapConfigurator
+                variant={isRiskStage ? "risk" : "indicators"}
                 indicators={indicators}
+                riskStoplossRanges={riskStoplossRanges}
                 onGenerate={(config) => handleGenerateHeatMap(config, heatMapConfigModalId)}
               />
             </div>
@@ -4611,8 +4872,14 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
       {/* HeatMap view modal — opens when Show heatmap is clicked */}
       {heatMapViewModalId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={() => setHeatMapViewModalId(null)}>
-          <div className={cx(ui.radius, "bg-[#141414] border border-[#303030] w-full max-w-[95vw] max-h-[90vh] overflow-hidden flex flex-col shadow-xl")} onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#303030]">
+          <div
+            className={cx(
+              ui.radius,
+              "bg-[#141414] border border-[#303030] w-fit max-w-[min(1100px,calc(100vw-2rem))] max-h-[90vh] overflow-hidden flex flex-col shadow-xl shrink-0",
+            )}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-3 py-2 border-b border-[#303030]">
               <span className="text-[14px] font-medium text-[#d9d9d9]">Heatmap</span>
               <div className="flex items-center gap-2">
                 {generatedHeatMap && generatedHeatMap.runId === heatMapViewModalId && (
@@ -4623,7 +4890,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                 <button type="button" onClick={() => setHeatMapViewModalId(null)} className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1">✕</button>
               </div>
             </div>
-            <div className="overflow-auto p-4 flex-1 min-h-0">
+            <div className="overflow-y-auto overflow-x-hidden p-3 flex-1 min-h-0">
               {generatedHeatMap && generatedHeatMap.runId === heatMapViewModalId ? (
                 <HeatMapView
                   heatMapData={currentHeatMapData}
@@ -4640,9 +4907,10 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                       ? handleSaveBestCandidates
                       : handleSaveBestResultFromHeatMap
                   }
-                  saveBestLabel={isEntryStage ? "Select for Stage 3" : isExitStage ? "Select for Stage 4" : "Select for Stage 2"}
+                  saveBestLabel={stageCopy.heatmapSelectLabel}
                   bestCandidates={bestCandidates}
                   onRemoveCandidate={handleRemoveBestCandidate}
+                  onApplyFilters={handleApplyHeatMapFilters}
                 />
               ) : (
                 <div className="py-8 text-center text-[#8c8c8c] text-[13px]">
@@ -4657,10 +4925,14 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
         </div>
       )}
       {editingIndicator && (
-        <EditIndicatorModal 
-          indicator={editingIndicator} 
-          onClose={() => setEditingIndicator(null)} 
-          onSave={handleEditIndicator} 
+        <EditIndicatorModal
+          indicator={editingIndicator}
+          rangesOnly={editIndicatorModalRangesOnly}
+          onClose={() => {
+            setEditingIndicator(null);
+            setEditIndicatorModalRangesOnly(false);
+          }}
+          onSave={handleEditIndicator}
         />
       )}
     </div>
@@ -4833,10 +5105,10 @@ export default function App() {
   ]);
   const [showFormulaModal, setShowFormulaModal] = useState(false);
   const [formulaEditingId, setFormulaEditingId] = useState(null);
-  const [formulaDraft, setFormulaDraft] = useState({ name: "", hyperoptType: "BIAS", type: "Score", subType: "Intermediate score", formula: "" });
+  const [formulaDraft, setFormulaDraft] = useState({ name: "", hyperoptType: "Brute Force", type: "Score", subType: "Intermediate score", formula: "" });
   const handleOpenAddFormula = useCallback(() => {
     setFormulaEditingId(null);
-    setFormulaDraft({ name: "", hyperoptType: "BIAS", type: "Score", subType: "Intermediate score", formula: "" });
+    setFormulaDraft({ name: "", hyperoptType: "Brute Force", type: "Score", subType: "Intermediate score", formula: "" });
     setShowFormulaModal(true);
   }, []);
   const handleEditFormula = useCallback((formula) => {
@@ -5142,8 +5414,8 @@ export default function App() {
                 <tr>
                   <th className="px-4 py-3 border-b border-[#303030] font-medium">Strategy name</th>
                   <th className="px-2 py-3 border-b border-[#303030] font-medium">Description</th>
-                  <th className="px-2 py-3 border-b border-[#303030] font-medium">Current stage</th>
-                  <th className="px-2 py-3 border-b border-[#303030] font-medium">Status</th>
+                  <th className="px-2 py-3 border-b border-[#303030] font-medium">Hyperopt status</th>
+                  <th className="px-2 py-3 border-b border-[#303030] font-medium">Post-processing status</th>
                   <th className="px-2 py-3 border-b border-[#303030] font-medium">Owner</th>
                   <th className="px-2 py-3 border-b border-[#303030] font-medium">Created at</th>
                   <th className="px-2 py-3 border-b border-[#303030] font-medium">Action</th>

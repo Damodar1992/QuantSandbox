@@ -3,8 +3,8 @@ import { cx, ui } from "../../../constants/ui";
 import { SOURCE_OPTIONS } from "../../../constants/indicators";
 import { getDefaultDisplayName } from "../utils/indicatorHelpers";
 
-export const EditIndicatorModal = memo(({ indicator, onClose, onSave }) => {
-  const [params, setParams] = useState(indicator.params.map((p) => ({ ...p })));
+export const EditIndicatorModal = memo(({ indicator, onClose, onSave, rangesOnly = false }) => {
+  const [params, setParams] = useState(() => (indicator.params || []).map((p) => ({ ...p })));
   const [source, setSource] = useState(indicator.source);
   const [displayName, setDisplayName] = useState(
     indicator.displayName || getDefaultDisplayName(indicator.type)
@@ -18,6 +18,15 @@ export const EditIndicatorModal = memo(({ indicator, onClose, onSave }) => {
   };
 
   const handleSave = () => {
+    if (rangesOnly) {
+      const updatedIndicator = { ...indicator, params };
+      if (indicator.type === "CUSTOM_FORMULA") {
+        updatedIndicator.customFormula = customFormula.trim();
+      }
+      onSave(updatedIndicator);
+      onClose();
+      return;
+    }
     const updatedIndicator = {
       ...indicator,
       params,
@@ -36,50 +45,70 @@ export const EditIndicatorModal = memo(({ indicator, onClose, onSave }) => {
       <div className={cx("w-full max-w-2xl", ui.radius, ui.panel, ui.shadow, "p-6 space-y-4")}>
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-[#f5f5f5]">
-            Edit Indicator: {indicator.name}
+            {rangesOnly ? "Parameter ranges" : "Edit Indicator"}: {indicator.displayName || indicator.name}
           </h2>
           <button className={cx(ui.btn, "px-2 py-1")} onClick={onClose}>
             ✕
           </button>
         </div>
-        <div>
-          <label className={cx("block mb-1 text-xs", ui.textMuted)}>Source</label>
-          <select
-            value={source}
-            onChange={(e) => setSource(e.target.value)}
-            className={cx(ui.input, "h-9")}
-          >
-            {SOURCE_OPTIONS.map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className={cx("block mb-1 text-xs", ui.textMuted)}>Display Name</label>
-          <input
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            className={ui.input}
-            placeholder="e.g., rsi, ema, my_indicator"
-          />
-          <div className={cx("text-[10px]", ui.textMuted, "mt-1")}>
-            This name will be used in formulas (e.g., {displayName || "indicator"}_close_14)
-          </div>
-        </div>
-        {indicator.type === "CUSTOM_FORMULA" && (
+        {rangesOnly && (
+          <p className={cx("text-[11px]", ui.textMuted)}>
+            {indicator.name} · {indicator.type}
+          </p>
+        )}
+        {!rangesOnly && (
+          <>
+            <div>
+              <label className={cx("block mb-1 text-xs", ui.textMuted)}>Source</label>
+              <select
+                value={source}
+                onChange={(e) => setSource(e.target.value)}
+                className={cx(ui.input, "h-9")}
+              >
+                {SOURCE_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={cx("block mb-1 text-xs", ui.textMuted)}>Display Name</label>
+              <input
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                className={ui.input}
+                placeholder="e.g., rsi, ema, my_indicator"
+              />
+              <div className={cx("text-[10px]", ui.textMuted, "mt-1")}>
+                This name will be used in formulas (e.g., {displayName || "indicator"}_close_14)
+              </div>
+            </div>
+            {indicator.type === "CUSTOM_FORMULA" && (
+              <div>
+                <label className={cx("block mb-1 text-xs", ui.textMuted)}>Custom Formula</label>
+                <textarea
+                  value={customFormula}
+                  onChange={(e) => setCustomFormula(e.target.value)}
+                  className={cx(ui.input, "min-h-[120px] font-mono text-[11px]")}
+                  placeholder={`Enter Python code for your custom indicator, e.g.:\ndataframe["ema_slope_20"] = dataframe["ema_close_20"].diff(1)\ndataframe["rsi_ma_14"] = dataframe["rsi_close_14"].rolling(14).mean()`}
+                />
+                <div className={cx("text-[10px]", ui.textMuted, "mt-1")}>
+                  Python code snippet to calculate custom indicator values
+                </div>
+              </div>
+            )}
+          </>
+        )}
+        {rangesOnly && indicator.type === "CUSTOM_FORMULA" && (
           <div>
             <label className={cx("block mb-1 text-xs", ui.textMuted)}>Custom Formula</label>
             <textarea
               value={customFormula}
               onChange={(e) => setCustomFormula(e.target.value)}
               className={cx(ui.input, "min-h-[120px] font-mono text-[11px]")}
-              placeholder={`Enter Python code for your custom indicator, e.g.:\ndataframe["ema_slope_20"] = dataframe["ema_close_20"].diff(1)\ndataframe["rsi_ma_14"] = dataframe["rsi_close_14"].rolling(14).mean()`}
+              placeholder="Python code for custom indicator"
             />
-            <div className={cx("text-[10px]", ui.textMuted, "mt-1")}>
-              Python code snippet to calculate custom indicator values
-            </div>
           </div>
         )}
         {indicator.type !== "CUSTOM_FORMULA" && (
@@ -135,7 +164,7 @@ export const EditIndicatorModal = memo(({ indicator, onClose, onSave }) => {
             Cancel
           </button>
           <button onClick={handleSave} className={ui.btnPrimary}>
-            Save Changes
+            {rangesOnly ? "Save ranges" : "Save Changes"}
           </button>
         </div>
       </div>

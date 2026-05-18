@@ -285,7 +285,7 @@ export const FORMULA_MODAL_FUNCTIONS = [
 
 export const FORMULA_MODAL_OPERATORS = ["+", "-", "*", "/", "^", "=", "<>", "<", "<=", ">", ">="];
 
-export const FORMULA_HYPEROPT_TYPES = ["BIAS", "Brute Force"];
+export const FORMULA_HYPEROPT_TYPES = ["Brute Force"];
 export const FORMULA_TYPES = ["Score", "Metric", "Stability"];
 export const FORMULA_SUBTYPES = [
   "Intermediate score",
@@ -296,3 +296,13 @@ export const FORMULA_SUBTYPES = [
   "AIR",
   "HitRate",
 ];
+
+export const DEFAULT_RISK_FORMULA = `# Risk management rules (stop-loss, take-profit, sizing)
+# Example:
+# STOP_LOSS_PCT = 0.02
+# TAKE_PROFIT_PCT = 0.04
+# MAX_POSITION_SIZE = 0.1
+
+IF drawdown_pct > 0.05 THEN REDUCE_SIZE
+IF unrealized_pnl_pct >= TAKE_PROFIT_PCT THEN TAKE_PROFIT
+IF unrealized_pnl_pct <= -STOP_LOSS_PCT THEN STOP_LOSS`;

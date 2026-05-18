@@ -2,7 +2,8 @@ import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "
 import Editor from "@monaco-editor/react";
 import { cx, ui } from "../../../constants/ui";
 import { TableBasedEditor } from "./TableBasedEditor";
-import { getDefaultDisplayName } from "../utils/indicatorHelpers";
+import { getDefaultDisplayName, getIndicatorOutputAliases } from "../utils/indicatorHelpers";
+import { IndicatorAliasesPanel } from "./IndicatorAliasesPanel";
 export const FormulaEditor = memo(({ value, onChange, indicators, mode = "signal" }) => {
   const editorRef = useRef(null);
   const monacoRef = useRef(null);
@@ -10,6 +11,7 @@ export const FormulaEditor = memo(({ value, onChange, indicators, mode = "signal
   const [tableRules, setTableRules] = useState([]);
   const [pythonCodeManuallyEdited, setPythonCodeManuallyEdited] = useState(false);
   const [generatedPythonCode, setGeneratedPythonCode] = useState('');
+  const [aliasesOpen, setAliasesOpen] = useState(false);
   
   // Initialize table rules if empty
   useEffect(() => {
@@ -27,34 +29,9 @@ export const FormulaEditor = memo(({ value, onChange, indicators, mode = "signal
   const availableVars = useMemo(() => {
     const vars = new Set(["Close", "Open", "High", "Low", "Volume", "BUY", "SELL"]);
     
-    indicators.forEach(ind => {
+    indicators.forEach((ind) => {
       if (!ind.enabled) return;
-      
-      const src = ind.source.toLowerCase();
-      const displayName = ind.displayName || getDefaultDisplayName(ind.type);
-      
-      // Add simple indicator variables without parameter details
-      if (ind.type === "RSI") {
-        vars.add(`${displayName}_${src}`);
-      } else if (ind.type === "EMA") {
-        vars.add(`${displayName}_${src}`);
-      } else if (ind.type === "MACD") {
-        vars.add(`${displayName}`);
-        vars.add(`${displayName}_signal`);
-        vars.add(`${displayName}_hist`);
-      } else if (ind.type === "BBANDS") {
-        vars.add(`${displayName}_upper`);
-        vars.add(`${displayName}_middle`);
-        vars.add(`${displayName}_lower`);
-        vars.add(`${displayName}_width`);
-      } else if (ind.type === "GC_DW") {
-        vars.add(`${displayName}_mid`);
-        vars.add(`${displayName}_upper`);
-        vars.add(`${displayName}_lower`);
-      } else if (ind.type === "CUSTOM_FORMULA") {
-        // For custom formulas, add a generic variable
-        vars.add(`${displayName}`);
-      }
+      getIndicatorOutputAliases(ind).forEach((alias) => vars.add(alias));
     });
     
     return Array.from(vars).sort();
@@ -338,10 +315,11 @@ export const FormulaEditor = memo(({ value, onChange, indicators, mode = "signal
   }, []);
   
   // Generate Python code for Freqtrade from table rules
-  // mode: "signal" | "entry" | "exit"
+  // mode: "signal" | "entry" | "exit" | "risk"
   const generatePythonSignalCode = useCallback((rules, mode = "signal") => {
     const isEntryMode = mode === "entry";
     const isExitMode = mode === "exit";
+    const isRiskMode = mode === "risk";
 
     if (!rules || rules.length === 0) {
       if (isEntryMode) {
@@ -367,6 +345,18 @@ export const FormulaEditor = memo(({ value, onChange, indicators, mode = "signal
     dataframe.loc[:, 'signal'] = False
     
     return dataframe
+`;
+      }
+      if (isRiskMode) {
+        return `def custom_stoploss(self, pair: str, trade, current_time, current_rate, current_profit, **kwargs):
+    """
+  Risk management: stop-loss, take-profit, position sizing (mock).
+  """
+    return -0.02  # 2% stop-loss
+
+def custom_exit(self, pair: str, trade, current_time, current_rate, current_profit, **kwargs):
+    """Optional take-profit / trailing rules."""
+    return None
 `;
       }
 
@@ -531,6 +521,7 @@ export const FormulaEditor = memo(({ value, onChange, indicators, mode = "signal
   
   // Handle mode switch
   const handleModeSwitch = useCallback((newMode) => {
+    if (newMode === 'table') setAliasesOpen(false);
     if (newMode === 'table' && editorMode === 'python') {
       // Switching from Python to Table - keep table rules as is
       // (no conversion needed, table rules are source of truth)
@@ -567,7 +558,13 @@ export const FormulaEditor = memo(({ value, onChange, indicators, mode = "signal
       <div className={cx("flex items-center justify-between px-3 py-2", ui.panelMuted, "border-0 border-b", ui.divider)}>
         <div className="flex-1">
           <div className="text-[12px] font-medium text-[#d9d9d9]">
-            {mode === "entry" ? "Entry formulas" : mode === "exit" ? "Exit formulas" : "Signal Formulas"}
+            {mode === "entry"
+              ? "Entry formulas"
+              : mode === "exit"
+                ? "Exit formulas"
+                : mode === "risk"
+                  ? "Risk formulas"
+                  : "Signal Formulas"}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -607,6 +604,18 @@ export const FormulaEditor = memo(({ value, onChange, indicators, mode = "signal
           
           {editorMode === 'python' && (
             <>
+              <button
+                type="button"
+                onClick={() => setAliasesOpen((v) => !v)}
+                className={cx(
+                  ui.btn,
+                  "h-7 px-2 text-[10px]",
+                  aliasesOpen && "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
+                )}
+                title="View indicator aliases"
+              >
+                Aliases
+              </button>
               {pythonCodeManuallyEdited && (
                 <button 
                   onClick={handleResetPythonCode}
@@ -629,34 +638,42 @@ export const FormulaEditor = memo(({ value, onChange, indicators, mode = "signal
               Click <button onClick={handleResetPythonCode} className="text-amber-300 underline hover:text-amber-200">Reset</button> to restore auto-generated code.
             </div>
           )}
-          <div className="relative" style={{ height: '400px' }}>
-            <Editor
-              height="400px"
-              defaultLanguage="python"
-              language="python"
-              theme="vs-dark"
-              value={value}
-              onChange={(newValue) => handlePythonCodeChange(newValue || '')}
-              onMount={handleEditorDidMount}
-              options={{
-                fontSize: 13,
-                lineHeight: 20,
-                fontFamily: 'Monaco, Menlo, "Courier New", monospace',
-                minimap: { enabled: false },
-                scrollBeyondLastLine: false,
-                renderLineHighlight: 'all',
-                renderWhitespace: 'none',
-                automaticLayout: true,
-                wordWrap: 'on',
-                lineNumbers: 'on',
-                glyphMargin: false,
-                folding: true,
-                lineDecorationsWidth: 0,
-                lineNumbersMinChars: 3,
-                renderValidationDecorations: 'on',
-                tabSize: 4,
-                insertSpaces: true,
-              }}
+          <div className="flex" style={{ height: 400 }}>
+            <div className="relative flex-1 min-w-0" style={{ height: 400 }}>
+              <Editor
+                height="400px"
+                defaultLanguage="python"
+                language="python"
+                theme="vs-dark"
+                value={value}
+                onChange={(newValue) => handlePythonCodeChange(newValue || '')}
+                onMount={handleEditorDidMount}
+                options={{
+                  fontSize: 13,
+                  lineHeight: 20,
+                  fontFamily: 'Monaco, Menlo, "Courier New", monospace',
+                  minimap: { enabled: false },
+                  scrollBeyondLastLine: false,
+                  renderLineHighlight: 'all',
+                  renderWhitespace: 'none',
+                  automaticLayout: true,
+                  wordWrap: 'on',
+                  lineNumbers: 'on',
+                  glyphMargin: false,
+                  folding: true,
+                  lineDecorationsWidth: 0,
+                  lineNumbersMinChars: 3,
+                  renderValidationDecorations: 'on',
+                  tabSize: 4,
+                  insertSpaces: true,
+                }}
+              />
+            </div>
+            <IndicatorAliasesPanel
+              indicators={indicators}
+              open={aliasesOpen}
+              onClose={() => setAliasesOpen(false)}
+              className="h-[400px]"
             />
           </div>
           

@@ -1,5 +1,6 @@
 import React, { memo } from "react";
-import { Badge, EyeIcon } from "../common";
+import { EyeIcon } from "../common";
+import { PipelineStatusCell } from "./PipelineStatusCell";
 import { RowActionMenu } from "./RowActionMenu";
 
 export const StrategyRow = memo(({ strategy, isExpanded, onToggle, onSelectVersion }) => (
@@ -35,9 +36,11 @@ export const StrategyRow = memo(({ strategy, isExpanded, onToggle, onSelectVersi
             </div>
           </td>
           <td className="px-2 py-2 border-b border-[#303030] text-[12px] text-[#a6a6a6]">{version.description}</td>
-          <td className="px-2 py-2 border-b border-[#303030] text-[12px] text-[#d9d9d9]">{version.currentStage ?? "Signal"}</td>
-          <td className="px-2 py-2 border-b border-[#303030]">
-            <Badge status={version.status} />
+          <td className="px-2 py-2 border-b border-[#303030] align-middle overflow-visible">
+            <PipelineStatusCell pipeline={version.hyperoptStatus} />
+          </td>
+          <td className="px-2 py-2 border-b border-[#303030] align-middle overflow-visible">
+            <PipelineStatusCell pipeline={version.postProcessingStatus} />
           </td>
           <td className="px-2 py-2 border-b border-[#303030] text-[12px] text-[#d9d9d9]">{strategy.owner}</td>
           <td className="px-2 py-2 border-b border-[#303030] text-[12px] text-[#a6a6a6]">{version.createdAt}</td>

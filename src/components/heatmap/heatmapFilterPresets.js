@@ -32,3 +32,33 @@ export const cloneFilterRootWithNewIds = (root, genIdFn = genId) => ({
     conditions: g.conditions.map((c) => ({ id: genIdFn(), field: c.field, op: c.op, value: c.value ?? "" })),
   })),
 });
+
+export const DEFAULT_FILTER_ROOT = () => ({
+  rootLogic: "or",
+  groups: [{ id: genId(), logic: "and", conditions: [] }],
+});
+
+export function filtersConfigToFilterRoot(filters) {
+  if (!filters?.groups?.length) return DEFAULT_FILTER_ROOT();
+  return cloneFilterRootWithNewIds({
+    rootLogic: filters.logic === "or" ? "or" : "and",
+    groups: filters.groups.map((g) => ({
+      logic: g.logic === "or" ? "or" : "and",
+      conditions: (g.conditions || []).map((c) => ({
+        field: c.field,
+        op: c.op,
+        value: c.value ?? "",
+      })),
+    })),
+  });
+}
+
+export function filterRootToFiltersConfig(filterRoot) {
+  return {
+    logic: filterRoot.rootLogic,
+    groups: filterRoot.groups.map((g) => ({
+      logic: g.logic,
+      conditions: g.conditions.map((c) => ({ field: c.field, op: c.op, value: c.value })),
+    })),
+  };
+}

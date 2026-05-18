@@ -1,7 +1,7 @@
 import React, { memo, useCallback, useMemo } from "react";
 import { cx, ui } from "../../../constants/ui";
 
-export const CodeEditor = memo(({ value, onChange, language = "python" }) => {
+export const CodeEditor = memo(({ value, onChange, language = "python", readOnly = false }) => {
   const lines = useMemo(() => {
     const count = (value || "").split("\n").length;
     return Array.from({ length: Math.max(1, count) }, (_, i) => i + 1);
@@ -20,7 +20,9 @@ export const CodeEditor = memo(({ value, onChange, language = "python" }) => {
       <div className={cx("flex items-center justify-between px-3 py-2", ui.panelMuted, "border-0 border-b", ui.divider)}>
         <div className="flex items-center gap-2">
           <span className="rounded-md border border-[#303030] bg-[#0f0f0f] px-2 py-0.5 text-[10px] text-[#a6a6a6]">{language}</span>
-          <span className="text-[10px] text-[#8c8c8c]">Monospace • Tabs preserved</span>
+          <span className="text-[10px] text-[#8c8c8c]">
+            {readOnly ? "Read-only preview" : "Monospace • Tabs preserved"}
+          </span>
         </div>
         <button type="button" onClick={copy} className={cx(ui.btn, "px-2 py-1 text-[10px]")}>
           Copy
@@ -36,9 +38,13 @@ export const CodeEditor = memo(({ value, onChange, language = "python" }) => {
         </div>
         <textarea
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={readOnly ? undefined : (e) => onChange(e.target.value)}
+          readOnly={readOnly}
           spellCheck={false}
-          className="block w-full resize-none bg-[#0f0f0f] px-3 py-2 pl-14 text-[12px] font-mono leading-5 text-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+          className={cx(
+            "block w-full resize-none bg-[#0f0f0f] px-3 py-2 pl-14 text-[12px] font-mono leading-5 text-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-emerald-500/50",
+            readOnly && "cursor-default opacity-95",
+          )}
           rows={18}
         />
       </div>

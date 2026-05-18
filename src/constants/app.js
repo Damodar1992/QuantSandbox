@@ -50,6 +50,15 @@ export const INITIAL_STRATEGIES = [
         createdAt: "2025-01-01",
         description: "Trend-follow strategy (initial version)",
         code: `# EMA Bounce v1\n# TODO: add strategy code here`,
+        hyperoptStatus: {
+          status: "Completed",
+          startDate: "2025-01-02",
+          finishDate: "2025-01-05",
+        },
+        postProcessingStatus: {
+          status: "In progress",
+          startDate: "2025-01-06",
+        },
       },
       {
         id: 12,
@@ -59,6 +68,14 @@ export const INITIAL_STRATEGIES = [
         createdAt: "2025-02-10",
         description: "Improved risk management and filters",
         code: `# EMA Bounce v2\n# TODO: add updated strategy code here`,
+        hyperoptStatus: {
+          status: "In progress",
+          startDate: "2025-02-11",
+        },
+        postProcessingStatus: {
+          status: "Fail",
+          startDate: "2025-02-08",
+        },
       },
     ],
   },
@@ -75,6 +92,15 @@ export const INITIAL_STRATEGIES = [
         createdAt: "2025-03-05",
         description: "Initial RSI-based reversion logic",
         code: `# RSI Mean Reversion v3\n# TODO: add strategy code here`,
+        hyperoptStatus: {
+          status: "Fail",
+          startDate: "2025-03-06",
+        },
+        postProcessingStatus: {
+          status: "Completed",
+          startDate: "2025-03-07",
+          finishDate: "2025-03-10",
+        },
       },
     ],
   },

@@ -24,11 +24,7 @@ export const AddIndicatorModal = memo(({ onClose, onAdd, initialType = "RSI" }) 
     }
   }, [selectedType]);
 
-  const handleParamChange = (index, field, value) => {
-    setParams((prev) =>
-      prev.map((p, i) => (i === index ? { ...p, [field]: parseFloat(value) || 0 } : p))
-    );
-  };
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const handleAdd = () => {
     if (!displayName.trim()) {
@@ -72,35 +68,7 @@ export const AddIndicatorModal = memo(({ onClose, onAdd, initialType = "RSI" }) 
           </button>
         </div>
         <div>
-          <label className={cx("block mb-1 text-xs", ui.textMuted)}>Indicator Type</label>
-          <select
-            value={selectedType}
-            onChange={(e) => setSelectedType(e.target.value)}
-            className={cx(ui.input, "h-9")}
-          >
-            {Object.entries(BASE_INDICATORS).map(([key, info]) => (
-              <option key={key} value={key}>
-                {info.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className={cx("block mb-1 text-xs", ui.textMuted)}>Source</label>
-          <select
-            value={source}
-            onChange={(e) => setSource(e.target.value)}
-            className={cx(ui.input, "h-9")}
-          >
-            {SOURCE_OPTIONS.map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className={cx("block mb-1 text-xs", ui.textMuted)}>Display Name</label>
+          <label className={cx("block mb-1 text-xs font-medium text-[#d9d9d9]")}>Display Name</label>
           <input
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
@@ -108,7 +76,7 @@ export const AddIndicatorModal = memo(({ onClose, onAdd, initialType = "RSI" }) 
             placeholder="e.g., rsi, ema, my_indicator"
           />
           <div className={cx("text-[10px]", ui.textMuted, "mt-1")}>
-            This name will be used in formulas (e.g., {displayName || "indicator"}_close_14)
+            Used in formulas (e.g., {displayName || "indicator"}_close_14). Type, source, and parameter ranges use defaults unless you expand options below.
           </div>
         </div>
         {selectedType === "CUSTOM_FORMULA" && (
@@ -126,66 +94,96 @@ export const AddIndicatorModal = memo(({ onClose, onAdd, initialType = "RSI" }) 
             </div>
           </div>
         )}
-        {selectedType !== "CUSTOM_FORMULA" && (
-          <div>
-            <div className={cx("text-xs font-medium text-[#d9d9d9] mb-2")}>
-              Parameter Ranges
+        <details
+          className={cx(ui.radius, "border border-[#303030] bg-[#141414] overflow-hidden")}
+          open={advancedOpen}
+          onToggle={(e) => setAdvancedOpen(e.target.open)}
+        >
+          <summary className="cursor-pointer select-none px-3 py-2 text-[11px] text-[#a6a6a6] hover:bg-[#1a1a1a]">
+            Type, source &amp; parameter ranges (defaults from catalog)
+          </summary>
+          <div className="p-3 pt-0 space-y-3 border-t border-[#303030]">
+            <div>
+              <label className={cx("block mb-1 text-xs", ui.textMuted)}>Indicator Type</label>
+              <select
+                value={selectedType}
+                onChange={(e) => setSelectedType(e.target.value)}
+                className={cx(ui.input, "h-9")}
+              >
+                {Object.entries(BASE_INDICATORS).map(([key, info]) => (
+                  <option key={key} value={key}>
+                    {info.name}
+                  </option>
+                ))}
+              </select>
             </div>
-            <div className="space-y-3">
-              {params.map((param, idx) => (
-                <div key={idx} className={cx(ui.radius, ui.panelMuted, "p-3")}>
-                  <div className="text-[12px] font-medium text-[#d9d9d9] mb-2">
-                    {param.label}
-                  </div>
-                  <div className="grid grid-cols-4 gap-3">
-                    <div>
-                      <label className={cx("block mb-1 text-[10px]", ui.textMuted)}>
-                        Default
-                      </label>
-                      <input
-                        type="number"
-                        value={param.default}
-                        readOnly
-                        className={cx(
-                          ui.input,
-                          "h-8 text-[12px] cursor-not-allowed bg-[#181818]"
-                        )}
-                      />
+            <div>
+              <label className={cx("block mb-1 text-xs", ui.textMuted)}>Source</label>
+              <select
+                value={source}
+                onChange={(e) => setSource(e.target.value)}
+                className={cx(ui.input, "h-9")}
+              >
+                {SOURCE_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {selectedType !== "CUSTOM_FORMULA" && (
+              <div>
+                <div className={cx("text-xs font-medium text-[#d9d9d9] mb-2")}>Parameter Ranges (defaults)</div>
+                <div className="space-y-3">
+                  {params.map((param, idx) => (
+                    <div key={idx} className={cx(ui.radius, ui.panelMuted, "p-3")}>
+                      <div className="text-[12px] font-medium text-[#d9d9d9] mb-2">{param.label}</div>
+                      <div className="grid grid-cols-4 gap-3">
+                        <div>
+                          <label className={cx("block mb-1 text-[10px]", ui.textMuted)}>Default</label>
+                          <input
+                            type="number"
+                            value={param.default}
+                            readOnly
+                            className={cx(ui.input, "h-8 text-[12px] cursor-not-allowed bg-[#181818]")}
+                          />
+                        </div>
+                        <div>
+                          <label className={cx("block mb-1 text-[10px]", ui.textMuted)}>Min</label>
+                          <input
+                            type="number"
+                            value={param.min}
+                            readOnly
+                            className={cx(ui.input, "h-8 text-[12px] cursor-not-allowed bg-[#181818]")}
+                          />
+                        </div>
+                        <div>
+                          <label className={cx("block mb-1 text-[10px]", ui.textMuted)}>Max</label>
+                          <input
+                            type="number"
+                            value={param.max}
+                            readOnly
+                            className={cx(ui.input, "h-8 text-[12px] cursor-not-allowed bg-[#181818]")}
+                          />
+                        </div>
+                        <div>
+                          <label className={cx("block mb-1 text-[10px]", ui.textMuted)}>Step</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={param.step}
+                            readOnly
+                            className={cx(ui.input, "h-8 text-[12px] cursor-not-allowed bg-[#181818]")}
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <label className={cx("block mb-1 text-[10px]", ui.textMuted)}>Min</label>
-                      <input
-                        type="number"
-                        value={param.min}
-                        onChange={(e) => handleParamChange(idx, "min", e.target.value)}
-                        className={cx(ui.input, "h-8 text-[12px]")}
-                      />
-                    </div>
-                    <div>
-                      <label className={cx("block mb-1 text-[10px]", ui.textMuted)}>Max</label>
-                      <input
-                        type="number"
-                        value={param.max}
-                        onChange={(e) => handleParamChange(idx, "max", e.target.value)}
-                        className={cx(ui.input, "h-8 text-[12px]")}
-                      />
-                    </div>
-                    <div>
-                      <label className={cx("block mb-1 text-[10px]", ui.textMuted)}>Step</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={param.step}
-                        onChange={(e) => handleParamChange(idx, "step", e.target.value)}
-                        className={cx(ui.input, "h-8 text-[12px]")}
-                      />
-                    </div>
-                  </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
           </div>
-        )}
+        </details>
         <div className="flex justify-end gap-2 pt-2">
           <button onClick={onClose} className={ui.btn}>
             Cancel

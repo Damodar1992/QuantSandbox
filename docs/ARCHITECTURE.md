@@ -23,8 +23,8 @@ flowchart TB
   components --> constants
 ```
 
-- **`App.jsx`** — корневой layout, переключение экранов (логин / основное приложение), большая часть состояния Strategy Builder и Hyperopt, вложенные таблицы результатов.
-- **`features/builder`** — выносимые части конструктора: `FormulaEditor`, библиотека индикаторов, модалки add/edit indicator, `TableBasedEditor`, и т.д.
+- **`App.jsx`** — корневой layout, переключение экранов (логин / основное приложение), большая часть состояния Strategy Builder и Hyperopt, вложенные таблицы результатов. В `BuilderStepper` секции стратегии (Signal / Entry / Exit) нумеруются **1–6** и сворачиваются через `collapsedSections`: (1) Indicators, (2) Signal/Entry/Exit formula, (3) Indicator Ranges, (4) Hyperoptimization Parameters, (5) Optimization Results, (6) Favorite Epochs (бывшие Best scores).
+- **`features/builder`** — выносимые части конструктора: `FormulaEditor`, `IndicatorLibrary`, `IndicatorRangesPanel`, модалки add/edit indicator, `TableBasedEditor`, и т.д.
 - **`components/*`** — доменные блоки (auth, heatmap, strategies, users, indicators, report, shared).
 - **`constants`** — данные и конфиг без UI: `app.js`, `formulas.js`, `indicators.js`, `heatmap.js`, `ui.js`.
 - **`utils`** — чистые функции (`weights`, `builder`, `mockResults`, `pythonCode`, …).

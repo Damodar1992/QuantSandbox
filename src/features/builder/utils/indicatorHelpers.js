@@ -57,3 +57,97 @@ export function formatIndicatorSnapshot(ind) {
     })
     .join(", ");
 }
+
+function getParam(ind, key) {
+  return Array.isArray(ind?.params) ? ind.params.find((p) => p.key === key) : undefined;
+}
+
+function parseCustomFormulaColumnAliases(customFormula) {
+  if (!customFormula?.trim()) return [];
+  const found = new Set();
+  const re = /dataframe\s*\[\s*(?:f)?['"]([^'"{}\]]+)['"]/g;
+  let m;
+  while ((m = re.exec(customFormula)) !== null) {
+    if (m[1]) found.add(m[1]);
+  }
+  return [...found];
+}
+
+/**
+ * Output column aliases for one indicator (fixed/default branch, aligned with pythonCode.js).
+ */
+export function getIndicatorOutputAliases(ind) {
+  if (!ind?.enabled) return [];
+
+  const src = (ind.source || "Close").toLowerCase();
+  const displayName = ind.displayName || getDefaultDisplayName(ind.type);
+
+  switch (ind.type) {
+    case "RSI": {
+      const p = getParam(ind, "timeperiod");
+      const period = p?.default ?? p?.min ?? 14;
+      return [`${displayName}_${src}_${period}`];
+    }
+    case "EMA": {
+      const p = getParam(ind, "timeperiod");
+      const period = p?.default ?? p?.min ?? 20;
+      return [`${displayName}_${src}_${period}`];
+    }
+    case "MACD":
+      return [`${displayName}_${src}`, `${displayName}_signal_${src}`, `${displayName}_hist_${src}`];
+    case "BBANDS":
+      return [
+        `${displayName}_upper_${src}`,
+        `${displayName}_middle_${src}`,
+        `${displayName}_lower_${src}`,
+        `${displayName}_width_${src}`,
+      ];
+    case "GC_DW":
+      return [`${displayName}_mid`, `${displayName}_upper`, `${displayName}_lower`];
+    case "CUSTOM_FORMULA": {
+      const parsed = parseCustomFormulaColumnAliases(ind.customFormula);
+      return parsed.length ? parsed : [displayName];
+    }
+    default:
+      return displayName ? [displayName] : [];
+  }
+}
+
+export function getIndicatorAlias(ind) {
+  return ind?.displayName || getDefaultDisplayName(ind?.type || "");
+}
+
+/**
+ * @returns {{ indicatorAlias: string, outputAliases: string[] }[]}
+ */
+export function buildIndicatorAliasTree(indicators) {
+  return (indicators || [])
+    .filter((ind) => ind?.enabled)
+    .map((ind) => ({
+      indicatorAlias: getIndicatorAlias(ind),
+      outputAliases: getIndicatorOutputAliases(ind),
+    }))
+    .filter((node) => node.indicatorAlias);
+}
+
+function formatTreeBranch(prefix, isLast) {
+  return `${isLast ? " └─ " : " ├─ "}${prefix}`;
+}
+
+/**
+ * Plain-text hierarchical alias tree for clipboard.
+ */
+export function formatAliasTreeText(tree) {
+  if (!tree?.length) return "";
+
+  return tree
+    .map((node) => {
+      const lines = [node.indicatorAlias];
+      const outputs = node.outputAliases || [];
+      outputs.forEach((alias, i) => {
+        lines.push(formatTreeBranch(alias, i === outputs.length - 1));
+      });
+      return lines.join("\n");
+    })
+    .join("\n\n");
+}
