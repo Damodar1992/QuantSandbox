@@ -1803,6 +1803,45 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
               {!collapsedSections.has(hyperoptSectionNum) && (
               <div className="p-3 space-y-3">
                 <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
+                  <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">
+                    Hyperopt type ({stageCopy.stageTag})
+                  </div>
+                  <div className="flex flex-wrap items-end gap-3">
+                    <div className="space-y-1">
+                      <label className={cx("block text-[11px]", ui.textMuted)}>Hyperopt type</label>
+                      <select
+                        value={hyperoptType}
+                        onChange={(e) => setHyperoptType(e.target.value)}
+                        className={cx(ui.input, "h-9 text-[12px] w-full min-w-[170px]")}
+                      >
+                        <option value="Brute Force">Brute Force</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className={cx("block text-[11px]", ui.textMuted)}>Exchange</label>
+                      <select
+                        value={exchange}
+                        onChange={(e) => setExchange(e.target.value)}
+                        className={cx(ui.input, "h-9 text-[12px] w-full min-w-[170px]")}
+                      >
+                        <option value="binance">binance</option>
+                        <option value="htx">htx</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className={cx("block text-[11px]", ui.textMuted)}>Trading mode</label>
+                      <select
+                        value={tradingMode}
+                        onChange={(e) => setTradingMode(e.target.value)}
+                        className={cx(ui.input, "h-9 text-[12px] w-full min-w-[170px]")}
+                      >
+                        <option value="futures">futures</option>
+                        <option value="spot">spot</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
                   <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">Market configuration</div>
                   <div
                     className={cx(
@@ -1997,45 +2036,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                     </div>
                   )}
                 </div>
-                <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
-                  <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">
-                    Hyperopt type ({stageCopy.stageTag})
-                  </div>
-                  <div className="flex flex-wrap items-end gap-3">
-                    <div className="space-y-1">
-                      <label className={cx("block text-[11px]", ui.textMuted)}>Hyperopt type</label>
-                      <select
-                        value={hyperoptType}
-                        onChange={(e) => setHyperoptType(e.target.value)}
-                        className={cx(ui.input, "h-9 text-[12px] w-full min-w-[170px]")}
-                      >
-                        <option value="Brute Force">Brute Force</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <label className={cx("block text-[11px]", ui.textMuted)}>Exchange</label>
-                      <select
-                        value={exchange}
-                        onChange={(e) => setExchange(e.target.value)}
-                        className={cx(ui.input, "h-9 text-[12px] w-full min-w-[170px]")}
-                      >
-                        <option value="binance">binance</option>
-                        <option value="htx">htx</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <label className={cx("block text-[11px]", ui.textMuted)}>Trading mode</label>
-                      <select
-                        value={tradingMode}
-                        onChange={(e) => setTradingMode(e.target.value)}
-                        className={cx(ui.input, "h-9 text-[12px] w-full min-w-[170px]")}
-                      >
-                        <option value="futures">futures</option>
-                        <option value="spot">spot</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
+
 
                 {/* Intermediate formula and Post-processing are hidden for Brute Force (and on Risk stage) */}
                 {hyperoptType !== "Brute Force" && !isRiskStage && (
