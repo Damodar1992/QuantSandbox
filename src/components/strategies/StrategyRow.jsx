@@ -1,9 +1,10 @@
 import React, { memo } from "react";
+import { cx, ui } from "../../constants/ui";
 import { EyeIcon } from "../common";
 import { PipelineStatusCell } from "./PipelineStatusCell";
 import { RowActionMenu } from "./RowActionMenu";
 
-export const StrategyRow = memo(({ strategy, isExpanded, onToggle, onSelectVersion }) => (
+export const StrategyRow = memo(({ strategy, isExpanded, onToggle, onSelectVersion, onOpenVersionTree }) => (
   <>
     <tr className="bg-[#141414] hover:bg-[#1f1f1f] transition-colors">
       <td className="px-4 py-2 border-b border-[#303030]">
@@ -45,10 +46,20 @@ export const StrategyRow = memo(({ strategy, isExpanded, onToggle, onSelectVersi
           <td className="px-2 py-2 border-b border-[#303030] text-[12px] text-[#d9d9d9]">{strategy.owner}</td>
           <td className="px-2 py-2 border-b border-[#303030] text-[12px] text-[#a6a6a6]">{version.createdAt}</td>
           <td className="px-2 py-2 border-b border-[#303030]">
-            <RowActionMenu
-              onDuplicate={() => alert(`Duplicate strategy: ${strategy.name} v${version.version}`)}
-              onDelete={() => alert(`Delete strategy: ${strategy.name}`)}
-            />
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                type="button"
+                onClick={() => typeof onOpenVersionTree === "function" && onOpenVersionTree(strategy)}
+                className={cx(ui.btn, "h-8 px-2 text-[10px] whitespace-nowrap")}
+                title="Show stage version tree"
+              >
+                Version tree
+              </button>
+              <RowActionMenu
+                onDuplicate={() => alert(`Duplicate strategy: ${strategy.name} v${version.version}`)}
+                onDelete={() => alert(`Delete strategy: ${strategy.name}`)}
+              />
+            </div>
           </td>
         </tr>
       ))}

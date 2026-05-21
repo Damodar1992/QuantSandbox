@@ -81,6 +81,26 @@ import {
   RiskStagePanel,
 } from "./features/builder/components";
 import { getDefaultDisplayName, formatIndicatorSnapshot } from "./features/builder/utils/indicatorHelpers";
+import { getStageVersionsForStrategy } from "./constants/mockStageVersionTree";
+import {
+  STAGE_ID_TO_TYPE,
+  STAGE_TYPE_TO_ID,
+  STAGE_TYPE_LABELS,
+  PARENT_STAGE_TYPE,
+} from "./constants/versioning";
+import {
+  StageVersionSelect,
+  StageVersionCommentButton,
+  StageVersionCommentModal,
+  StageVersionTreeModal,
+  createDefaultVersionSelection,
+  applyVersionChange,
+  selectionFromTreeNode,
+  getAvailableVersions,
+  getVersionBreadcrumb,
+  getVersionById,
+  hasVersionComment,
+} from "./features/versioning";
 
 /**
  * Quant Sandbox CRM Mock — Properly structured React app
@@ -99,6 +119,8 @@ import { getDefaultDisplayName, formatIndicatorSnapshot } from "./features/build
 /* ====================== HeatMap Configuration (imported from components/heatmap) ====================== */
 
 const BuilderStepper = memo(function BuilderStepper({
+  strategyId,
+  strategyName = "",
   activeStage,
   onStageChange,
   pairs,
@@ -111,6 +133,8 @@ const BuilderStepper = memo(function BuilderStepper({
   onTimeFrameEndChange,
   hyperoptRun,
   onHyperoptRunChange,
+  versionComments = {},
+  onOpenVersionComment,
 }) {
   // Indicators state (separate for Signal and Entry)
   const [signalIndicators, setSignalIndicators] = useState([]);
@@ -1544,6 +1568,52 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
 
   const active = stages.find((s) => s.id === activeStage) ?? stages[0];
 
+  const stageVersions = useMemo(
+    () => (strategyId != null ? getStageVersionsForStrategy(strategyId) : []),
+    [strategyId],
+  );
+  const [selectedVersionByStage, setSelectedVersionByStage] = useState(() =>
+    createDefaultVersionSelection(stageVersions),
+  );
+  const [showVersionTree, setShowVersionTree] = useState(false);
+
+  useEffect(() => {
+    if (strategyId == null) return;
+    setSelectedVersionByStage(createDefaultVersionSelection(getStageVersionsForStrategy(strategyId)));
+  }, [strategyId]);
+
+  const versionBreadcrumb = useMemo(
+    () => getVersionBreadcrumb(stageVersions, selectedVersionByStage),
+    [stageVersions, selectedVersionByStage],
+  );
+
+  const handleStageVersionChange = useCallback(
+    (stageType, versionId) => {
+      setSelectedVersionByStage((prev) =>
+        applyVersionChange(prev, stageType, versionId, stageVersions),
+      );
+    },
+    [stageVersions],
+  );
+
+  const handleAddNewStageVersion = useCallback((stageType) => {
+    const label = STAGE_TYPE_LABELS[stageType] ?? stageType;
+    alert(`Add new ${label} version (mock — not persisted)`);
+  }, []);
+
+  const handleTreeNodeSelect = useCallback(
+    (versionId) => {
+      const target = getVersionById(stageVersions, versionId);
+      if (!target) return;
+      setSelectedVersionByStage(selectionFromTreeNode(stageVersions, target));
+      if (typeof onStageChange === "function") {
+        onStageChange(STAGE_TYPE_TO_ID[target.stageType] ?? 1);
+      }
+      setShowVersionTree(false);
+    },
+    [stageVersions, onStageChange],
+  );
+
   const [openRunId, setOpenRunId] = useState(null);
 
   return (
@@ -1562,7 +1632,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
         <span className="rounded-md border border-[#303030] bg-[#0f0f0f] px-2 py-0.5 text-[10px] text-[#8c8c8c]">mock</span>
       </div>
 
-      {/* Horizontal stepper */}
+      {/* Horizontal stepper + per-stage version selects */}
       <div
         className={cx(
           "sticky top-14 z-10 px-3 py-3",
@@ -1570,43 +1640,126 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
           "border-0 border-b border-[#303030] bg-[#1a1a1a]/95 backdrop-blur supports-[backdrop-filter]:bg-[#1a1a1a]/80",
         )}
       >
-        <div className="grid grid-cols-5 gap-2">
-          {stages.map((s) => {
-            const isActive = s.id === activeStage;
-            const isLocked = s.locked;
-            return (
-              <div
-                key={s.id}
-                className={cx(
-                  "rounded-lg border px-2 py-2 flex items-center gap-2",
-                  isActive ? "border-emerald-500/40 bg-emerald-500/10" : "border-[#303030] bg-[#0f0f0f]",
-                  isLocked && "opacity-80 cursor-not-allowed"
-                )}
-                title={s.title}
-                onClick={() => {
-                  if (!isLocked && typeof onStageChange === "function") {
-                    onStageChange(s.id);
-                  }
-                }}
-              >
-                <span
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
+          <div className="grid grid-cols-5 gap-2 flex-1 min-w-0">
+            {stages.map((s) => {
+              const isActive = s.id === activeStage;
+              const isLocked = s.locked;
+              const stageType = STAGE_ID_TO_TYPE[s.id];
+              const versionOptions = getAvailableVersions(
+                stageVersions,
+                stageType,
+                selectedVersionByStage,
+              );
+              const parentType = PARENT_STAGE_TYPE[stageType];
+              const versionDisabled = parentType && !selectedVersionByStage[parentType];
+
+              return (
+                <div
+                  key={s.id}
                   className={cx(
-                    "inline-flex h-7 w-7 items-center justify-center rounded-md border",
-                    isActive ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200" : "border-[#303030] bg-[#141414] text-[#a6a6a6]"
+                    "rounded-lg border px-2 py-2 flex items-center gap-2 min-w-0",
+                    isActive ? "border-emerald-500/40 bg-emerald-500/10" : "border-[#303030] bg-[#0f0f0f]",
+                    isLocked && "opacity-80",
                   )}
+                  title={s.title}
                 >
-                  {s.icon}
-                </span>
-                <div className="min-w-0">
-                  <div className={cx("text-[12px] font-medium truncate", isActive ? "text-emerald-100" : "text-[#d9d9d9]")}>
-                    {s.label}
+                  <div
+                    role="button"
+                    tabIndex={isLocked ? -1 : 0}
+                    className={cx(
+                      "flex items-center gap-2 min-w-0 flex-1",
+                      isLocked ? "cursor-not-allowed" : "cursor-pointer",
+                    )}
+                    onClick={() => {
+                      if (!isLocked && typeof onStageChange === "function") {
+                        onStageChange(s.id);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (isLocked) return;
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        if (typeof onStageChange === "function") onStageChange(s.id);
+                      }
+                    }}
+                  >
+                    <span
+                      className={cx(
+                        "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border",
+                        isActive
+                          ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+                          : "border-[#303030] bg-[#141414] text-[#a6a6a6]",
+                      )}
+                    >
+                      {s.icon}
+                    </span>
+                    <div
+                      className={cx(
+                        "min-w-0 flex-1 text-[12px] font-medium truncate",
+                        isActive ? "text-emerald-100" : "text-[#d9d9d9]",
+                      )}
+                    >
+                      {s.label}
+                    </div>
                   </div>
+                  <StageVersionSelect
+                    value={selectedVersionByStage[stageType]}
+                    options={versionOptions}
+                    disabled={versionDisabled}
+                    placeholder={versionDisabled ? "—" : "Select"}
+                    onChange={(versionId) => handleStageVersionChange(stageType, versionId)}
+                    onAddNewVersion={() => handleAddNewStageVersion(stageType)}
+                    className="w-[4.25rem] shrink-0 flex-none"
+                  />
+                  <StageVersionCommentButton
+                    disabled={versionDisabled || !selectedVersionByStage[stageType]}
+                    hasComment={hasVersionComment(
+                      versionComments,
+                      selectedVersionByStage[stageType],
+                    )}
+                    onClick={() => {
+                      const version = getVersionById(
+                        stageVersions,
+                        selectedVersionByStage[stageType],
+                      );
+                      if (version && typeof onOpenVersionComment === "function") {
+                        onOpenVersionComment(version);
+                      }
+                    }}
+                  />
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowVersionTree(true)}
+            className={cx(
+              ui.btn,
+              "h-7 shrink-0 px-2 text-[10px] whitespace-nowrap self-center",
+            )}
+            title="Show full version hierarchy"
+          >
+            Version tree
+          </button>
         </div>
+        {versionBreadcrumb.length > 0 && (
+          <div className={cx("mt-2 text-[10px]", ui.textMuted)}>
+            {versionBreadcrumb.join(" → ")}
+          </div>
+        )}
       </div>
+
+      <StageVersionTreeModal
+        open={showVersionTree}
+        onClose={() => setShowVersionTree(false)}
+        versions={stageVersions}
+        strategyName={strategyName}
+        selectedByStage={selectedVersionByStage}
+        commentsByVersionId={versionComments}
+        onSelectNode={handleTreeNodeSelect}
+      />
 
       {/* Stage content */}
       <div className="p-3">
@@ -4982,6 +5135,50 @@ export default function App() {
   const [showEditDescription, setShowEditDescription] = useState(false);
   const [editDescriptionDraft, setEditDescriptionDraft] = useState("");
 
+  // Stage version tree from strategies list
+  const [versionTreeListStrategy, setVersionTreeListStrategy] = useState(null);
+  const [listVersionByStage, setListVersionByStage] = useState(() =>
+    createDefaultVersionSelection([]),
+  );
+
+  const listStageVersions = useMemo(
+    () => (versionTreeListStrategy ? getStageVersionsForStrategy(versionTreeListStrategy.id) : []),
+    [versionTreeListStrategy],
+  );
+
+  useEffect(() => {
+    if (!versionTreeListStrategy) return;
+    setListVersionByStage(
+      createDefaultVersionSelection(getStageVersionsForStrategy(versionTreeListStrategy.id)),
+    );
+  }, [versionTreeListStrategy]);
+
+  const [versionComments, setVersionComments] = useState({});
+  const [versionCommentTarget, setVersionCommentTarget] = useState(null);
+
+  const handleOpenVersionComment = useCallback((version) => {
+    if (!version) return;
+    setVersionCommentTarget({
+      id: version.id,
+      label: version.label,
+      lineageCode: version.lineageCode,
+      stageType: version.stageType,
+    });
+  }, []);
+
+  const handleSaveVersionComment = useCallback((versionId, text) => {
+    setVersionComments((prev) => {
+      const trimmed = text.trim();
+      if (!trimmed) {
+        const next = { ...prev };
+        delete next[versionId];
+        return next;
+      }
+      return { ...prev, [versionId]: trimmed };
+    });
+    setVersionCommentTarget(null);
+  }, []);
+
   // Filters
   const [filterName, setFilterName] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
@@ -5249,6 +5446,26 @@ export default function App() {
     [strategies]
   );
 
+  const handleOpenListVersionTree = useCallback((strategy) => {
+    setVersionTreeListStrategy({ id: strategy.id, name: strategy.name });
+  }, []);
+
+  const handleListVersionTreeNodeSelect = useCallback(
+    (versionId) => {
+      const target = getVersionById(listStageVersions, versionId);
+      if (!target || !versionTreeListStrategy) return;
+
+      const strategy = strategies.find((s) => s.id === versionTreeListStrategy.id);
+      const flatVersion = strategy?.versions[0];
+      if (flatVersion) {
+        handleSelectVersion(versionTreeListStrategy.id, flatVersion.id);
+        setBuilderStage(STAGE_TYPE_TO_ID[target.stageType] ?? 1);
+      }
+      setVersionTreeListStrategy(null);
+    },
+    [listStageVersions, versionTreeListStrategy, strategies, handleSelectVersion],
+  );
+
   const openEditDescription = useCallback(() => {
     if (!selectedStrategy) return;
     setEditDescriptionDraft(selectedStrategy.v.description || "");
@@ -5431,10 +5648,21 @@ export default function App() {
                     isExpanded={expandedStrategies.has(strategy.id)}
                     onToggle={toggleExpanded}
                     onSelectVersion={handleSelectVersion}
+                    onOpenVersionTree={handleOpenListVersionTree}
                   />
                 ))}
               </tbody>
             </table>
+
+            <StageVersionTreeModal
+              open={versionTreeListStrategy != null}
+              onClose={() => setVersionTreeListStrategy(null)}
+              versions={listStageVersions}
+              strategyName={versionTreeListStrategy?.name ?? ""}
+              selectedByStage={listVersionByStage}
+              commentsByVersionId={versionComments}
+              onSelectNode={handleListVersionTreeNodeSelect}
+            />
           </div>
         )}
 
@@ -5557,6 +5785,8 @@ export default function App() {
             {detailTab === "Strategy Builder" && (
               <div className="space-y-4">
                 <BuilderStepper
+                  strategyId={selectedStrategy.s.id}
+                  strategyName={selectedStrategy.s.name}
                   activeStage={builderStage}
                   onStageChange={setBuilderStage}
                   pairs={builderPairs}
@@ -5569,6 +5799,8 @@ export default function App() {
                   onTimeFrameEndChange={setBuilderTimeFrameEnd}
                   hyperoptRun={builderHyperoptRun}
                   onHyperoptRunChange={setBuilderHyperoptRun}
+                  versionComments={versionComments}
+                  onOpenVersionComment={handleOpenVersionComment}
                 />
               </div>
             )}
@@ -5769,6 +6001,16 @@ export default function App() {
           onSave={saveEditDescription}
         />
       )}
+
+      <StageVersionCommentModal
+        open={versionCommentTarget != null}
+        target={versionCommentTarget}
+        initialComment={
+          versionCommentTarget ? versionComments[versionCommentTarget.id] ?? "" : ""
+        }
+        onClose={() => setVersionCommentTarget(null)}
+        onSave={handleSaveVersionComment}
+      />
 
       {showForgot && (
         <ForgotPasswordModal

@@ -25,6 +25,7 @@ flowchart TB
 
 - **`App.jsx`** — корневой layout, переключение экранов (логин / основное приложение), большая часть состояния Strategy Builder и Hyperopt, вложенные таблицы результатов. В `BuilderStepper` секции стратегии (Signal / Entry / Exit) нумеруются **1–6** и сворачиваются через `collapsedSections`: (1) Indicators, (2) Signal/Entry/Exit formula, (3) Indicator Ranges, (4) Hyperoptimization Parameters, (5) Optimization Results, (6) Favorite Epochs (бывшие Best scores).
 - **`features/builder`** — выносимые части конструктора: `FormulaEditor`, `IndicatorLibrary`, `IndicatorRangesPanel`, модалки add/edit indicator, `TableBasedEditor`, и т.д.
+- **`features/versioning`** — UI-мок иерархии версий стейджей (Signal→Final): dropdown на табах `BuilderStepper`, модалка дерева; данные в `constants/mockStageVersionTree.js`, логика фильтрации в `features/versioning/utils/versionSelection.js`.
 - **`components/*`** — доменные блоки (auth, heatmap, strategies, users, indicators, report, shared).
 - **`constants`** — данные и конфиг без UI: `app.js`, `formulas.js`, `indicators.js`, `heatmap.js`, `ui.js`.
 - **`utils`** — чистые функции (`weights`, `builder`, `mockResults`, `pythonCode`, …).
@@ -37,6 +38,7 @@ flowchart TB
 | Переиспользование на нескольких экранах | `src/components/<домен>/` + при необходимости barrel `index.js` |
 | Новые константы формул / шаблонов | `src/constants/formulas.js` (или новый файл в `constants/` с экспортом) |
 | Новые мок-списки приложения | `src/constants/app.js` или отдельный файл в `constants/` |
+| Версии стейджей (lineage-дерево) | `src/constants/versioning.js`, `src/constants/mockStageVersionTree.js` |
 | Общий хук | `src/hooks/` |
 
 Не вводить новый глобальный state-manager без явной задачи: по умолчанию `useState` / `useMemo` / `useCallback` в `App.jsx` или в дочерних компонентах.
