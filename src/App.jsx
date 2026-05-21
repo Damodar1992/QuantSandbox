@@ -54,6 +54,7 @@ import { Logo, Badge, MoreIcon, EyeIcon, MenuIcon, ModalShell } from "./componen
 import { LoginScreen, ForgotPasswordModal } from "./components/auth";
 import { Header } from "./components/shared";
 import { CreateStrategyModal, EditDescriptionModal, StrategyRow } from "./components/strategies";
+import { AgentChatWidget } from "./components/chat";
 import { GenerateReportModal } from "./components/report";
 import {
   HeatMapView,
@@ -5439,6 +5440,7 @@ export default function App() {
 
         {/* Strategy detail */}
         {activeSection === "Strategies" && selectedStrategy && (
+          <>
           <div className={cx(ui.radius, ui.panel, "p-5 space-y-5")}>
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
@@ -5581,6 +5583,14 @@ export default function App() {
               </div>
             )}
           </div>
+          <AgentChatWidget
+            strategyName={selectedStrategy.s.name}
+            versionLabel={`v${selectedStrategy.v.version}`}
+            activeStage={builderStage}
+            detailTab={detailTab}
+            sessionKey={`${selectedStrategy.s.id}-${selectedStrategy.v.id}`}
+          />
+          </>
         )}
 
         {/* Users page (mock) */}
