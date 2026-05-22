@@ -1741,7 +1741,24 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
             )}
             title="Show full version hierarchy"
           >
-            Version tree
+            <span className="inline-flex items-center gap-1.5">
+              <svg
+                viewBox="0 0 24 24"
+                className="h-3.5 w-3.5 shrink-0"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <circle cx="6" cy="6" r="2.5" />
+                <circle cx="6" cy="18" r="2.5" />
+                <circle cx="18" cy="12" r="2.5" />
+                <path d="M6 8.5v7M6 12h8.5a2.5 2.5 0 0 0 0-5H6" />
+              </svg>
+              Version tree
+            </span>
           </button>
         </div>
         {versionBreadcrumb.length > 0 && (
@@ -5529,9 +5546,6 @@ export default function App() {
     );
   }
 
-  const current = selectedStrategy?.s ?? null;
-  const versions = current?.versions ?? [];
-
   return (
     <div className={cx("min-h-screen", ui.page, "flex flex-col")}>
       <Header
@@ -5674,22 +5688,6 @@ export default function App() {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-[14px] font-semibold text-[#f5f5f5] truncate">{selectedStrategy.s.name}</h2>
-
-                  <select
-                    value={selectedStrategy.v.id}
-                    onChange={(e) => handleSelectVersion(selectedStrategy.s.id, Number(e.target.value))}
-                    className={ui.select}
-                    aria-label="Version"
-                    title="Version"
-                  >
-                    {versions.map((v) => (
-                      <option key={v.id} value={v.id}>
-                        v{v.version}
-                      </option>
-                    ))}
-                  </select>
-
-                  <Badge status={selectedStrategy.v.status} />
                 </div>
 
                 <p className={cx("mt-1 text-[12px]", ui.textMuted)}>
