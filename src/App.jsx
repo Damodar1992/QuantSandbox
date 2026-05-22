@@ -3750,7 +3750,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                               <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">MFE</th>
                               <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">MAE</th>
                               <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">AIR</th>
-                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">normStability</th>
+                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">HitRate</th>
                               <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Indicators</th>
                               <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Source</th>
                               <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Actions</th>
