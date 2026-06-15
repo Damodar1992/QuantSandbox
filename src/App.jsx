@@ -52,9 +52,8 @@ import { generateMockResults } from "./utils/mockResults";
 import { useOutsideClose } from "./hooks/useOutsideClose";
 import { Logo, Badge, MoreIcon, EyeIcon, MenuIcon, ModalShell } from "./components/common";
 import { LoginScreen, ForgotPasswordModal } from "./components/auth";
-import { Header } from "./components/shared";
+import { Header, TableViewIcon, CardViewIcon } from "./components/shared";
 import { CreateStrategyModal, EditDescriptionModal, StrategyRow } from "./components/strategies";
-import { AgentChatWidget } from "./components/chat";
 import { GenerateReportModal } from "./components/report";
 import {
   HeatMapView,
@@ -79,6 +78,8 @@ import {
   FormulaEditor,
   CodeEditor,
   RiskStagePanel,
+  HyperoptResultCard,
+  HyperoptRunDetail,
 } from "./features/builder/components";
 import { getDefaultDisplayName, formatIndicatorSnapshot } from "./features/builder/utils/indicatorHelpers";
 import { getStageVersionsForStrategy } from "./constants/mockStageVersionTree";
@@ -953,6 +954,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
     {
       id: "hr1",
       date: "2024-01-15",
+      status: "Done",
       pairs: "BTC/USDT",
       timeFrame: "1h",
       knowRange: "2020-01-01 – 2023-06-01",
@@ -971,6 +973,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
     {
       id: "hr2",
       date: "2024-01-14",
+      status: "In Progress",
       pairs: "ETH/USDT",
       timeFrame: "4h",
       knowRange: "2021-01-01 – 2023-09-01",
@@ -1615,6 +1618,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
   );
 
   const [openRunId, setOpenRunId] = useState(null);
+  const [resultsViewMode, setResultsViewMode] = useState("table");
 
   return (
     <div className={cx(ui.radius, ui.panel, "overflow-visible")}>
@@ -3236,7 +3240,39 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                     Hyperopt result
                   </div>
                   <div className="px-3 py-2 border-b border-[#303030] bg-[#141414]">
-                    <div className="flex items-center justify-end">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="inline-flex rounded-md border border-[#303030] bg-[#0f0f0f] p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setResultsViewMode("table")}
+                          className={cx(
+                            "h-6 w-6 inline-flex items-center justify-center rounded transition-colors",
+                            resultsViewMode === "table"
+                              ? "bg-emerald-500 text-[#0f0f0f]"
+                              : "text-[#a6a6a6] hover:text-[#d9d9d9]",
+                          )}
+                          aria-pressed={resultsViewMode === "table"}
+                          title="Table view"
+                          aria-label="Table view"
+                        >
+                          <TableViewIcon className="h-3.5 w-3.5 shrink-0" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setResultsViewMode("card")}
+                          className={cx(
+                            "h-6 w-6 inline-flex items-center justify-center rounded transition-colors",
+                            resultsViewMode === "card"
+                              ? "bg-emerald-500 text-[#0f0f0f]"
+                              : "text-[#a6a6a6] hover:text-[#d9d9d9]",
+                          )}
+                          aria-pressed={resultsViewMode === "card"}
+                          title="Card view"
+                          aria-label="Card view"
+                        >
+                          <CardViewIcon className="h-3.5 w-3.5 shrink-0" />
+                        </button>
+                      </div>
                       <div className="relative" ref={hyperoptTagFilterRef}>
                         <button
                           type="button"
@@ -3281,6 +3317,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                       </div>
                     </div>
                   </div>
+                  {resultsViewMode === "table" && (
                   <div className="overflow-x-auto">
                     <table className="w-full border-collapse text-[11px]">
                       <thead className="bg-[#1a1a1a] text-[#8c8c8c]">
@@ -3696,6 +3733,84 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                       </tbody>
                     </table>
                   </div>
+                  )}
+                  {resultsViewMode === "card" && (
+                  <div className="p-3">
+                    {(() => {
+                      const openRun = filteredHyperoptResultsRows.find((r) => r.id === openRunId);
+                      const showSource = isEntryStage || isExitStage || isRiskStage;
+                      const sourceText = selectedStageSource
+                        ? (selectedStageSource.label || "Best result")
+                        : "—";
+                      const sourceTitle = selectedStageSource
+                        ? `${selectedStageSource.label || "Best result"} · S:${formatBestMetric(selectedStageSource.score)} · MFE:${formatBestMetric(selectedStageSource.mfe)} · MAE:${formatBestMetric(selectedStageSource.mae)} · AIR:${formatBestMetric(selectedStageSource.air)} · normStability:${formatBestMetric(selectedStageSource.stability)}`
+                        : "—";
+                      const showPostProcessing = hyperoptRun !== "Pipeline";
+
+                      if (openRun) {
+                        return (
+                          <HyperoptRunDetail
+                            run={openRun}
+                            showSource={showSource}
+                            sourceText={sourceText}
+                            sourceTitle={sourceTitle}
+                            showPostProcessing={showPostProcessing}
+                            onBack={() => setOpenRunId(null)}
+                            onPostProcessing={() => setShowNormalizationModal(true)}
+                            onTagsComments={(row) => openHyperoptMetaModal(row)}
+                            onShowHyperoptDetails={() => {
+                              setHyperoptDetailsModalType("hyperopt");
+                              setShowHyperoptDetailsModal(true);
+                            }}
+                            onShowPostProcessingDetails={() => {
+                              setHyperoptDetailsModalType("post-processing");
+                              setShowHyperoptDetailsModal(true);
+                            }}
+                            onConfigureHeatMap={(heatMapId) => setHeatMapConfigModalId(heatMapId)}
+                            onGenerateReport={() => setShowReportModal(true)}
+                            onAddTruncate={(sub) => {
+                              setSelectedNormalizationRow(sub);
+                              setShowTruncateModal(true);
+                            }}
+                            onShowHeatmap={(heatMapId) => setHeatMapViewModalId(heatMapId)}
+                            onDownloadReport={() => setShowReportModal(true)}
+                            onShowItemFilters={(item) => setHeatmapItemFiltersModalItem(item)}
+                          />
+                        );
+                      }
+
+                      if (filteredHyperoptResultsRows.length === 0) {
+                        return (
+                          <div className={cx(ui.radius, ui.panelMuted, "p-3 text-[11px]", ui.textMuted)}>
+                            No optimization runs match the current filter.
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                          {filteredHyperoptResultsRows.map((row) => (
+                            <HyperoptResultCard
+                              key={row.id}
+                              row={row}
+                              showSource={showSource}
+                              sourceText={sourceText}
+                              sourceTitle={sourceTitle}
+                              showPostProcessing={showPostProcessing}
+                              onOpen={(id) => setOpenRunId(id)}
+                              onPostProcessing={() => setShowNormalizationModal(true)}
+                              onTagsComments={(r) => openHyperoptMetaModal(r)}
+                              onShowDetails={() => {
+                                setHyperoptDetailsModalType("hyperopt");
+                                setShowHyperoptDetailsModal(true);
+                              }}
+                            />
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                  )}
                 </div>
               </div>
               )}
@@ -5146,7 +5261,7 @@ export default function App() {
   const [builderTimeRange, setBuilderTimeRange] = useState("15m");
   const [builderTimeFrameStart, setBuilderTimeFrameStart] = useState("2020-01-01");
   const [builderTimeFrameEnd, setBuilderTimeFrameEnd] = useState("2023-12-31");
-  const [builderHyperoptRun, setBuilderHyperoptRun] = useState("Pipeline");
+  const [builderHyperoptRun, setBuilderHyperoptRun] = useState("Admin run");
 
   // Edit description modal
   const [showEditDescription, setShowEditDescription] = useState(false);
@@ -5813,13 +5928,6 @@ export default function App() {
               </div>
             )}
           </div>
-          <AgentChatWidget
-            strategyName={selectedStrategy.s.name}
-            versionLabel={`v${selectedStrategy.v.version}`}
-            activeStage={builderStage}
-            detailTab={detailTab}
-            sessionKey={`${selectedStrategy.s.id}-${selectedStrategy.v.id}`}
-          />
           </>
         )}
 

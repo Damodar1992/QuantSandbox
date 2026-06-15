@@ -19,7 +19,7 @@ export const Header = memo(function Header({
   queueItems = [],
   onQueueReorder,
   onQueueRemove,
-  hyperoptRun = "Pipeline",
+  hyperoptRun = "Admin run",
   onHyperoptRunChange,
 }) {
   const queueRef = useOutsideClose(queueOpen, onQueueClose);
