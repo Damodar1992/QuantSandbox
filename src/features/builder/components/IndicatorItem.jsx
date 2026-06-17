@@ -1,5 +1,6 @@
 import React, { memo } from "react";
 import { cx, ui } from "../../../constants/ui";
+import { crmAccent, crmSurface } from "../../../constants/crmAccent";
 import { BASE_INDICATORS } from "../../../constants/indicators";
 
 export const IndicatorItem = memo(({ indicator, index, total, onEdit, onDelete, variant = "default" }) => {
@@ -17,14 +18,16 @@ export const IndicatorItem = memo(({ indicator, index, total, onEdit, onDelete, 
       <div
         className={cx(
           ui.radius,
-          "border p-3 transition-all border-[#303030] bg-[#0f0f0f]",
+          "border p-3 transition-all",
+          crmSurface.border,
+          crmSurface.input,
         )}
       >
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 mb-1 flex-wrap">
-              <span className="text-[12px] font-medium text-[#d9d9d9]">{indicator.displayName || indicator.name}</span>
-              <span className="text-[10px] px-2 py-0.5 rounded border border-[#303030] bg-[#0f0f0f] text-[#8c8c8c]">
+              <span className={cx("text-[12px] font-medium", crmSurface.text)}>{indicator.displayName || indicator.name}</span>
+              <span className={cx("text-[10px] px-2 py-0.5 rounded border text-muted-foreground", crmSurface.border, crmSurface.input)}>
                 {indicator.type}
               </span>
               {baseInfo && (
@@ -74,20 +77,20 @@ export const IndicatorItem = memo(({ indicator, index, total, onEdit, onDelete, 
         ui.radius,
         "border p-3 transition-all",
         indicator.enabled
-          ? "border-[#303030] bg-[#0f0f0f]"
-          : "border-[#303030] bg-[#0f0f0f]/50 opacity-60"
+          ? cx(crmSurface.border, crmSurface.input)
+          : cx(crmSurface.border, crmSurface.input, "opacity-60")
       )}
     >
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <span className="text-[12px] font-medium text-[#d9d9d9]">{indicator.name}</span>
+            <span className={cx("text-[12px] font-medium", crmSurface.text)}>{indicator.name}</span>
             {indicator.displayName && (
-              <span className="text-[10px] px-2 py-0.5 rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 font-medium">
+              <span className={cx("text-[10px] px-2 py-0.5 rounded border font-medium", crmAccent.border, crmAccent.bg, crmAccent.textMuted)}>
                 Display: {indicator.displayName}
               </span>
             )}
-            <span className="text-[10px] px-2 py-0.5 rounded border border-[#303030] bg-[#0f0f0f] text-[#8c8c8c]">
+            <span className={cx("text-[10px] px-2 py-0.5 rounded border text-muted-foreground", crmSurface.border, crmSurface.input)}>
               {indicator.type}
             </span>
             {baseInfo && (
@@ -106,11 +109,11 @@ export const IndicatorItem = memo(({ indicator, index, total, onEdit, onDelete, 
                 {baseInfo.group}
               </span>
             )}
-            <span className="text-[10px] px-2 py-0.5 rounded border border-[#303030] bg-[#0f0f0f] text-[#8c8c8c]">
+            <span className={cx("text-[10px] px-2 py-0.5 rounded border text-muted-foreground", crmSurface.border, crmSurface.input)}>
               Source: {indicator.source}
             </span>
             {combinations > 1 && (
-              <span className="text-[10px] px-2 py-0.5 rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 font-medium">
+              <span className={cx("text-[10px] px-2 py-0.5 rounded border font-medium", crmAccent.border, crmAccent.bg, crmAccent.textMuted)}>
                 {combinations.toLocaleString()} combinations
               </span>
             )}

@@ -1,5 +1,6 @@
 import React from "react";
-import { cx } from "../../../constants/ui";
+import { cx, ui } from "../../../constants/ui";
+import { crmAccent } from "../../../constants/crmAccent";
 import { formatVersionOptionTitle } from "../utils/versionSelection";
 
 /** Sentinel value for the “Add new version” row (not a real version id). */
@@ -37,14 +38,15 @@ export function StageVersionSelect({
         if (typeof onChange === "function") onChange(next);
       }}
       className={cx(
-        "h-7 min-w-0 max-w-full rounded-md border border-[#303030] bg-[#0f0f0f] px-1.5 text-[10px] text-[#d9d9d9]",
-        "focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30",
+        ui.select,
+        "h-7 min-w-0 max-w-full px-1.5 text-[10px]",
+        crmAccent.ring,
         isSelectDisabled && "opacity-50 cursor-not-allowed",
         className,
       )}
     >
       {canAddNew && (
-        <option value={ADD_NEW_VERSION_VALUE} className="text-emerald-300">
+        <option value={ADD_NEW_VERSION_VALUE} className={crmAccent.textMuted}>
           Add new version
         </option>
       )}

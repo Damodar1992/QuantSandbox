@@ -1,6 +1,9 @@
 import React, { memo } from "react";
 import { cx, ui } from "../../../../constants/ui";
+import { crmAccent, crmSurface } from "../../../../constants/crmAccent";
 import { HyperoptDetailsTooltip } from "../../../../components/heatmap";
+import { AppButton } from "../../../../components/common/AppButton";
+import { formatHyperoptDateTime } from "../../utils/hyperoptFormatters";
 import { RunStatusBadge } from "./RunStatusBadge";
 
 /**
@@ -32,15 +35,20 @@ export const HyperoptResultCard = memo(function HyperoptResultCard({
       }}
       className={cx(
         ui.radius,
-        "group flex flex-col gap-2 border border-[#303030] border-l-4 border-l-emerald-500 bg-[#141414] p-3",
-        "cursor-pointer hover:bg-[#1a1a1a] hover:border-l-emerald-400 transition-colors",
-        "focus:outline-none focus:ring-2 focus:ring-emerald-500/40",
+        "group flex flex-col gap-2 border border-l-4 p-3",
+        crmSurface.border,
+        crmAccent.borderL,
+        crmSurface.panel,
+        "cursor-pointer transition-colors",
+        crmAccent.borderLHover,
+        "hover:bg-muted focus:outline-none focus:ring-2",
+        crmAccent.ring,
       )}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2 min-w-0">
-            <div className="text-[12px] font-semibold text-[#f5f5f5]">{row.date}</div>
+            <div className={cx("text-[12px] font-semibold", crmSurface.textBright)}>{formatHyperoptDateTime(row.date)}</div>
             <RunStatusBadge status={row.status} />
           </div>
           <div className="mt-0.5 text-[10px] text-[#8c8c8c]">
@@ -104,28 +112,16 @@ export const HyperoptResultCard = memo(function HyperoptResultCard({
         onClick={(e) => e.stopPropagation()}
       >
         {showPostProcessing && (
-          <button
-            type="button"
-            onClick={() => onPostProcessing?.()}
-            className={cx(ui.btnPrimary, "h-7 px-2 text-[10px] whitespace-nowrap")}
-          >
+          <AppButton type="button" variant="default" size="xs" onClick={() => onPostProcessing?.()}>
             Post-processing
-          </button>
+          </AppButton>
         )}
-        <button
-          type="button"
-          onClick={() => onTagsComments?.(row)}
-          className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
-        >
+        <AppButton type="button" variant="outline" size="xs" onClick={() => onTagsComments?.(row)}>
           Tags &amp; comments
-        </button>
-        <button
-          type="button"
-          onClick={() => onOpen?.(row.id)}
-          className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap ml-auto")}
-        >
+        </AppButton>
+        <AppButton type="button" variant="outline" size="xs" className="ml-auto" onClick={() => onOpen?.(row.id)}>
           Open
-        </button>
+        </AppButton>
       </div>
     </div>
   );

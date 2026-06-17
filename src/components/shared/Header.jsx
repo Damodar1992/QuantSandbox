@@ -2,6 +2,7 @@ import React, { memo, useCallback, useEffect, useState } from "react";
 import { cx, ui } from "../../constants/ui";
 import { useOutsideClose } from "../../hooks/useOutsideClose";
 import { Logo, MenuIcon } from "../common";
+import { UiVariantToggle } from "../prod";
 import { QueueIcon, DragHandleIcon, TrashIcon } from "./Icons";
 
 export const Header = memo(function Header({
@@ -168,6 +169,7 @@ export const Header = memo(function Header({
         </div>
 
         <div ref={queueRef} className="relative flex items-center gap-3">
+          <UiVariantToggle />
           <select
             value={hyperoptRun}
             onChange={(e) => onHyperoptRunChange?.(e.target.value)}

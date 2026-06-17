@@ -1,0 +1,47 @@
+/** Design token objects for legacy vs prod (reference + future codegen). */
+export const themeLegacy = {
+  colors: {
+    page: "#0f0f0f",
+    foreground: "#d9d9d9",
+    muted: "#8c8c8c",
+    subtle: "#a6a6a6",
+    panel: "#141414",
+    panelMuted: "#1f1f1f",
+    border: "#303030",
+    primary: "#10b981",
+    primaryForeground: "#0f0f0f",
+    success: "#34d399",
+    successBg: "#022c22",
+  },
+  fontSize: { base: "14px", sm: "12px", xs: "11px", h3: "16px" },
+  fontFamily: "system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+};
+
+export const themeProd = {
+  colors: {
+    page: "#0f0d1e",
+    pageDeep: "#0f0a1e",
+    foreground: "#faf7fd",
+    muted: "#b8aecc",
+    subtle: "#6e6682",
+    panel: "#170f29",
+    panelMuted: "#19102b",
+    elevated: "#170f29",
+    navPill: "#251937",
+    border: "rgba(60, 40, 80, 0.35)",
+    primary: "#6d28d9",
+    primaryForeground: "#faf7fd",
+    accent: "#a78bfa",
+    accentLight: "#ddd6fe",
+    accentBg: "rgba(168, 96, 240, 0.16)",
+    stepActive: "#1e1333",
+    stepIcon: "#2c1b46",
+    stepConnector: "#4c2c72",
+    success: "#34d399",
+    successBg: "#022c22",
+    danger: "#ef4444",
+    warning: "#feca16",
+  },
+  fontSize: { base: "14px", sm: "12px", xs: "11px", h3: "16.38px" },
+  fontFamily: "Inter, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+};

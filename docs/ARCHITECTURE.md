@@ -35,7 +35,7 @@ flowchart TB
 | Задача | Папка |
 |--------|--------|
 | UI только для этапа Builder / сигналов | `src/features/builder/components/` или `.../utils/` |
-| Переиспользование на нескольких экранах | `src/components/<домен>/` + при необходимости barrel `index.js` |
+| Переиспользование на нескольких экранах | `src/components/<домен>/` + bridge в `src/components/common/` (`AppButton`, …) |
 | Новые константы формул / шаблонов | `src/constants/formulas.js` (или новый файл в `constants/` с экспортом) |
 | Новые мок-списки приложения | `src/constants/app.js` или отдельный файл в `constants/` |
 | Версии стейджей (lineage-дерево) | `src/constants/versioning.js`, `src/constants/mockStageVersionTree.js` |
@@ -45,8 +45,13 @@ flowchart TB
 
 ## Стили и UI-примитивы
 
-- Утилиты **Tailwind**; для склейки классов часто используется **`cx`** (см. импорты в `App.jsx` и компонентах).
-- Общие токены/классы панелей — **`src/constants/ui.js`** (`ui.*`), по возможности переиспользовать.
+- Утилиты **Tailwind CSS v4** (`@tailwindcss/vite`); для склейки классов — **`cx`** (`src/constants/ui.js`) или **`cn`** (`src/lib/utils.js` для shadcn).
+- **Dual-theme (legacy / prod)**: переключатель `UI: Legacy / Prod` в header; `localStorage.uiVariant` или `VITE_UI_THEME=legacy|prod`; на `<html>` выставляется `data-ui`. Откат: `localStorage.setItem('uiVariant','legacy')` + reload.
+- **Токены**: `src/constants/ui.legacy.js` (замороженный baseline), `src/constants/ui.prod.js`, фасад `ui.js` → `getUiTokens()`. CSS variables в `src/index.css` для `:root[data-ui="legacy"]` и `:root[data-ui="prod"]`.
+- **Prod layout**: `builderLayout` = `horizontal` (legacy) | `sidebar` (prod); компоненты в `src/components/prod/`, `src/features/builder/layout/`.
+- **h2d**: снимки прода декодируются `node scripts/h2d-decode.mjs <file.h2d>`.
+- **shadcn/ui (Radix Nova)**: примитивы в **`src/components/ui/`**; bridge в **`src/components/common/`** (`AppButton`, …).
+- Новые примитивы: `npm run ui:add -- <component>`; `npm run ui:add:overwrite -- <component>` — осторожно, сбрасывает кастомизацию.
 
 ## Данные и моки
 

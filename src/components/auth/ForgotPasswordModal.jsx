@@ -1,23 +1,29 @@
 import React, { memo } from "react";
 import { cx, ui } from "../../constants/ui";
-import { ModalShell } from "../common";
+import { AppButton } from "../common/AppButton";
+import { AppDialog } from "../common/AppDialog";
+import { AppInput } from "../common/AppInput";
 
 export const ForgotPasswordModal = memo(({ email, onEmailChange, onClose, onSend }) => (
-  <ModalShell title="Reset password" onClose={onClose}>
+  <AppDialog open onOpenChange={(open) => !open && onClose?.()} title="Reset password">
     <div className="space-y-4">
-      <div className={cx("text-[12px]", ui.textSubtle)}>Enter your email and we'll send a password reset link. (Mock)</div>
-      <div>
-        <label className={cx("block mb-1 text-xs", ui.textMuted)}>Email</label>
-        <input value={email} onChange={(e) => onEmailChange(e.target.value)} className={ui.input} placeholder="you@example.com" />
+      <div className={cx("text-[12px]", ui.textSubtle)}>
+        Enter your email and we&apos;ll send a password reset link. (Mock)
       </div>
+      <AppInput
+        label="Email"
+        value={email}
+        onChange={(e) => onEmailChange(e.target.value)}
+        placeholder="you@example.com"
+      />
       <div className="flex justify-end gap-2 pt-2">
-        <button onClick={onClose} className={ui.btn}>
+        <AppButton onClick={onClose} variant="outline">
           Cancel
-        </button>
-        <button onClick={onSend} className={ui.btnPrimary} disabled={!email.trim()} title={!email.trim() ? "Enter an email" : "Send"}>
+        </AppButton>
+        <AppButton onClick={onSend} variant="default" disabled={!email.trim()} title={!email.trim() ? "Enter an email" : "Send"}>
           Send reset link
-        </button>
+        </AppButton>
       </div>
     </div>
-  </ModalShell>
+  </AppDialog>
 ));

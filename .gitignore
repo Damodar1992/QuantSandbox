@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Graphify (local cost tracking only; graph artifacts are committable)
+graphify-out/cost.json
+graphify-out/cache/

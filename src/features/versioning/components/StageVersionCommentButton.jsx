@@ -1,5 +1,6 @@
 import React from "react";
 import { cx } from "../../../constants/ui";
+import { crmAccent, crmSurface } from "../../../constants/crmAccent";
 
 function CommentIcon({ className }) {
   return (
@@ -35,17 +36,20 @@ export function StageVersionCommentButton({
       title={hasComment ? "Edit comment" : "Add comment"}
       aria-label={hasComment ? "Edit comment" : "Add comment"}
       className={cx(
-        "relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[#303030] bg-[#0f0f0f] text-[#a6a6a6]",
-        "hover:bg-[#1f1f1f] hover:text-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-emerald-500/40",
-        hasComment && "border-emerald-500/50 text-emerald-200/90",
-        disabled && "opacity-40 cursor-not-allowed hover:bg-[#0f0f0f] hover:text-[#a6a6a6]",
+        "relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border text-muted-foreground",
+        crmSurface.border,
+        crmSurface.input,
+        "hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2",
+        crmAccent.ring,
+        hasComment && cx(crmAccent.border, crmAccent.textStrong),
+        disabled && cx("opacity-40 cursor-not-allowed", "hover:bg-background hover:text-muted-foreground"),
         className,
       )}
     >
       <CommentIcon className="h-3.5 w-3.5" />
       {hasComment && (
         <span
-          className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-emerald-400 ring-2 ring-[#0f0f0f]"
+          className={cx("absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full ring-2 ring-background", crmAccent.dot)}
           aria-hidden
         />
       )}

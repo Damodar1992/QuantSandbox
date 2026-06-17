@@ -1,0 +1,5 @@
+# Code-only graph (no LLM API key required for docs/PDFs).
+# Index application source; skip docs, assets, build output.
+*
+!src/
+!src/**

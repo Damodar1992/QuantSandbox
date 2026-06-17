@@ -1,8 +1,9 @@
 import React, { memo, useMemo } from "react";
 import { cx } from "../../constants/ui";
+import { crmAccent, crmSurface } from "../../constants/crmAccent";
 
 const STATUS_STYLES = {
-  Completed: "bg-emerald-500/10 text-emerald-200 border-emerald-500/40",
+  Completed: `${crmAccent.bg} ${crmAccent.textStrong} ${crmAccent.border}`,
   "In progress": "bg-blue-500/10 text-blue-200 border-blue-500/40",
   Fail: "bg-red-500/10 text-red-200 border-red-500/40",
 };
@@ -12,7 +13,7 @@ function StatusBadge({ status }) {
     <span
       className={cx(
         "inline-flex items-center rounded-md px-2 py-0.5 text-[11px] leading-4 border",
-        STATUS_STYLES[status] || "bg-white/5 text-[#8c8c8c] border-[#303030]",
+        STATUS_STYLES[status] || "bg-white/5 text-muted-foreground border-border",
       )}
     >
       {status}
@@ -34,7 +35,7 @@ export const PipelineStatusCell = memo(function PipelineStatusCell({ pipeline })
   }, [pipeline]);
 
   if (!pipeline?.status) {
-    return <span className="text-[12px] text-[#595959]">—</span>;
+    return <span className="text-[12px] text-muted-foreground">—</span>;
   }
 
   const hasTooltip = Boolean(tooltip);
@@ -47,7 +48,9 @@ export const PipelineStatusCell = memo(function PipelineStatusCell({ pipeline })
           role="tooltip"
           className={cx(
             "pointer-events-none absolute left-0 bottom-full z-[100] mb-1.5 min-w-[10rem]",
-            "rounded-md border border-[#303030] bg-[#1f1f1f] px-2.5 py-2 text-[11px] leading-relaxed text-[#d9d9d9] shadow-lg",
+            "rounded-md border px-2.5 py-2 text-[11px] leading-relaxed shadow-lg",
+            crmSurface.border,
+            "bg-secondary text-foreground",
             "whitespace-pre-line opacity-0 transition-opacity duration-150",
             "group-hover:opacity-100",
           )}

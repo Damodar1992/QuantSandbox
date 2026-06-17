@@ -1,67 +1,61 @@
 import React, { memo } from "react";
 import { cx, ui } from "../../constants/ui";
+import { crmSurface } from "../../constants/crmAccent";
 import { EyeIcon } from "../common";
-import { PipelineStatusCell } from "./PipelineStatusCell";
 import { RowActionMenu } from "./RowActionMenu";
 
-export const StrategyRow = memo(({ strategy, isExpanded, onToggle, onSelectVersion, onOpenVersionTree }) => (
-  <>
-    <tr className="bg-[#141414] hover:bg-[#1f1f1f] transition-colors">
-      <td className="px-4 py-2 border-b border-[#303030]">
-        <button className="inline-flex items-center gap-2 text-emerald-300 hover:text-emerald-200" onClick={() => onToggle(strategy.id)}>
-          <span className="flex h-4 w-4 items-center justify-center rounded border border-[#303030] bg-[#0f0f0f] text-[11px] text-[#a6a6a6]">
-            {isExpanded ? "-" : "+"}
-          </span>
-          <span className="font-medium">{strategy.name}</span>
-          <span className="text-[11px] text-[#8c8c8c]">({strategy.versions.length} versions)</span>
-        </button>
-      </td>
-      <td colSpan={6} className="border-b border-[#303030]" />
-    </tr>
+function getLatestVersion(strategy) {
+  const versions = strategy.versions ?? [];
+  return versions[versions.length - 1] ?? null;
+}
 
-    {isExpanded &&
-      strategy.versions.map((version) => (
-        <tr key={version.id} className="bg-[#141414] hover:bg-[#1f1f1f] transition-colors">
-          <td className="px-6 py-2 border-b border-[#303030]">
-            <div className="flex items-center gap-2">
-              <span className="rounded-md border border-[#303030] bg-[#0f0f0f] px-2 py-0.5 text-[11px] text-[#a6a6a6]">v{version.version}</span>
-              <button
-                type="button"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#303030] bg-[#0f0f0f] text-[#a6a6a6] hover:bg-[#1f1f1f]"
-                onClick={() => onSelectVersion(strategy.id, version.id)}
-                title="View"
-                aria-label="View"
-              >
-                <EyeIcon />
-              </button>
-            </div>
-          </td>
-          <td className="px-2 py-2 border-b border-[#303030] text-[12px] text-[#a6a6a6]">{version.description}</td>
-          <td className="px-2 py-2 border-b border-[#303030] align-middle overflow-visible">
-            <PipelineStatusCell pipeline={version.hyperoptStatus} />
-          </td>
-          <td className="px-2 py-2 border-b border-[#303030] align-middle overflow-visible">
-            <PipelineStatusCell pipeline={version.postProcessingStatus} />
-          </td>
-          <td className="px-2 py-2 border-b border-[#303030] text-[12px] text-[#d9d9d9]">{strategy.owner}</td>
-          <td className="px-2 py-2 border-b border-[#303030] text-[12px] text-[#a6a6a6]">{version.createdAt}</td>
-          <td className="px-2 py-2 border-b border-[#303030]">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <button
-                type="button"
-                onClick={() => typeof onOpenVersionTree === "function" && onOpenVersionTree(strategy)}
-                className={cx(ui.btn, "h-8 px-2 text-[10px] whitespace-nowrap")}
-                title="Show stage version tree"
-              >
-                Version tree
-              </button>
-              <RowActionMenu
-                onDuplicate={() => alert(`Duplicate strategy: ${strategy.name} v${version.version}`)}
-                onDelete={() => alert(`Delete strategy: ${strategy.name}`)}
-              />
-            </div>
-          </td>
-        </tr>
-      ))}
-  </>
-));
+export const StrategyRow = memo(({ strategy, onSelectVersion, onOpenVersionTree }) => {
+  const version = getLatestVersion(strategy);
+
+  return (
+    <tr className={cx(crmSurface.panel, "hover:bg-secondary transition-colors")}>
+      <td className={cx("px-4 py-2 border-b", crmSurface.border)}>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className={cx(
+              "inline-flex h-8 w-8 items-center justify-center rounded-md border text-muted-foreground hover:bg-secondary",
+              crmSurface.border,
+              crmSurface.input,
+            )}
+            onClick={() => version && onSelectVersion(strategy.id, version.id)}
+            title="View"
+            aria-label="View"
+            disabled={!version}
+          >
+            <EyeIcon />
+          </button>
+          <span className="font-medium">{strategy.name}</span>
+        </div>
+      </td>
+      <td className={cx("px-2 py-2 border-b text-[12px] text-muted-foreground", crmSurface.border)}>
+        {version?.description ?? "—"}
+      </td>
+      <td className={cx("px-2 py-2 border-b text-[12px]", crmSurface.border, crmSurface.text)}>{strategy.owner}</td>
+      <td className={cx("px-2 py-2 border-b text-[12px] text-muted-foreground", crmSurface.border)}>
+        {version?.createdAt ?? "—"}
+      </td>
+      <td className={cx("px-2 py-2 border-b", crmSurface.border)}>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <button
+            type="button"
+            onClick={() => typeof onOpenVersionTree === "function" && onOpenVersionTree(strategy)}
+            className={cx(ui.btn, "h-8 px-2 text-[10px] whitespace-nowrap")}
+            title="Show stage version tree"
+          >
+            Version tree
+          </button>
+          <RowActionMenu
+            onDuplicate={() => alert(`Duplicate strategy: ${strategy.name}`)}
+            onDelete={() => alert(`Delete strategy: ${strategy.name}`)}
+          />
+        </div>
+      </td>
+    </tr>
+  );
+});

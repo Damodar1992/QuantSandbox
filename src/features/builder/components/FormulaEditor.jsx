@@ -1,10 +1,51 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Editor from "@monaco-editor/react";
 import { cx, ui } from "../../../constants/ui";
+import { isProdUi } from "../../../constants/uiVariant";
+import { crmAccent, successAccent } from "../../../constants/crmAccent";
 import { TableBasedEditor } from "./TableBasedEditor";
 import { getDefaultDisplayName, getIndicatorOutputAliases } from "../utils/indicatorHelpers";
 import { IndicatorAliasesPanel } from "./IndicatorAliasesPanel";
-export const FormulaEditor = memo(({ value, onChange, indicators, mode = "signal" }) => {
+import { registerMonacoThemes, getMonacoThemeId } from "../utils/monacoThemes";
+
+function CodeModeIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <polyline points="16 18 22 12 16 6" />
+      <polyline points="8 6 2 12 8 18" />
+    </svg>
+  );
+}
+
+function BuilderModeIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+      <rect x="14" y="14" width="7" height="7" rx="1" />
+    </svg>
+  );
+}
+
+function LockIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
+  );
+}
+
+function CheckIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
+
+export const FormulaEditor = memo(({ value, onChange, indicators, mode = "signal", editingLocked = false }) => {
   const editorRef = useRef(null);
   const monacoRef = useRef(null);
   const [editorMode, setEditorMode] = useState('python'); // 'python' | 'table'
@@ -12,6 +53,9 @@ export const FormulaEditor = memo(({ value, onChange, indicators, mode = "signal
   const [pythonCodeManuallyEdited, setPythonCodeManuallyEdited] = useState(false);
   const [generatedPythonCode, setGeneratedPythonCode] = useState('');
   const [aliasesOpen, setAliasesOpen] = useState(false);
+  const modeActiveClass = isProdUi()
+    ? "bg-[rgba(168,96,240,0.16)] text-[#ddd6fe] font-medium"
+    : "bg-emerald-500/20 text-emerald-300 font-medium";
   
   // Initialize table rules if empty
   useEffect(() => {
@@ -113,27 +157,7 @@ export const FormulaEditor = memo(({ value, onChange, indicators, mode = "signal
       }
     });
     
-    // Define theme
-    monaco.editor.defineTheme('tradingDark', {
-      base: 'vs-dark',
-      inherit: true,
-      rules: [
-        { token: 'comment', foreground: '6A9955', fontStyle: 'italic' },
-        { token: 'keyword', foreground: 'C586C0' },
-        { token: 'keyword.control', foreground: '10B981', fontStyle: 'bold' },
-        { token: 'constant.language', foreground: '569CD6' },
-        { token: 'number', foreground: 'B5CEA8' },
-        { token: 'operator', foreground: 'D4D4D4' },
-      ],
-      colors: {
-        'editor.background': '#0f0f0f',
-        'editor.foreground': '#d9d9d9',
-        'editorLineNumber.foreground': '#595959',
-        'editor.lineHighlightBackground': '#1f1f1f',
-        'editor.selectionBackground': '#264f78',
-        'editorCursor.foreground': '#10B981',
-      }
-    });
+    registerMonacoThemes(monaco);
     
     // Register completion provider for autocomplete
     monaco.languages.registerCompletionItemProvider('tradingFormula', {
@@ -209,13 +233,13 @@ export const FormulaEditor = memo(({ value, onChange, indicators, mode = "signal
       fontFamily: 'Monaco, Menlo, "Courier New", monospace',
       minimap: { enabled: false },
       scrollBeyondLastLine: false,
-      renderLineHighlight: 'all',
+      renderLineHighlight: 'line',
       renderWhitespace: 'none',
       automaticLayout: true,
+      'semanticHighlighting.enabled': false,
     });
     
-    // Set dark theme for Python editor
-    monaco.editor.setTheme('vs-dark');
+    monaco.editor.setTheme(getMonacoThemeId());
   }, []);
   
   // Convert code to table rules
@@ -552,7 +576,211 @@ def custom_exit(self, pair: str, trade, current_time, current_rate, current_prof
     setPythonCodeManuallyEdited(false);
     onChange(generatedPythonCode);
   }, [generatedPythonCode, onChange]);
-  
+
+  const prod = isProdUi();
+  const monacoTheme = getMonacoThemeId();
+  const editorReadOnly = editingLocked;
+
+  const renderModeSwitcher = (variant = "legacy") => {
+    const isProdToggle = variant === "prod";
+    const wrapClass = isProdToggle
+      ? "inline-flex items-center rounded-lg bg-[#251937] p-0.5"
+      : "flex border border-[#303030] rounded overflow-hidden";
+
+    const btnClass = (targetMode) => {
+      const active = editorMode === targetMode;
+      if (isProdToggle) {
+        return active
+          ? "bg-violet-700 text-[#faf7fd]"
+          : "text-[#b8aecc] hover:text-[#faf7fd]";
+      }
+      return active
+        ? modeActiveClass
+        : "bg-[#1a1a1a] text-[#8c8c8c] hover:text-[#d9d9d9]";
+    };
+
+    return (
+      <div className={wrapClass}>
+        <button
+          type="button"
+          onClick={() => handleModeSwitch("python")}
+          className={cx(
+            "inline-flex h-7 items-center gap-1.5 px-3 transition-colors",
+            isProdToggle ? "text-[11px]" : "text-[10px]",
+            btnClass("python"),
+          )}
+          title="Python Code Editor"
+        >
+          {isProdToggle ? <CodeModeIcon className="h-3.5 w-3.5 shrink-0" /> : "🐍 Python"}
+        </button>
+        <button
+          type="button"
+          onClick={() => handleModeSwitch("table")}
+          className={cx(
+            "inline-flex h-7 items-center gap-1.5 px-3 transition-colors",
+            isProdToggle ? "text-[11px]" : "text-[10px] border-l border-[#303030]",
+            btnClass("table"),
+          )}
+          title="Builder"
+        >
+          <BuilderModeIcon className="h-3.5 w-3.5 shrink-0" />
+          Builder
+        </button>
+      </div>
+    );
+  };
+
+  const renderTips = (variant = "legacy") => (
+    <div
+      className={cx(
+        "px-3 py-2 text-[10px] border-0 border-t",
+        ui.divider,
+        variant === "prod"
+          ? cx("border-l-4", successAccent.borderL, successAccent.bg, successAccent.text)
+          : ui.textMuted,
+      )}
+    >
+      💡 <strong>Tips:</strong> Click &quot;Add New Rule&quot; to create trading conditions •{" "}
+      Combine multiple conditions with{" "}
+      <code className={variant === "prod" ? "text-[var(--crm-success)]" : "text-amber-300"}>AND</code>/
+      <code className={variant === "prod" ? "text-[var(--crm-success)]" : "text-amber-300"}>OR</code> •{" "}
+      Switch to Code mode to see generated formula
+    </div>
+  );
+
+  const editorOptions = {
+    fontSize: 13,
+    lineHeight: 20,
+    fontFamily: 'Monaco, Menlo, "Courier New", monospace',
+    minimap: { enabled: false },
+    scrollBeyondLastLine: false,
+    renderLineHighlight: "line",
+    renderWhitespace: "none",
+    automaticLayout: true,
+    wordWrap: "on",
+    lineNumbers: "on",
+    glyphMargin: false,
+    folding: true,
+    lineDecorationsWidth: 0,
+    lineNumbersMinChars: 3,
+    renderValidationDecorations: "on",
+    tabSize: 4,
+    insertSpaces: true,
+    readOnly: editorReadOnly,
+    "semanticHighlighting.enabled": false,
+  };
+
+  if (prod) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-end gap-2">
+          {renderModeSwitcher("prod")}
+          {editorMode === "python" && pythonCodeManuallyEdited && (
+            <button
+              type="button"
+              onClick={handleResetPythonCode}
+              className="h-7 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 text-[10px] text-amber-200 hover:bg-amber-500/20"
+              title="Reset to auto-generated code"
+            >
+              Reset
+            </button>
+          )}
+        </div>
+
+        {editingLocked && (
+          <div className="flex items-start gap-2 rounded-md border border-amber-500/25 bg-[#2a1f0a] px-3 py-2.5 text-[11px] text-amber-200">
+            <LockIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+            <span>
+              Hyperopt results exist. Signal editing is locked to preserve optimization integrity.
+            </span>
+          </div>
+        )}
+
+        {editorMode === "python" ? (
+          <>
+            {pythonCodeManuallyEdited && !editingLocked && (
+              <div className="rounded-md border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+                ⚠️ <strong>Warning:</strong> This code has been manually edited. Changes made in Builder mode will overwrite your manual edits.{" "}
+                <button type="button" onClick={handleResetPythonCode} className="underline hover:text-amber-100">
+                  Reset
+                </button>{" "}
+                to restore auto-generated code.
+              </div>
+            )}
+
+            <div className="overflow-hidden rounded-lg border border-[rgba(60,40,80,0.35)]">
+              <div className="flex" style={{ height: 400 }}>
+                  <div className="relative min-w-0 flex-1 bg-[#110e1f]" style={{ height: 400 }}>
+                  <div className="pointer-events-none absolute right-2 top-2 z-10">
+                    <button
+                      type="button"
+                      onClick={() => setAliasesOpen((v) => !v)}
+                      className={cx(
+                        "pointer-events-auto inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] transition-colors",
+                        aliasesOpen
+                          ? cx(crmAccent.bg, crmAccent.textMuted)
+                          : "text-[#b8aecc] hover:text-[#ddd6fe]",
+                      )}
+                      title="View indicator aliases"
+                    >
+                      <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                        <circle cx="6" cy="6" r="3" />
+                        <circle cx="6" cy="18" r="3" />
+                        <path d="M8.12 8.12 12 12M8.12 15.88 12 12M12 12h8" />
+                      </svg>
+                      Aliases
+                    </button>
+                  </div>
+                  <Editor
+                    height="400px"
+                    defaultLanguage="python"
+                    language="python"
+                    theme={monacoTheme}
+                    value={value}
+                    onChange={(newValue) => handlePythonCodeChange(newValue || "")}
+                    beforeMount={handleEditorWillMount}
+                    onMount={handleEditorDidMount}
+                    loading={<div className="h-full w-full bg-[#110e1f]" />}
+                    options={editorOptions}
+                  />
+                </div>
+                <IndicatorAliasesPanel
+                  indicators={indicators}
+                  open={aliasesOpen}
+                  onClose={() => setAliasesOpen(false)}
+                  className="h-[400px]"
+                />
+              </div>
+
+              <div className="flex items-center justify-between border-t border-[rgba(60,40,80,0.35)] px-3 py-2.5">
+                <span className={cx("inline-flex items-center gap-1.5 text-[11px] font-medium", successAccent.text)}>
+                  <CheckIcon className="h-3.5 w-3.5" />
+                  Validated
+                </span>
+                <button type="button" className={cx(ui.btnPrimary, "h-8 px-4 text-[11px]")}>
+                  Validate
+                </button>
+              </div>
+            </div>
+
+            {renderTips("prod")}
+          </>
+        ) : (
+          <>
+            <div className="overflow-hidden rounded-lg border border-[rgba(60,40,80,0.35)] p-3" style={{ maxHeight: "600px", overflowY: "auto" }}>
+              <TableBasedEditor
+                rules={tableRules}
+                onChange={handleTableRulesChange}
+                groupedVars={groupedVars}
+              />
+            </div>
+            {renderTips("prod")}
+          </>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
       <div className={cx("flex items-center justify-between px-3 py-2", ui.panelMuted, "border-0 border-b", ui.divider)}>
@@ -568,39 +796,7 @@ def custom_exit(self, pair: str, trade, current_time, current_rate, current_prof
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {/* Mode Switcher */}
-          <div className="flex border border-[#303030] rounded overflow-hidden">
-            <button
-              onClick={() => handleModeSwitch('python')}
-              className={cx(
-                "h-7 px-3 text-[10px] transition-colors",
-                editorMode === 'python' 
-                  ? "bg-emerald-500/20 text-emerald-300 font-medium" 
-                  : "bg-[#1a1a1a] text-[#8c8c8c] hover:text-[#d9d9d9]"
-              )}
-              title="Python Code Editor"
-            >
-              🐍 Python
-            </button>
-            <button
-              onClick={() => handleModeSwitch('table')}
-              className={cx(
-                "h-7 px-3 text-[10px] transition-colors border-l border-[#303030] inline-flex items-center gap-1.5",
-                editorMode === 'table' 
-                  ? "bg-emerald-500/20 text-emerald-300 font-medium" 
-                  : "bg-[#1a1a1a] text-[#8c8c8c] hover:text-[#d9d9d9]"
-              )}
-              title="Builder"
-            >
-              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="7" height="7" rx="1" />
-                <rect x="14" y="3" width="7" height="7" rx="1" />
-                <rect x="3" y="14" width="7" height="7" rx="1" />
-                <rect x="14" y="14" width="7" height="7" rx="1" />
-              </svg>
-              Builder
-            </button>
-          </div>
+          {renderModeSwitcher("legacy")}
           
           {editorMode === 'python' && (
             <>
@@ -639,34 +835,18 @@ def custom_exit(self, pair: str, trade, current_time, current_rate, current_prof
             </div>
           )}
           <div className="flex" style={{ height: 400 }}>
-            <div className="relative flex-1 min-w-0" style={{ height: 400 }}>
+            <div className="relative flex-1 min-w-0 bg-[#0f0f0f]" style={{ height: 400 }}>
               <Editor
                 height="400px"
                 defaultLanguage="python"
                 language="python"
-                theme="vs-dark"
+                theme={monacoTheme}
                 value={value}
                 onChange={(newValue) => handlePythonCodeChange(newValue || '')}
+                beforeMount={handleEditorWillMount}
                 onMount={handleEditorDidMount}
-                options={{
-                  fontSize: 13,
-                  lineHeight: 20,
-                  fontFamily: 'Monaco, Menlo, "Courier New", monospace',
-                  minimap: { enabled: false },
-                  scrollBeyondLastLine: false,
-                  renderLineHighlight: 'all',
-                  renderWhitespace: 'none',
-                  automaticLayout: true,
-                  wordWrap: 'on',
-                  lineNumbers: 'on',
-                  glyphMargin: false,
-                  folding: true,
-                  lineDecorationsWidth: 0,
-                  lineNumbersMinChars: 3,
-                  renderValidationDecorations: 'on',
-                  tabSize: 4,
-                  insertSpaces: true,
-                }}
+                loading={<div className="h-full w-full bg-[#0f0f0f]" />}
+                options={editorOptions}
               />
             </div>
             <IndicatorAliasesPanel
@@ -693,11 +873,7 @@ def custom_exit(self, pair: str, trade, current_time, current_rate, current_prof
             />
           </div>
           
-          <div className={cx("px-3 py-2 text-[10px]", ui.textMuted, "border-0 border-t", ui.divider)}>
-            💡 <strong>Tips:</strong> Click "Add New Rule" to create trading conditions • 
-            Combine multiple conditions with <code className="text-amber-300">AND</code>/<code className="text-amber-300">OR</code> • 
-            Switch to Code mode to see generated formula
-          </div>
+          {renderTips("legacy")}
         </>
       )}
     </div>

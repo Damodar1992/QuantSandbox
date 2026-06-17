@@ -18,7 +18,7 @@
 
 - **React 18** — UI
 - **Vite 5** — сборка и dev-сервер
-- **Tailwind CSS 3** — стили
+- **Tailwind CSS 4** — стили (+ **shadcn/ui** примитивы в `src/components/ui/`)
 - **@monaco-editor/react** — редактор кода в Builder
 - **JavaScript (ES modules)** — без TypeScript
 
@@ -63,6 +63,7 @@ QuantSandbox/
 │       ├── report/
 │       ├── shared/
 │       ├── strategies/
+│       ├── ui/                  # shadcn/ui примитивы (Button, Dialog, Badge, …)
 │       └── users/
 ├── docs/
 │   └── ARCHITECTURE.md          # Карта модулей и соглашения

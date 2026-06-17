@@ -12,6 +12,8 @@
 - **Builder UI**: новые компоненты конструктора — в `src/features/builder/`; общие — в `src/components/<домен>/`.
 - **Константы и формулы** — `src/constants/` (часто `formulas.js`, `app.js`).
 - **Таблицы Hyperopt**: при правках разметки проверять `colSpan` у раскрывающихся строк и ключи `Set` для expand/collapse (см. ARCHITECTURE).
+- **shadcn/ui**: новые UI-примитивы — из `src/components/ui/` (Radix). Bridge: `AppButton`, … в `src/components/common/`. `npm run ui:add -- <name>`.
+- **Dual-theme (legacy / prod)**: `ui.legacy.js` не редактировать; prod-токены в `ui.prod.js`; переключатель в header (`UI: Legacy / Prod`) или `VITE_UI_THEME=prod`. Откат: `localStorage.uiVariant='legacy'` + reload. Prod layout: sidebar шагов, `HeaderProd`, компоненты в `src/components/prod/`.
 
 ## Быстрые команды
 

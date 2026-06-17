@@ -4,6 +4,7 @@ import Editor from "@monaco-editor/react";
 
 // Import constants from separate files
 import { cx, ui } from "./constants/ui";
+import { isProdUi, resolveBuilderLayout } from "./constants/uiVariant";
 import { SECTIONS, DISABLED_SECTIONS, PAIR_OPTIONS, TIME_RANGES, INITIAL_STRATEGIES, MOCK_OPTIMIZATION_RUNS } from "./constants/app";
 import { SOURCE_OPTIONS, MA_TYPES, INDICATOR_GROUPS, BASE_INDICATORS } from "./constants/indicators";
 import { HEATMAP_FILTER_KEYS, FILTER_OPERATIONS } from "./constants/heatmap";
@@ -52,7 +53,11 @@ import { generateMockResults } from "./utils/mockResults";
 import { useOutsideClose } from "./hooks/useOutsideClose";
 import { Logo, Badge, MoreIcon, EyeIcon, MenuIcon, ModalShell } from "./components/common";
 import { LoginScreen, ForgotPasswordModal } from "./components/auth";
-import { Header, TableViewIcon, CardViewIcon } from "./components/shared";
+import { Header, HeaderProd, TableViewIcon, CardViewIcon } from "./components/shared";
+import { UiVariantToggle } from "./components/prod";
+import { BuilderStageNavHorizontal } from "./features/builder/layout/BuilderStageNav";
+import { BuilderSectionShell } from "./features/builder/layout/BuilderSectionShell";
+import { BuilderStepsSidebar } from "./components/prod";
 import { CreateStrategyModal, EditDescriptionModal, StrategyRow } from "./components/strategies";
 import { GenerateReportModal } from "./components/report";
 import {
@@ -70,18 +75,24 @@ import {
   StageIcon,
   IndicatorLibrary,
   IndicatorItem,
+  SelectedIndicatorCard,
+  selectedIndicatorsGridClass,
   AddIndicatorModal,
   EditIndicatorModal,
   IndicatorRangesPanel,
+  TotalCombinationsBadge,
   CollapsibleSelect,
   TableBasedEditor,
   FormulaEditor,
-  CodeEditor,
   RiskStagePanel,
   HyperoptResultCard,
+  HyperoptResultListItem,
+  HyperoptResultDrawer,
   HyperoptRunDetail,
+  RunStatusBadge,
 } from "./features/builder/components";
 import { getDefaultDisplayName, formatIndicatorSnapshot } from "./features/builder/utils/indicatorHelpers";
+import { formatHyperoptDateTime, normalizeHyperoptRunStatus } from "./features/builder/utils/hyperoptFormatters";
 import { getStageVersionsForStrategy } from "./constants/mockStageVersionTree";
 import {
   STAGE_ID_TO_TYPE,
@@ -108,7 +119,7 @@ import {
  * - Login + Forgot Password (mock)
  * - Header navigation (Backtesting disabled, Users available)
  * - Strategies list (expand versions)
- * - Strategy detail (tabs: Strategy Builder / Strategy Code)
+ * - Strategy detail (Strategy Builder)
  * - Edit version description modal
  * - Builder: Run Optimization + Optimization Runs table + row-details HeatMap
  * 
@@ -215,6 +226,10 @@ const BuilderStepper = memo(function BuilderStepper({
   const [riskHyperoptType, setRiskHyperoptType] = useState("Brute Force");
   const [riskExchange, setRiskExchange] = useState("binance");
   const [riskTradingMode, setRiskTradingMode] = useState("futures");
+  const [signalSyntheticDataset, setSignalSyntheticDataset] = useState("dataset1");
+  const [entrySyntheticDataset, setEntrySyntheticDataset] = useState("dataset1");
+  const [exitSyntheticDataset, setExitSyntheticDataset] = useState("dataset1");
+  const [riskSyntheticDataset, setRiskSyntheticDataset] = useState("dataset1");
   const [signalFoldSize, setSignalFoldSize] = useState("");
   const [includeIncompleteFold, setIncludeIncompleteFold] = useState(false);
   const maxPossibleStd = pickByStage(activeStage, {
@@ -289,6 +304,25 @@ const BuilderStepper = memo(function BuilderStepper({
     exit: setExitTradingMode,
     risk: setRiskTradingMode,
   });
+  const syntheticDataset = pickByStage(activeStage, {
+    signal: signalSyntheticDataset,
+    entry: entrySyntheticDataset,
+    exit: exitSyntheticDataset,
+    risk: riskSyntheticDataset,
+  });
+  const setSyntheticDataset = pickByStage(activeStage, {
+    signal: setSignalSyntheticDataset,
+    entry: setEntrySyntheticDataset,
+    exit: setExitSyntheticDataset,
+    risk: setRiskSyntheticDataset,
+  });
+  const isSyntheticExchange = exchange === "synthetic";
+  const syntheticDatasetPair = syntheticDataset === "dataset2" ? "ETC/USDT" : "BTC/USDT";
+  useEffect(() => {
+    if (isSyntheticExchange && pairs !== syntheticDatasetPair) {
+      onPairsChange?.(syntheticDatasetPair);
+    }
+  }, [isSyntheticExchange, syntheticDatasetPair, pairs, onPairsChange]);
   // Best results are tracked independently per stage
   const [signalBestResults, setSignalBestResults] = useState([]);
   const [entryBestResults, setEntryBestResults] = useState([]);
@@ -953,8 +987,8 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
   const [hyperoptResultsRows, setHyperoptResultsRows] = useState(() => [
     {
       id: "hr1",
-      date: "2024-01-15",
-      status: "Done",
+      date: "2024-01-15T16:09:00",
+      status: "Completed",
       pairs: "BTC/USDT",
       timeFrame: "1h",
       knowRange: "2020-01-01 – 2023-06-01",
@@ -962,17 +996,17 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
       tags: ["baseline", "btc"],
       comment: "First production sweep; watch drawdown in unknow range.",
       children: [
-      { id: "hr1-1", date: "2024-01-15", minScore: "0.20", avgScore: "0.55", maxScore: "0.99", foldSize: "24", truncScores: { min: "-0.14", avg: "-0.45", max: "0.84" }, heatmapsAndReports: [
-        { id: "hr1-1-h1", date: "2024-01-15", type: "Heatmap" },
-        { id: "hr1-1-r1", date: "2024-01-15", type: "Report" },
+      { id: "hr1-1", date: "2024-01-15T12:04:00", status: "Finished", minScore: "0.20", avgScore: "0.55", maxScore: "0.99", foldSize: "24", truncScores: { min: "-0.14", avg: "-0.45", max: "0.84" }, heatmapsAndReports: [
+        { id: "hr1-1-h1", date: "2024-01-15", type: "Heatmap", status: "Finished" },
+        { id: "hr1-1-r1", date: "2024-01-15", type: "Report", status: "Completed" },
       ]},
-      { id: "hr1-2", date: "2024-01-16", minScore: "0.18", avgScore: "0.52", maxScore: "0.87", heatmapsAndReports: [
-        { id: "hr1-2-h1", date: "2024-01-16", type: "Heatmap" },
+      { id: "hr1-2", date: "2024-01-16T10:15:00", status: "Finished", minScore: "0.18", avgScore: "0.52", maxScore: "0.87", heatmapsAndReports: [
+        { id: "hr1-2-h1", date: "2024-01-16", type: "Heatmap", status: "Finished" },
       ]},
     ]},
     {
       id: "hr2",
-      date: "2024-01-14",
+      date: "2024-01-14T11:58:00",
       status: "In Progress",
       pairs: "ETH/USDT",
       timeFrame: "4h",
@@ -981,9 +1015,9 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
       tags: ["eth", "4h"],
       comment: "Needs re-run after fee model update.",
       children: [
-      { id: "hr2-1", date: "2024-01-14", minScore: "0.22", avgScore: "0.58", maxScore: "0.91", heatmapsAndReports: [
-        { id: "hr2-1-h1", date: "2024-01-14", type: "Heatmap" },
-        { id: "hr2-1-r1", date: "2024-01-14", type: "Report" },
+      { id: "hr2-1", date: "2024-01-14T09:22:00", status: "Finished", minScore: "0.22", avgScore: "0.58", maxScore: "0.91", heatmapsAndReports: [
+        { id: "hr2-1-h1", date: "2024-01-14", type: "Heatmap", status: "Finished" },
+        { id: "hr2-1-r1", date: "2024-01-14", type: "Report", status: "Completed" },
       ]},
     ]},
   ]);
@@ -1620,157 +1654,50 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
   const [openRunId, setOpenRunId] = useState(null);
   const [resultsViewMode, setResultsViewMode] = useState("table");
 
+  const builderLayout = resolveBuilderLayout();
+
+  const stageNavRows = useMemo(
+    () =>
+      stages.map((s) => {
+        const stageType = STAGE_ID_TO_TYPE[s.id];
+        const parentType = PARENT_STAGE_TYPE[stageType];
+        const versionDisabled = parentType && !selectedVersionByStage[parentType];
+        return {
+          ...s,
+          stageType,
+          versionOptions: getAvailableVersions(stageVersions, stageType, selectedVersionByStage),
+          versionDisabled,
+          hasComment: hasVersionComment(versionComments, selectedVersionByStage[stageType]),
+        };
+      }),
+    [stages, stageVersions, selectedVersionByStage, versionComments],
+  );
+
+  const openVersionCommentForStage = useCallback(
+    (stageType) => {
+      const version = getVersionById(stageVersions, selectedVersionByStage[stageType]);
+      if (version && typeof onOpenVersionComment === "function") {
+        onOpenVersionComment(version);
+      }
+    },
+    [stageVersions, selectedVersionByStage, onOpenVersionComment],
+  );
+
   return (
-    <div className={cx(ui.radius, ui.panel, "overflow-visible")}>
-      <div className={cx("flex items-center justify-between px-3 py-2", ui.panelMuted, "border-0 border-b", ui.divider)}>
-        <div className="flex items-center gap-2">
-          <StageIcon>
-            <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-              <path d="M5 7h14M5 12h10M5 17h14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          </StageIcon>
-          <div>
-            <div className="text-[12px] font-medium text-[#d9d9d9]">Strategy Builder</div>
-          </div>
-        </div>
-        <span className="rounded-md border border-[#303030] bg-[#0f0f0f] px-2 py-0.5 text-[10px] text-[#8c8c8c]">mock</span>
-      </div>
-
-      {/* Horizontal stepper + per-stage version selects */}
-      <div
-        className={cx(
-          "sticky top-14 z-10 px-3 py-3",
-          ui.panelMuted,
-          "border-0 border-b border-[#303030] bg-[#1a1a1a]/95 backdrop-blur supports-[backdrop-filter]:bg-[#1a1a1a]/80",
-        )}
-      >
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
-          <div className="grid grid-cols-5 gap-2 flex-1 min-w-0">
-            {stages.map((s) => {
-              const isActive = s.id === activeStage;
-              const isLocked = s.locked;
-              const stageType = STAGE_ID_TO_TYPE[s.id];
-              const versionOptions = getAvailableVersions(
-                stageVersions,
-                stageType,
-                selectedVersionByStage,
-              );
-              const parentType = PARENT_STAGE_TYPE[stageType];
-              const versionDisabled = parentType && !selectedVersionByStage[parentType];
-
-              return (
-                <div
-                  key={s.id}
-                  className={cx(
-                    "rounded-lg border px-2 py-2 flex items-center gap-2 min-w-0",
-                    isActive ? "border-emerald-500/40 bg-emerald-500/10" : "border-[#303030] bg-[#0f0f0f]",
-                    isLocked && "opacity-80",
-                  )}
-                  title={s.title}
-                >
-                  <div
-                    role="button"
-                    tabIndex={isLocked ? -1 : 0}
-                    className={cx(
-                      "flex items-center gap-2 min-w-0 flex-1",
-                      isLocked ? "cursor-not-allowed" : "cursor-pointer",
-                    )}
-                    onClick={() => {
-                      if (!isLocked && typeof onStageChange === "function") {
-                        onStageChange(s.id);
-                      }
-                    }}
-                    onKeyDown={(e) => {
-                      if (isLocked) return;
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        if (typeof onStageChange === "function") onStageChange(s.id);
-                      }
-                    }}
-                  >
-                    <span
-                      className={cx(
-                        "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border",
-                        isActive
-                          ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
-                          : "border-[#303030] bg-[#141414] text-[#a6a6a6]",
-                      )}
-                    >
-                      {s.icon}
-                    </span>
-                    <div
-                      className={cx(
-                        "min-w-0 flex-1 text-[12px] font-medium truncate",
-                        isActive ? "text-emerald-100" : "text-[#d9d9d9]",
-                      )}
-                    >
-                      {s.label}
-                    </div>
-                  </div>
-                  <StageVersionSelect
-                    value={selectedVersionByStage[stageType]}
-                    options={versionOptions}
-                    disabled={versionDisabled}
-                    placeholder={versionDisabled ? "—" : "Select"}
-                    onChange={(versionId) => handleStageVersionChange(stageType, versionId)}
-                    onAddNewVersion={() => handleAddNewStageVersion(stageType)}
-                    className="w-[4.25rem] shrink-0 flex-none"
-                  />
-                  <StageVersionCommentButton
-                    disabled={versionDisabled || !selectedVersionByStage[stageType]}
-                    hasComment={hasVersionComment(
-                      versionComments,
-                      selectedVersionByStage[stageType],
-                    )}
-                    onClick={() => {
-                      const version = getVersionById(
-                        stageVersions,
-                        selectedVersionByStage[stageType],
-                      );
-                      if (version && typeof onOpenVersionComment === "function") {
-                        onOpenVersionComment(version);
-                      }
-                    }}
-                  />
-                </div>
-              );
-            })}
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowVersionTree(true)}
-            className={cx(
-              ui.btn,
-              "h-7 shrink-0 px-2 text-[10px] whitespace-nowrap self-center",
-            )}
-            title="Show full version hierarchy"
-          >
-            <span className="inline-flex items-center gap-1.5">
-              <svg
-                viewBox="0 0 24 24"
-                className="h-3.5 w-3.5 shrink-0"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden
-              >
-                <circle cx="6" cy="6" r="2.5" />
-                <circle cx="6" cy="18" r="2.5" />
-                <circle cx="18" cy="12" r="2.5" />
-                <path d="M6 8.5v7M6 12h8.5a2.5 2.5 0 0 0 0-5H6" />
-              </svg>
-              Version tree
-            </span>
-          </button>
-        </div>
-        {versionBreadcrumb.length > 0 && (
-          <div className={cx("mt-2 text-[10px]", ui.textMuted)}>
-            {versionBreadcrumb.join(" → ")}
-          </div>
-        )}
-      </div>
+    <div className={cx(isProdUi() ? "space-y-6" : cx(ui.radius, ui.panel, "overflow-visible"))}>
+      {builderLayout === "horizontal" ? (
+        <BuilderStageNavHorizontal
+          stages={stageNavRows}
+          activeStage={activeStage}
+          onStageChange={onStageChange}
+          selectedVersionByStage={selectedVersionByStage}
+          onStageVersionChange={handleStageVersionChange}
+          onAddNewStageVersion={handleAddNewStageVersion}
+          onOpenVersionComment={openVersionCommentForStage}
+          onOpenVersionTree={() => setShowVersionTree(true)}
+          versionBreadcrumb={versionBreadcrumb}
+        />
+      ) : null}
 
       <StageVersionTreeModal
         open={showVersionTree}
@@ -1783,9 +1710,30 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
       />
 
       {/* Stage content */}
-      <div className="p-3">
+      <div className={isProdUi() ? "space-y-6" : builderLayout === "sidebar" ? "space-y-4 p-4" : "p-3"}>
+        {builderLayout === "sidebar" ? (
+          <div
+            className={cx(
+              isProdUi() &&
+                "sticky z-10 top-[var(--header-height)] border-b border-[rgba(60,40,80,0.35)] bg-[#0f0d1e]/95 py-3 backdrop-blur supports-[backdrop-filter]:bg-[#0f0d1e]/80",
+            )}
+          >
+            <BuilderStepsSidebar
+              stages={stageNavRows}
+              activeStageId={activeStage}
+              onStageChange={onStageChange}
+              selectedVersionByStage={selectedVersionByStage}
+              onStageVersionChange={handleStageVersionChange}
+              onAddNewStageVersion={handleAddNewStageVersion}
+              onOpenVersionComment={openVersionCommentForStage}
+              onOpenVersionTree={() => setShowVersionTree(true)}
+              versionBreadcrumb={versionBreadcrumb}
+            />
+          </div>
+        ) : null}
+        <div className={builderLayout === "sidebar" ? "min-w-0" : undefined}>
         {active.id === 1 || active.id === 2 || active.id === 3 || active.id === 4 ? (
-          <div className="space-y-4">
+          <div className={isProdUi() ? "space-y-6" : "space-y-4"}>
             {isRiskStage && (
               <RiskStagePanel
                 collapsedSections={collapsedSections}
@@ -1801,29 +1749,16 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
             {!isRiskStage && (
             <>
             {/* 1. INDICATORS */}
-            <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
-              <button
-                type="button"
-                onClick={() => toggleSection(1)}
-                className={cx("w-full px-3 py-2 flex items-center justify-between gap-2 text-left", ui.panelMuted, "border-0 border-b", ui.divider, "hover:bg-[#1a1a1a] transition-colors")}
-              >
-                <div>
-                  <div className="text-[12px] font-medium text-[#d9d9d9]">
-                    1. Indicators ({stageCopy.stageTag})
-                  </div>
-                  <div className={cx("text-[11px]", ui.textMuted)}>
-                    Indicator Library and Selected Indicators
-                  </div>
-                </div>
-                <span className="text-[#8c8c8c] text-[10px]">
-                  {collapsedSections.has(1) ? "▶" : "▼"}
-                </span>
-              </button>
-              {!collapsedSections.has(1) && (
-              <div className="p-3">
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-                  {/* Library (left) */}
-                  <div className="lg:col-span-5">
+            <BuilderSectionShell
+              sectionNum={1}
+              title={`Indicators (${stageCopy.stageTag})`}
+              subtitle="Indicator Library and Selected Indicators"
+              collapsed={collapsedSections.has(1)}
+              onToggle={() => toggleSection(1)}
+            >
+                <div className="grid grid-cols-1 lg:grid-cols-[3fr_7fr] gap-4">
+                  {/* Library (left) — 30% */}
+                  <div className="min-w-0">
                     <IndicatorLibrary
                       query={libraryQuery}
                       onQueryChange={setLibraryQuery}
@@ -1833,36 +1768,56 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                     />
                   </div>
 
-                  {/* Selected indicators (right) */}
-                  <div className="lg:col-span-7">
-                <div className={cx(ui.radius, ui.panel, "overflow-hidden h-full flex flex-col")}>
-                  <div className={cx("px-4 py-3", ui.panelMuted, "border-0 border-b", ui.divider)}>
+                  {/* Selected indicators (right) — 70% */}
+                  <div className="min-w-0">
+                <div
+                  className={cx(
+                    "h-full flex flex-col",
+                    isProdUi()
+                      ? ui.builderColumn
+                      : cx(ui.radius, ui.panel, "overflow-hidden"),
+                  )}
+                >
+                  <div className={cx(isProdUi() ? "mb-2" : cx("px-4 py-3", ui.panelMuted, "border-0 border-b", ui.divider))}>
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <div className="text-[12px] font-medium text-[#d9d9d9] mb-1">Selected Indicators</div>
-                        <div className={cx("text-[10px]", ui.textMuted)}>Ranges are edited in section 3.</div>
+                        <div className={cx(isProdUi() ? "text-[12px] font-medium mb-1 text-[#faf7fd]" : "text-sm font-medium mb-1 text-[#d9d9d9]")}>
+                          Selected Indicators
+                        </div>
+                        <div className={cx("text-[10px]", ui.textMuted)}>
+                          {isProdUi() ? "Added indicators" : "Ranges are edited in section 3."}
+                        </div>
                       </div>
                     </div>
                   </div>
                   
-                  <div className="flex-1 overflow-auto p-3">
+                  <div className="flex-1 overflow-auto">
                     {true ? (
                       indicators.length === 0 ? (
                         <div className={cx(ui.radius, ui.panelMuted, "p-6 text-center text-[12px]", ui.textMuted)}>
                           No indicators yet. Add one from the library.
                         </div>
                       ) : (
-                        <div className="space-y-2">
-                          {indicators.map((ind, idx) => (
-                            <IndicatorItem
-                              key={ind.id}
-                              indicator={ind}
-                              index={idx}
-                              total={indicators.length}
-                              variant="summary"
-                              onDelete={() => handleDeleteIndicator(ind.id)}
-                            />
-                          ))}
+                        <div className={isProdUi() ? selectedIndicatorsGridClass : "space-y-2"}>
+                          {indicators.map((ind, idx) =>
+                            isProdUi() ? (
+                              <SelectedIndicatorCard
+                                key={ind.id}
+                                indicator={ind}
+                                variant="compact"
+                                onDelete={() => handleDeleteIndicator(ind.id)}
+                              />
+                            ) : (
+                              <IndicatorItem
+                                key={ind.id}
+                                indicator={ind}
+                                index={idx}
+                                total={indicators.length}
+                                variant="summary"
+                                onDelete={() => handleDeleteIndicator(ind.id)}
+                              />
+                            ),
+                          )}
                         </div>
                       )
                     ) : (
@@ -1888,65 +1843,39 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                 </div>
               </div>
                 </div>
-              </div>
-              )}
-            </div>
+            </BuilderSectionShell>
 
             {/* 2. FORMULAS (Signal / Entry) */}
-            <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
-              <button
-                type="button"
-                onClick={() => toggleSection(2)}
-                className={cx("w-full px-3 py-2 flex items-center justify-between gap-2 text-left", ui.panelMuted, "border-0 border-b", ui.divider, "hover:bg-[#1a1a1a] transition-colors")}
-              >
-                <div>
-                  <div className="text-[12px] font-medium text-[#d9d9d9]">
-                    2. {stageCopy.formulaTitle}
-                  </div>
-                  <div className={cx("text-[11px]", ui.textMuted)}>
-                    Define {stageCopy.formulaKind} signals using python formula or builder
-                  </div>
-                </div>
-                <span className="text-[#8c8c8c] text-[10px]">{collapsedSections.has(2) ? "▶" : "▼"}</span>
-              </button>
-              {!collapsedSections.has(2) && (
-                <div className="p-3">
+            <BuilderSectionShell
+              sectionNum={2}
+              title={stageCopy.formulaTitle}
+              subtitle={`Define ${stageCopy.formulaKind} signals using python formula or builder`}
+              collapsed={collapsedSections.has(2)}
+              onToggle={() => toggleSection(2)}
+            >
                   <FormulaEditor
                     key={stageCopy.formulaEditorKey}
                     value={stageFormula}
                     onChange={setStageFormula}
                     indicators={indicators}
                     mode={stageCopy.formulaMode}
+                    editingLocked={isSignalStage && hyperoptResultsRows.length > 0}
                   />
-                </div>
-              )}
-            </div>
+            </BuilderSectionShell>
 
             {/* 3. INDICATOR RANGES */}
-            <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
-              <button
-                type="button"
-                onClick={() => toggleSection(3)}
-                className={cx(
-                  "w-full px-3 py-2 flex items-center justify-between gap-2 text-left",
-                  ui.panelMuted,
-                  "border-0 border-b",
-                  ui.divider,
-                  "hover:bg-[#1a1a1a] transition-colors",
-                )}
-              >
-                <div>
-                  <div className="text-[12px] font-medium text-[#d9d9d9]">
-                    3. Indicator Ranges ({stageCopy.stageTag})
-                  </div>
-                  <div className={cx("text-[11px]", ui.textMuted)}>
-                    Min, max, and step for each selected indicator. Remove indicators in section 1.
-                  </div>
-                </div>
-                <span className="text-[#8c8c8c] text-[10px]">{collapsedSections.has(3) ? "▶" : "▼"}</span>
-              </button>
-              {!collapsedSections.has(3) && (
-                <div className="p-3">
+            <BuilderSectionShell
+              sectionNum={3}
+              title={`Indicator Ranges (${stageCopy.stageTag})`}
+              subtitle="Min, max, and step for each selected indicator. Remove indicators in section 1."
+              collapsed={collapsedSections.has(3)}
+              onToggle={() => toggleSection(3)}
+              headerRight={
+                isProdUi() ? (
+                  <TotalCombinationsBadge totalCombinations={totalCombinations} />
+                ) : null
+              }
+            >
                   <IndicatorRangesPanel
                     indicators={indicators}
                     totalCombinations={totalCombinations}
@@ -1955,28 +1884,20 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                       setEditIndicatorModalRangesOnly(true);
                     }}
                   />
-                </div>
-              )}
-            </div>
+            </BuilderSectionShell>
 
             </>
             )}
 
             {/* Hyperoptimization Parameters */}
-            <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
-              <button
-                type="button"
-                onClick={() => toggleSection(hyperoptSectionNum)}
-                className={cx("w-full px-3 py-2 flex items-center justify-between gap-2 text-left", ui.panelMuted, "border-0 border-b", ui.divider, "hover:bg-[#1a1a1a] transition-colors")}
-              >
-                <div>
-                  <div className="text-[12px] font-medium text-[#d9d9d9]">{hyperoptSectionNum}. Hyperoptimization Parameters</div>
-                  <div className={cx("text-[11px]", ui.textMuted)}>Set trading pairs and time parameters</div>
-                </div>
-                <span className="text-[#8c8c8c] text-[10px]">{collapsedSections.has(hyperoptSectionNum) ? "▶" : "▼"}</span>
-              </button>
-              {!collapsedSections.has(hyperoptSectionNum) && (
-              <div className="p-3 space-y-3">
+            <BuilderSectionShell
+              sectionNum={hyperoptSectionNum}
+              title="Hyperoptimization Parameters"
+              subtitle="Set trading pairs and time parameters"
+              collapsed={collapsedSections.has(hyperoptSectionNum)}
+              onToggle={() => toggleSection(hyperoptSectionNum)}
+            >
+              <div className="space-y-3">
                 <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
                   <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">
                     Hyperopt type ({stageCopy.stageTag})
@@ -1993,17 +1914,6 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                       </select>
                     </div>
                     <div className="space-y-1">
-                      <label className={cx("block text-[11px]", ui.textMuted)}>Exchange</label>
-                      <select
-                        value={exchange}
-                        onChange={(e) => setExchange(e.target.value)}
-                        className={cx(ui.input, "h-9 text-[12px] w-full min-w-[170px]")}
-                      >
-                        <option value="binance">binance</option>
-                        <option value="htx">htx</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1">
                       <label className={cx("block text-[11px]", ui.textMuted)}>Trading mode</label>
                       <select
                         value={tradingMode}
@@ -2014,6 +1924,31 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                         <option value="spot">spot</option>
                       </select>
                     </div>
+                    <div className="space-y-1">
+                      <label className={cx("block text-[11px]", ui.textMuted)}>Exchange</label>
+                      <select
+                        value={exchange}
+                        onChange={(e) => setExchange(e.target.value)}
+                        className={cx(ui.input, "h-9 text-[12px] w-full min-w-[170px]")}
+                      >
+                        <option value="binance">binance</option>
+                        <option value="htx">htx</option>
+                        <option value="synthetic">Synthetic dataset</option>
+                      </select>
+                    </div>
+                    {exchange === "synthetic" ? (
+                      <div className="space-y-1">
+                        <label className={cx("block text-[11px]", ui.textMuted)}>Synthetic dataset</label>
+                        <select
+                          value={syntheticDataset}
+                          onChange={(e) => setSyntheticDataset(e.target.value)}
+                          className={cx(ui.input, "h-9 text-[12px] w-full min-w-[170px]")}
+                        >
+                          <option value="dataset1">Dataset 1 (BTC/USDT)</option>
+                          <option value="dataset2">Dataset 2 (ETC/USDT)</option>
+                        </select>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
                 <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
@@ -2099,7 +2034,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                       </div>
                     ) : (
                       <div className={cx(isSignalStage && "xl:col-span-4")}>
-                        <PairsDropdown value={pairs} onChange={onPairsChange} />
+                        <PairsDropdown value={pairs} onChange={onPairsChange} disabled={isSyntheticExchange} />
                       </div>
                     )}
                     <div className={cx(isSignalStage && "xl:col-span-2")}>
@@ -3209,31 +3144,22 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                   </div>
                 )}
               </div>
-              )}
-            </div>
+            </BuilderSectionShell>
 
             {/* Optimization Results */}
-            <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
-              <button
-                type="button"
-                onClick={() => toggleSection(resultsSectionNum)}
-                className={cx("w-full px-3 py-2 flex items-center justify-between gap-2 text-left", ui.panelMuted, "border-0 border-b", ui.divider, "hover:bg-[#1a1a1a] transition-colors")}
-              >
-                <div>
-                  <div className="text-[12px] font-medium text-[#d9d9d9]">{resultsSectionNum}. Optimization Results</div>
-                  <div className={cx("text-[11px]", ui.textMuted)}>
-                    Analyze optimization results, normalize scores by formula, and generate heatmaps and reports.
-                  </div>
-                </div>
-                <span className="flex items-center gap-2">
-                  <span className="rounded-md border border-[#303030] bg-[#0f0f0f] px-2 py-0.5 text-[10px] text-[#8c8c8c]">
-                    {hyperoptResultsRows.length} runs
-                  </span>
-                  <span className="text-[#8c8c8c] text-[10px]">{collapsedSections.has(resultsSectionNum) ? "▶" : "▼"}</span>
+            <BuilderSectionShell
+              sectionNum={resultsSectionNum}
+              title="Optimization Results"
+              subtitle="Analyze optimization results, normalize scores by formula, and generate heatmaps and reports."
+              collapsed={collapsedSections.has(resultsSectionNum)}
+              onToggle={() => toggleSection(resultsSectionNum)}
+            >
+              <div className="mb-3 flex justify-end">
+                <span className="rounded-md border border-border bg-background px-2 py-0.5 text-[10px] text-muted-foreground">
+                  {hyperoptResultsRows.length} runs
                 </span>
-              </button>
-              {!collapsedSections.has(resultsSectionNum) && (
-              <div className="overflow-auto p-3 space-y-4">
+              </div>
+              <div className="overflow-auto space-y-4">
                 {/* Block 1: Hyperopt result */}
                 <div className="rounded-lg border border-[#303030] overflow-hidden border-l-4 border-l-emerald-500">
                   <div className="px-3 py-2 font-medium border-b border-[#303030] bg-emerald-500/10 text-emerald-200 text-[12px]">
@@ -3329,7 +3255,8 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                           )}
                           <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Pairs</th>
                           <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">TimeFrame</th>
-                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">KnowRange</th>
+                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Time Range</th>
+                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Status</th>
                           <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Tags</th>
                           <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Comment</th>
                           <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Indicators</th>
@@ -3350,7 +3277,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                   {hyperoptResultsExpanded.has(row.id) ? "▼" : "▶"}
                                 </button>
                               </td>
-                              <td className="px-3 py-2">{row.date}</td>
+                              <td className="px-3 py-2 whitespace-nowrap">{formatHyperoptDateTime(row.date)}</td>
                               {(isEntryStage || isExitStage || isRiskStage) && (
                                 <td
                                   className="px-3 py-2 max-w-[260px]"
@@ -3368,6 +3295,9 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                               <td className="px-3 py-2">{row.pairs}</td>
                               <td className="px-3 py-2">{row.timeFrame}</td>
                               <td className="px-3 py-2 text-[#a6a6a6]">{row.knowRange}</td>
+                              <td className="px-3 py-2">
+                                <RunStatusBadge status={normalizeHyperoptRunStatus(row.status)} />
+                              </td>
                               <td
                                 className="px-3 py-2 max-w-[200px] align-top"
                                 title={row.tags?.length ? row.tags.join(", ") : undefined}
@@ -3432,12 +3362,11 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                             </tr>
                             {hyperoptResultsExpanded.has(row.id) && row.children && row.children.length > 0 && (
                               <tr>
-                                <td colSpan={(isEntryStage || isExitStage || isRiskStage) ? 10 : 9} className="p-0 align-top bg-[#0f0f0f]">
+                                <td colSpan={(isEntryStage || isExitStage || isRiskStage) ? 11 : 10} className="p-0 align-top bg-[#0f0f0f]">
                                   {/* Block 2: Normalization result (nested per expanded row) */}
                                   <div className="ml-4 mt-2 mb-2 rounded-lg border border-[#303030] overflow-hidden border-l-4 border-l-sky-500">
                                     <div className="px-3 py-1.5 font-medium border-b border-[#303030] bg-sky-500/10 text-sky-200 text-[11px]">
                                       Post-processing result
-                                      <span className="ml-2 text-[#8c8c8c] font-normal">— {row.date} · {row.pairs}</span>
                                     </div>
                                     <div className="overflow-x-auto">
                                       <table className="w-full border-collapse text-[11px]">
@@ -3445,11 +3374,9 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                           <tr>
                                             <th className="px-2 py-1.5 text-left font-medium border-b border-[#303030] w-8"></th>
                                             <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030] w-24">Date</th>
-                                            <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030] w-20">Min score</th>
-                                            <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030] w-20">AVG score</th>
-                                            <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030] w-20">Max score</th>
                                             <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Post-processing formula info</th>
-                                            <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Actions</th>
+                                            <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Status</th>
+                                            <th className="px-3 py-1.5 text-right font-medium border-b border-[#303030]">Actions</th>
                                           </tr>
                                         </thead>
                                         <tbody>
@@ -3474,10 +3401,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                       {isDetailsExpanded ? "▼" : "▶"}
                                                     </button>
                                                   </td>
-                                                  <td className="px-3 py-2 text-[#a6a6a6]">{sub.date}</td>
-                                                  <td className="px-3 py-2 tabular-nums text-[#d9d9d9]">{sub.minScore ?? "—"}</td>
-                                                  <td className="px-3 py-2 tabular-nums text-[#d9d9d9]">{sub.avgScore ?? "—"}</td>
-                                                  <td className="px-3 py-2 tabular-nums text-[#d9d9d9]">{sub.maxScore ?? "—"}</td>
+                                                  <td className="px-3 py-2 text-[#a6a6a6] whitespace-nowrap">{formatHyperoptDateTime(sub.date)}</td>
                                                   <td className="px-3 py-2">
                                                     <HyperoptDetailsTooltip
                                                       onShowDetails={() => {
@@ -3487,7 +3411,10 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                     />
                                                   </td>
                                                   <td className="px-3 py-2">
-                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                    <RunStatusBadge status={sub.status || "Finished"} />
+                                                  </td>
+                                                  <td className="px-3 py-2 text-right">
+                                                    <div className="flex items-center justify-end gap-2 flex-wrap">
                                                       <button
                                                         type="button"
                                                         onClick={() => setHeatMapConfigModalId(heatMapId)}
@@ -3517,7 +3444,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                 </tr>
                                                 {isDetailsExpanded && (
                                                   <tr>
-                                                    <td colSpan={7} className="p-0 align-top bg-[#0f0f0f]">
+                                                    <td colSpan={5} className="p-0 align-top bg-[#0f0f0f]">
                                                       {/* Branch A: HeatMaps & Reports (full data scope) */}
                                                       <div className="ml-4 mt-2 mb-2 rounded-lg border border-[#303030] overflow-hidden border-l-4 border-l-amber-500 bg-[#111111]">
                                                         <div className="px-3 py-1.5 font-medium border-b border-[#303030] bg-amber-500/10 text-amber-200 text-[11px]">
@@ -3534,7 +3461,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                                   Type
                                                                 </th>
                                                                 <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">
-                                                                  Details
+                                                                  Status
                                                                 </th>
                                                                 <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">
                                                                   Actions
@@ -3547,30 +3474,33 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                                   <td className="px-3 py-2 text-[#a6a6a6]">{item.date}</td>
                                                                   <td className="px-3 py-2">{item.type}</td>
                                                                   <td className="px-3 py-2">
-                                                                    <HyperoptDetailsTooltip
-                                                                      title="Filters (read-only)"
-                                                                      ariaLabel="Show filters snapshot"
-                                                                      onShowDetails={() => setHeatmapItemFiltersModalItem(item)}
-                                                                    />
+                                                                    <RunStatusBadge status={item.status || "Finished"} />
                                                                   </td>
                                                                   <td className="px-3 py-2">
-                                                                    {item.type === "Heatmap" ? (
-                                                                      <button
-                                                                        type="button"
-                                                                        onClick={() => setHeatMapViewModalId(heatMapId)}
-                                                                        className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
-                                                                      >
-                                                                        Show heatmap
-                                                                      </button>
-                                                                    ) : (
-                                                                      <button
-                                                                        type="button"
-                                                                        onClick={() => setShowReportModal(true)}
-                                                                        className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
-                                                                      >
-                                                                        Download report
-                                                                      </button>
-                                                                    )}
+                                                                    <div className="flex items-center gap-2">
+                                                                      <HyperoptDetailsTooltip
+                                                                        title="Filters (read-only)"
+                                                                        ariaLabel="Show filters snapshot"
+                                                                        onShowDetails={() => setHeatmapItemFiltersModalItem(item)}
+                                                                      />
+                                                                      {item.type === "Heatmap" ? (
+                                                                        <button
+                                                                          type="button"
+                                                                          onClick={() => setHeatMapViewModalId(heatMapId)}
+                                                                          className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
+                                                                        >
+                                                                          Show heatmap
+                                                                        </button>
+                                                                      ) : (
+                                                                        <button
+                                                                          type="button"
+                                                                          onClick={() => setShowReportModal(true)}
+                                                                          className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
+                                                                        >
+                                                                          Download report
+                                                                        </button>
+                                                                      )}
+                                                                    </div>
                                                                   </td>
                                                                 </tr>
                                                               ))}
@@ -3590,11 +3520,9 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                             <thead className="bg-[#1a1a1a] text-[#8c8c8c]">
                                                               <tr>
                                                                 <th className="px-2 py-1.5 text-left font-medium border-b border-[#303030] w-8"></th>
-                                                                <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030] w-24">Date</th>
-                                                                <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Min score</th>
-                                                                <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">AVG score</th>
-                                                                <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Max score</th>
-                                                                <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Fold size</th>
+                                                                <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030] whitespace-nowrap">Date</th>
+                                                                <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Truncated cycle size</th>
+                                                                <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Status</th>
                                                                 <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Actions</th>
                                                               </tr>
                                                             </thead>
@@ -3625,11 +3553,11 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                                             </button>
                                                                           )}
                                                                         </td>
-                                                                      <td className="px-3 py-2 text-[#a6a6a6]">{sub.date}</td>
-                                                                      <td className="px-3 py-2">{detail.scores?.min ?? "-"}</td>
-                                                                      <td className="px-3 py-2">{detail.scores?.avg ?? "-"}</td>
-                                                                      <td className="px-3 py-2">{detail.scores?.max ?? "-"}</td>
+                                                                      <td className="px-3 py-2 text-[#a6a6a6] whitespace-nowrap">{formatHyperoptDateTime(sub.date)}</td>
                                                                       <td className="px-3 py-2">{sub.foldSize ?? "-"}</td>
+                                                                      <td className="px-3 py-2">
+                                                                        <RunStatusBadge status={sub.status || "Finished"} />
+                                                                      </td>
                                                                       <td className="px-3 py-2">
                                                                         <div className="flex items-center gap-2">
                                                                           <button
@@ -3651,7 +3579,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                                       </tr>
                                                                       {isLevel3ExpandedForRow && level3Items.length > 0 && (
                                                                         <tr>
-                                                                          <td colSpan={7} className="p-0 align-top bg-[#0a0a0a]">
+                                                                          <td colSpan={5} className="p-0 align-top bg-[#0a0a0a]">
                                                                           {/* Block 3: HeatMaps & Reports (child of Normalization details) */}
                                                                           <div className="ml-4 mt-2 mb-2 rounded-lg border border-[#303030] overflow-hidden border-l-4 border-l-amber-500">
                                                                             <div className="px-3 py-1.5 font-medium border-b border-[#303030] bg-amber-500/10 text-amber-200 text-[11px]">
@@ -3663,7 +3591,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                                                   <tr>
                                                                                     <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030] w-24">Date</th>
                                                                                     <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Type</th>
-                                                                                    <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Details</th>
+                                                                                    <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Status</th>
                                                                                     <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Actions</th>
                                                                                   </tr>
                                                                                 </thead>
@@ -3673,30 +3601,33 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                                                       <td className="px-3 py-2 text-[#a6a6a6]">{item.date}</td>
                                                                                       <td className="px-3 py-2">{item.type}</td>
                                                                                       <td className="px-3 py-2">
-                                                                                        <HyperoptDetailsTooltip
-                                                                                          title="Filters (read-only)"
-                                                                                          ariaLabel="Show filters snapshot"
-                                                                                          onShowDetails={() => setHeatmapItemFiltersModalItem(item)}
-                                                                                        />
+                                                                                        <RunStatusBadge status={item.status || "Finished"} />
                                                                                       </td>
                                                                                       <td className="px-3 py-2">
-                                                                                        {item.type === "Heatmap" ? (
-                                                                                          <button
-                                                                                            type="button"
-                                                                                            onClick={() => setHeatMapViewModalId(heatMapId)}
-                                                                                            className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
-                                                                                          >
-                                                                                            Show heatmap
-                                                                                          </button>
-                                                                                        ) : (
-                                                                                          <button
-                                                                                            type="button"
-                                                                                            onClick={() => setShowReportModal(true)}
-                                                                                            className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
-                                                                                          >
-                                                                                            Download report
-                                                                                          </button>
-                                                                                        )}
+                                                                                        <div className="flex items-center gap-2">
+                                                                                          <HyperoptDetailsTooltip
+                                                                                            title="Filters (read-only)"
+                                                                                            ariaLabel="Show filters snapshot"
+                                                                                            onShowDetails={() => setHeatmapItemFiltersModalItem(item)}
+                                                                                          />
+                                                                                          {item.type === "Heatmap" ? (
+                                                                                            <button
+                                                                                              type="button"
+                                                                                              onClick={() => setHeatMapViewModalId(heatMapId)}
+                                                                                              className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
+                                                                                            >
+                                                                                              Show heatmap
+                                                                                            </button>
+                                                                                          ) : (
+                                                                                            <button
+                                                                                              type="button"
+                                                                                              onClick={() => setShowReportModal(true)}
+                                                                                              className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
+                                                                                            >
+                                                                                              Download report
+                                                                                            </button>
+                                                                                          )}
+                                                                                        </div>
                                                                                       </td>
                                                                                     </tr>
                                                                                   ))}
@@ -3747,65 +3678,64 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                         : "—";
                       const showPostProcessing = hyperoptRun !== "Pipeline";
 
-                      if (openRun) {
-                        return (
-                          <HyperoptRunDetail
-                            run={openRun}
-                            showSource={showSource}
-                            sourceText={sourceText}
-                            sourceTitle={sourceTitle}
-                            showPostProcessing={showPostProcessing}
-                            onBack={() => setOpenRunId(null)}
-                            onPostProcessing={() => setShowNormalizationModal(true)}
-                            onTagsComments={(row) => openHyperoptMetaModal(row)}
-                            onShowHyperoptDetails={() => {
-                              setHyperoptDetailsModalType("hyperopt");
-                              setShowHyperoptDetailsModal(true);
-                            }}
-                            onShowPostProcessingDetails={() => {
-                              setHyperoptDetailsModalType("post-processing");
-                              setShowHyperoptDetailsModal(true);
-                            }}
-                            onConfigureHeatMap={(heatMapId) => setHeatMapConfigModalId(heatMapId)}
-                            onGenerateReport={() => setShowReportModal(true)}
-                            onAddTruncate={(sub) => {
-                              setSelectedNormalizationRow(sub);
-                              setShowTruncateModal(true);
-                            }}
-                            onShowHeatmap={(heatMapId) => setHeatMapViewModalId(heatMapId)}
-                            onDownloadReport={() => setShowReportModal(true)}
-                            onShowItemFilters={(item) => setHeatmapItemFiltersModalItem(item)}
-                          />
-                        );
-                      }
-
-                      if (filteredHyperoptResultsRows.length === 0) {
-                        return (
-                          <div className={cx(ui.radius, ui.panelMuted, "p-3 text-[11px]", ui.textMuted)}>
-                            No optimization runs match the current filter.
-                          </div>
-                        );
-                      }
-
                       return (
-                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                          {filteredHyperoptResultsRows.map((row) => (
-                            <HyperoptResultCard
-                              key={row.id}
-                              row={row}
-                              showSource={showSource}
-                              sourceText={sourceText}
-                              sourceTitle={sourceTitle}
-                              showPostProcessing={showPostProcessing}
-                              onOpen={(id) => setOpenRunId(id)}
-                              onPostProcessing={() => setShowNormalizationModal(true)}
-                              onTagsComments={(r) => openHyperoptMetaModal(r)}
-                              onShowDetails={() => {
-                                setHyperoptDetailsModalType("hyperopt");
-                                setShowHyperoptDetailsModal(true);
-                              }}
-                            />
-                          ))}
+                        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[2fr_3fr]">
+                          {/* Left: vertical list of runs */}
+                          <div className="space-y-2">
+                            {filteredHyperoptResultsRows.length === 0 ? (
+                              <div className={cx(ui.radius, ui.panelMuted, "p-3 text-[11px]", ui.textMuted)}>
+                                No optimization runs match the current filter.
+                              </div>
+                            ) : (
+                              filteredHyperoptResultsRows.map((row) => (
+                                <HyperoptResultListItem
+                                  key={row.id}
+                                  row={row}
+                                  selected={row.id === openRunId}
+                                  onSelect={(id) => setOpenRunId(id)}
+                                  showSource={showSource}
+                                  sourceText={sourceText}
+                                />
+                              ))
+                            )}
+                          </div>
+
+                          {/* Right: inline detail drawer */}
+                          <div className="lg:sticky lg:top-2 h-fit">
+                            {openRun ? (
+                              <HyperoptResultDrawer
+                                run={openRun}
+                                showSource={showSource}
+                                sourceText={sourceText}
+                                sourceTitle={sourceTitle}
+                                showPostProcessing={showPostProcessing}
+                                onClose={() => setOpenRunId(null)}
+                                onPostProcessing={() => setShowNormalizationModal(true)}
+                                onTagsComments={(row) => openHyperoptMetaModal(row)}
+                                onShowHyperoptDetails={() => {
+                                  setHyperoptDetailsModalType("hyperopt");
+                                  setShowHyperoptDetailsModal(true);
+                                }}
+                                onShowPostProcessingDetails={() => {
+                                  setHyperoptDetailsModalType("post-processing");
+                                  setShowHyperoptDetailsModal(true);
+                                }}
+                                onConfigureHeatMap={(heatMapId) => setHeatMapConfigModalId(heatMapId)}
+                                onGenerateReport={() => setShowReportModal(true)}
+                                onAddTruncate={(sub) => {
+                                  setSelectedNormalizationRow(sub);
+                                  setShowTruncateModal(true);
+                                }}
+                                onShowHeatmap={(heatMapId) => setHeatMapViewModalId(heatMapId)}
+                                onDownloadReport={() => setShowReportModal(true)}
+                                onShowItemFilters={(item) => setHeatmapItemFiltersModalItem(item)}
+                              />
+                            ) : (
+                              <div className={cx(ui.radius, ui.panelMuted, "p-6 text-center text-[11px]", ui.textMuted)}>
+                                Select a result to see details.
+                              </div>
+                            )}
+                          </div>
                         </div>
                       );
                     })()}
@@ -3813,40 +3743,22 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                   )}
                 </div>
               </div>
-              )}
-            </div>
+            </BuilderSectionShell>
 
             {/* Favorite Epochs */}
-            {
-              <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
-                <button
-                  type="button"
-                  onClick={() => toggleSection(favoritesSectionNum)}
-                  className={cx(
-                    "w-full px-3 py-2 flex items-center justify-between gap-2 text-left",
-                    ui.panelMuted,
-                    "border-0 border-b",
-                    ui.divider,
-                    "hover:bg-[#1a1a1a] transition-colors",
-                  )}
-                >
-                  <div>
-                    <div className="text-[12px] font-medium text-[#d9d9d9]">
-                      {`${favoritesSectionNum}. Favorite Epochs (Stage ${stageCopy.favoriteEpochsNext})`}
-                    </div>
-                    <div className={cx("text-[11px]", ui.textMuted)}>
-                      {`Select scores from the heatmap or enter manually for Stage ${stageCopy.favoriteEpochsNext}`}
-                    </div>
-                  </div>
-                  <span className="flex items-center gap-2">
-                    <span className="rounded-md border border-[#303030] bg-[#0f0f0f] px-2 py-0.5 text-[10px] text-[#8c8c8c]">
-                      {bestResults.length} saved
-                    </span>
-                    <span className="text-[#8c8c8c] text-[10px]">{collapsedSections.has(favoritesSectionNum) ? "▶" : "▼"}</span>
-                  </span>
-                </button>
-                {!collapsedSections.has(favoritesSectionNum) && (
-                  <div className="p-3 space-y-3">
+            <BuilderSectionShell
+              sectionNum={favoritesSectionNum}
+              title={`Favorite Epochs (Stage ${stageCopy.favoriteEpochsNext})`}
+              subtitle={`Select scores from the heatmap or enter manually for Stage ${stageCopy.favoriteEpochsNext}`}
+              collapsed={collapsedSections.has(favoritesSectionNum)}
+              onToggle={() => toggleSection(favoritesSectionNum)}
+            >
+              <div className="mb-3 flex justify-end">
+                <span className="rounded-md border border-border bg-background px-2 py-0.5 text-[10px] text-muted-foreground">
+                  {bestResults.length} saved
+                </span>
+              </div>
+              <div className="space-y-3">
                     <div className={cx("text-[11px]", ui.textMuted)}>
                       {`Choose the best values from the heatmap to apply in Stage ${stageCopy.favoriteEpochsNext}.`}
                     </div>
@@ -3954,10 +3866,8 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                         </table>
                       </div>
                     )}
-                  </div>
-                )}
               </div>
-            }
+            </BuilderSectionShell>
 
           </div>
         ) : (
@@ -3965,6 +3875,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
             {active.title} — coming soon.
           </div>
         )}
+        </div>
       </div>
       
       {/* Modals */}
@@ -5247,12 +5158,9 @@ export default function App() {
 
   // Strategies
   const [strategies, setStrategies] = useState(INITIAL_STRATEGIES);
-  const [expandedStrategies, setExpandedStrategies] = useState(() => new Set());
   const [selected, setSelected] = useState(null); // {strategyId, versionId}
-  const [strategyCode, setStrategyCode] = useState("");
 
-  // Detail tabs
-  const [detailTab, setDetailTab] = useState("Strategy Builder"); // "Strategy Builder" | "Strategy Code"
+  // Detail view
   const [actionsDropdownOpen, setActionsDropdownOpen] = useState(false);
 
   // Builder fields (mock)
@@ -5552,14 +5460,6 @@ export default function App() {
     console.assert(SECTIONS.includes("Strategies"), "[Test] sections include Strategies");
   }, [strategies, totalVersions]);
 
-  const toggleExpanded = useCallback((id) => {
-    setExpandedStrategies((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  }, []);
-
   const handleSectionChange = useCallback((section) => {
     // Backtesting stays disabled; Strategies and Users are available
     if (section === "Backtesting") return;
@@ -5570,12 +5470,8 @@ export default function App() {
   const handleSelectVersion = useCallback(
     (strategyId, versionId) => {
       setSelected({ strategyId, versionId });
-      const s = strategies.find((x) => x.id === strategyId);
-      const v = s?.versions.find((x) => x.id === versionId);
-      setStrategyCode(v?.code ?? "");
-      setDetailTab("Strategy Builder");
     },
-    [strategies]
+    [],
   );
 
   const handleOpenListVersionTree = useCallback((strategy) => {
@@ -5663,8 +5559,28 @@ export default function App() {
 
   return (
     <div className={cx("min-h-screen", ui.page, "flex flex-col")}>
-      <Header
-        onLogout={handleLogout}
+      {isProdUi() ? (
+        <HeaderProd
+          onLogout={handleLogout}
+          sections={SECTIONS}
+          activeSection={activeSection}
+          onSectionChange={handleSectionChange}
+          settingsSubSection={settingsSubSection}
+          onSettingsSubChange={setSettingsSubSection}
+          strategiesCount={strategies.length}
+          disabledSections={DISABLED_SECTIONS}
+          queueOpen={showQueuePanel}
+          onQueueToggle={() => setShowQueuePanel((v) => !v)}
+          onQueueClose={() => setShowQueuePanel(false)}
+          queueItems={queueItems}
+          onQueueReorder={handleQueueReorder}
+          onQueueRemove={handleQueueRemove}
+          hyperoptRun={builderHyperoptRun}
+          onHyperoptRunChange={setBuilderHyperoptRun}
+        />
+      ) : (
+        <Header
+          onLogout={handleLogout}
         sections={SECTIONS}
         activeSection={activeSection}
         onSectionChange={handleSectionChange}
@@ -5681,8 +5597,10 @@ export default function App() {
         hyperoptRun={builderHyperoptRun}
         onHyperoptRunChange={setBuilderHyperoptRun}
       />
+      )}
 
       <main className="flex-1 overflow-visible p-6">
+        {!(activeSection === "Strategies" && selectedStrategy) && (
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <h1 className="text-[16px] font-semibold text-[#f5f5f5]">{activeSection === "Settings" ? `${activeSection} · ${settingsSubSection === "indicators" ? "Indicators" : "Formulas"}` : activeSection}</h1>
@@ -5719,13 +5637,14 @@ export default function App() {
             </button>
           )}
         </div>
+        )}
 
         {/* Strategies list */}
         {activeSection === "Strategies" && !selectedStrategy && (
           <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
             <div className={cx("flex items-center gap-3 px-4 py-3", ui.panelMuted, "border-0 border-b", ui.divider)}>
               <div className={cx("text-[12px]", ui.textSubtle)}>
-                {strategies.length} strategies / {totalVersions} versions
+                {strategies.length} strategies
               </div>
 
               <div className="ml-auto flex items-center gap-3">
@@ -5762,8 +5681,6 @@ export default function App() {
                 <tr>
                   <th className="px-4 py-3 border-b border-[#303030] font-medium">Strategy name</th>
                   <th className="px-2 py-3 border-b border-[#303030] font-medium">Description</th>
-                  <th className="px-2 py-3 border-b border-[#303030] font-medium">Hyperopt status</th>
-                  <th className="px-2 py-3 border-b border-[#303030] font-medium">Post-processing status</th>
                   <th className="px-2 py-3 border-b border-[#303030] font-medium">Owner</th>
                   <th className="px-2 py-3 border-b border-[#303030] font-medium">Created at</th>
                   <th className="px-2 py-3 border-b border-[#303030] font-medium">Action</th>
@@ -5774,8 +5691,6 @@ export default function App() {
                   <StrategyRow
                     key={strategy.id}
                     strategy={strategy}
-                    isExpanded={expandedStrategies.has(strategy.id)}
-                    onToggle={toggleExpanded}
                     onSelectVersion={handleSelectVersion}
                     onOpenVersionTree={handleOpenListVersionTree}
                   />
@@ -5798,24 +5713,27 @@ export default function App() {
         {/* Strategy detail */}
         {activeSection === "Strategies" && selectedStrategy && (
           <>
-          <div className={cx(ui.radius, ui.panel, "p-5 space-y-5")}>
-            <div className="flex items-start justify-between gap-4">
+            <div className="mb-6 flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-[14px] font-semibold text-[#f5f5f5] truncate">{selectedStrategy.s.name}</h2>
+                  <h2 className="text-[16px] font-semibold text-[#f5f5f5] truncate">{selectedStrategy.s.name}</h2>
                 </div>
 
                 <p className={cx("mt-1 text-[12px]", ui.textMuted)}>
-                  Owner: <span className="text-[#d9d9d9]">{selectedStrategy.s.owner}</span>
+                  Owner: <span className="text-[#faf7fd]">{selectedStrategy.s.owner}</span>
                 </p>
 
                 <div className={cx("mt-1 flex items-start gap-2 text-[12px]", ui.textMuted)}>
                   <div className="min-w-0">
-                    Description: <span className="text-[#d9d9d9]">{selectedStrategy.v.description || "—"}</span>
+                    Description: <span className="text-[#faf7fd]">{selectedStrategy.v.description || "—"}</span>
                   </div>
                   <button
                     onClick={openEditDescription}
-                    className="inline-flex h-5 w-5 items-center justify-center rounded border border-[#303030] bg-[#0f0f0f] text-[#a6a6a6] hover:bg-[#1f1f1f]"
+                    className={cx(
+                      "inline-flex h-5 w-5 items-center justify-center rounded border text-[#a6a6a6] hover:bg-secondary",
+                      ui.divider,
+                      isProdUi() ? "border-[rgba(60,40,80,0.5)] bg-[#170f29]" : "border-[#303030] bg-[#0f0f0f] hover:bg-[#1f1f1f]",
+                    )}
                     title="Edit description"
                     aria-label="Edit description"
                   >
@@ -5843,18 +5761,23 @@ export default function App() {
                   Actions
                 </button>
                 {actionsDropdownOpen && (
-                  <div className="absolute right-0 top-full z-50 mt-1 min-w-[180px] rounded-md border border-[#303030] bg-[#1a1a1a] py-1 shadow-lg">
+                  <div
+                    className={cx(
+                      "absolute right-0 top-full z-50 mt-1 min-w-[180px] rounded-md border py-1 shadow-lg",
+                      isProdUi() ? "border-[rgba(60,40,80,0.5)] bg-[#170f29]" : "border-[#303030] bg-[#1a1a1a]",
+                    )}
+                  >
                     <button
                       type="button"
                       onClick={() => { alert("Create new version (mock)"); setActionsDropdownOpen(false); }}
-                      className="block w-full px-3 py-2 text-left text-[12px] text-[#d9d9d9] hover:bg-[#252525]"
+                      className="block w-full px-3 py-2 text-left text-[12px] text-[#d9d9d9] hover:bg-secondary"
                     >
                       Create new version
                     </button>
                     <button
                       type="button"
                       onClick={() => { alert("Duplicate strategy (mock)"); setActionsDropdownOpen(false); }}
-                      className="block w-full px-3 py-2 text-left text-[12px] text-[#d9d9d9] hover:bg-[#252525]"
+                      className="block w-full px-3 py-2 text-left text-[12px] text-[#d9d9d9] hover:bg-secondary"
                     >
                       Duplicate strategy
                     </button>
@@ -5863,71 +5786,24 @@ export default function App() {
               </div>
             </div>
 
-            {/* Tabs */}
-            <div className={cx("border-0 border-b", ui.divider)}>
-              <nav className="-mb-px flex gap-4 text-[13px]">
-                <button
-                  type="button"
-                  onClick={() => setDetailTab("Strategy Builder")}
-                  className={cx(
-                    "px-2 py-2 border-b-2 transition",
-                    detailTab === "Strategy Builder"
-                      ? "border-emerald-500 text-emerald-200"
-                      : "border-transparent text-[#8c8c8c] hover:text-[#d9d9d9]"
-                  )}
-                >
-                  Strategy Builder
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setDetailTab("Strategy Code")}
-                  className={cx(
-                    "px-2 py-2 border-b-2 transition",
-                    detailTab === "Strategy Code"
-                      ? "border-emerald-500 text-emerald-200"
-                      : "border-transparent text-[#8c8c8c] hover:text-[#d9d9d9]"
-                  )}
-                >
-                  Strategy Code
-                </button>
-              </nav>
-            </div>
-
-            {/* Content */}
-            {detailTab === "Strategy Builder" && (
-              <div className="space-y-4">
-                <BuilderStepper
-                  strategyId={selectedStrategy.s.id}
-                  strategyName={selectedStrategy.s.name}
-                  activeStage={builderStage}
-                  onStageChange={setBuilderStage}
-                  pairs={builderPairs}
-                  onPairsChange={setBuilderPairs}
-                  timeRange={builderTimeRange}
-                  onTimeRangeChange={setBuilderTimeRange}
-                  timeFrameStart={builderTimeFrameStart}
-                  onTimeFrameStartChange={setBuilderTimeFrameStart}
-                  timeFrameEnd={builderTimeFrameEnd}
-                  onTimeFrameEndChange={setBuilderTimeFrameEnd}
-                  hyperoptRun={builderHyperoptRun}
-                  onHyperoptRunChange={setBuilderHyperoptRun}
-                  versionComments={versionComments}
-                  onOpenVersionComment={handleOpenVersionComment}
-                />
-              </div>
-            )}
-
-            {detailTab === "Strategy Code" && (
-              <div className="space-y-3">
-                <div>
-                  <div className="text-[12px] font-medium text-[#d9d9d9]">Strategy code</div>
-                  <div className={cx("text-[11px]", ui.textMuted)}>Displayed as Python code.</div>
-                </div>
-                <CodeEditor value={strategyCode} onChange={setStrategyCode} language="python" />
-              </div>
-            )}
-          </div>
+            <BuilderStepper
+              strategyId={selectedStrategy.s.id}
+              strategyName={selectedStrategy.s.name}
+              activeStage={builderStage}
+              onStageChange={setBuilderStage}
+              pairs={builderPairs}
+              onPairsChange={setBuilderPairs}
+              timeRange={builderTimeRange}
+              onTimeRangeChange={setBuilderTimeRange}
+              timeFrameStart={builderTimeFrameStart}
+              onTimeFrameStartChange={setBuilderTimeFrameStart}
+              timeFrameEnd={builderTimeFrameEnd}
+              onTimeFrameEndChange={setBuilderTimeFrameEnd}
+              hyperoptRun={builderHyperoptRun}
+              onHyperoptRunChange={setBuilderHyperoptRun}
+              versionComments={versionComments}
+              onOpenVersionComment={handleOpenVersionComment}
+            />
           </>
         )}
 

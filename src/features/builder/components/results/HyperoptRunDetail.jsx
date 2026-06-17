@@ -1,6 +1,8 @@
 import React, { memo } from "react";
 import { cx, ui } from "../../../../constants/ui";
 import { HyperoptDetailsTooltip } from "../../../../components/heatmap";
+import { AppButton } from "../../../../components/common/AppButton";
+import { formatHyperoptDateTime } from "../../utils/hyperoptFormatters";
 import { PostProcessingCard } from "./PostProcessingCard";
 import { RunStatusBadge } from "./RunStatusBadge";
 
@@ -42,15 +44,11 @@ export const HyperoptRunDetail = memo(function HyperoptRunDetail({
         </button>
         <span className="text-[#595959]">/</span>
         <span className="text-[#d9d9d9] truncate">
-          {run.date} · {run.pairs}
+          {formatHyperoptDateTime(run.date)} · {run.pairs}
         </span>
-        <button
-          type="button"
-          onClick={() => onBack?.()}
-          className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap ml-auto")}
-        >
+        <AppButton type="button" variant="outline" size="xs" className="ml-auto" onClick={() => onBack?.()}>
           ← Back
-        </button>
+        </AppButton>
       </div>
 
       {/* Run summary */}
@@ -63,7 +61,7 @@ export const HyperoptRunDetail = memo(function HyperoptRunDetail({
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <div className="flex items-center gap-2 min-w-0">
-              <div className="text-[12px] font-semibold text-[#f5f5f5]">{run.date}</div>
+              <div className="text-[12px] font-semibold text-[#f5f5f5]">{formatHyperoptDateTime(run.date)}</div>
               <RunStatusBadge status={run.status} />
             </div>
             <div className="mt-0.5 text-[10px] text-[#8c8c8c]">
@@ -111,21 +109,13 @@ export const HyperoptRunDetail = memo(function HyperoptRunDetail({
 
         <div className="flex flex-wrap items-center gap-1.5 pt-1">
           {showPostProcessing && (
-            <button
-              type="button"
-              onClick={() => onPostProcessing?.()}
-              className={cx(ui.btnPrimary, "h-7 px-2 text-[10px] whitespace-nowrap")}
-            >
+            <AppButton type="button" variant="default" size="xs" onClick={() => onPostProcessing?.()}>
               Post-processing
-            </button>
+            </AppButton>
           )}
-          <button
-            type="button"
-            onClick={() => onTagsComments?.(run)}
-            className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
-          >
+          <AppButton type="button" variant="outline" size="xs" onClick={() => onTagsComments?.(run)}>
             Tags &amp; comments
-          </button>
+          </AppButton>
         </div>
       </div>
 

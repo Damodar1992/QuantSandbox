@@ -1,24 +1,22 @@
-import React, { memo } from "react";
-import { cx, ui } from "../../constants/ui";
+import React, { memo, useMemo } from "react";
 import { PAIR_OPTIONS } from "../../constants/app";
+import { AppSelect } from "../common/AppSelect";
 
-export const PairsDropdown = memo(({ value, onChange }) => {
-  const currentValue = value || "";
+export const PairsDropdown = memo(({ value, onChange, disabled = false }) => {
+  const options = useMemo(() => {
+    const base = [...PAIR_OPTIONS];
+    if (value && !base.includes(value)) base.unshift(value);
+    return base.map((opt) => ({ value: opt, label: opt }));
+  }, [value]);
 
   return (
-    <div className="relative">
-      <label className={cx("block mb-1 text-xs", ui.textMuted)}>Pairs</label>
-      <select
-        value={currentValue}
-        onChange={(e) => onChange(e.target.value)}
-        className={cx(ui.input, "h-9 text-[12px] w-full")}
-      >
-        {PAIR_OPTIONS.map((opt) => (
-          <option key={opt} value={opt}>
-            {opt}
-          </option>
-        ))}
-      </select>
-    </div>
+    <AppSelect
+      label="Pairs"
+      value={value || ""}
+      onValueChange={onChange}
+      options={options}
+      triggerClassName="h-9 text-xs"
+      disabled={disabled}
+    />
   );
 });

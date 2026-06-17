@@ -1,34 +1,25 @@
 import React, { memo, useCallback, useEffect, useRef, useState } from "react";
-import { cx, ui } from "../../../constants/ui";
+import { cx } from "../../../constants/ui";
+import { crmAccent } from "../../../constants/crmAccent";
+import { Input } from "@/components/ui/input";
+import { AppButton } from "@/components/common/AppButton";
 
 export const CollapsibleSelect = memo(({ value, onChange, groupedVars }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState(new Set());
-  const [dropdownPosition, setDropdownPosition] = useState(null);
-  const dropdownRef = useRef(null);
-  const buttonRef = useRef(null);
+  const containerRef = useRef(null);
+  const justSelectedRef = useRef(false);
 
+  // Close on outside click
   useEffect(() => {
-    if (isOpen && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      setDropdownPosition({
-        top: rect.bottom + 4,
-        left: rect.left,
-        width: Math.max(rect.width, 350),
-      });
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+    if (!isOpen) return;
+    const handler = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
         setIsOpen(false);
       }
     };
-    if (isOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () => document.removeEventListener("mousedown", handleClickOutside);
-    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
   }, [isOpen]);
 
   const toggleGroup = useCallback((groupName) => {
@@ -42,63 +33,65 @@ export const CollapsibleSelect = memo(({ value, onChange, groupedVars }) => {
 
   const handleSelect = useCallback(
     (varName) => {
+      justSelectedRef.current = true;
       onChange(varName);
       setIsOpen(false);
     },
-    [onChange]
+    [onChange],
   );
 
+  const handleInputFocus = useCallback(() => {
+    if (justSelectedRef.current) {
+      justSelectedRef.current = false;
+      return;
+    }
+    setIsOpen(true);
+  }, []);
+
   return (
-    <div ref={dropdownRef} className="relative w-full">
-      <div ref={buttonRef} className="relative w-full">
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onFocus={() => setIsOpen(true)}
-          className={cx(ui.input, "w-full h-8 text-[11px] pr-8")}
-          placeholder="Enter value or select from list"
-        />
-        <button
-          type="button"
-          onClick={() => setIsOpen(!isOpen)}
-          className="absolute right-1 top-1/2 -translate-y-1/2 px-2 py-1 text-[#8c8c8c] hover:text-[#d9d9d9] transition-colors"
-        >
-          {isOpen ? "▲" : "▼"}
-        </button>
-      </div>
-      {isOpen && groupedVars && dropdownPosition && (
+    <div ref={containerRef} className="relative w-full">
+      <Input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onFocus={handleInputFocus}
+        className="h-8 w-full pr-8 text-[11px]"
+        placeholder="Enter value or select from list"
+      />
+      <AppButton
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        onMouseDown={(e) => {
+          // prevent input blur→focus cycle
+          e.preventDefault();
+          setIsOpen((v) => !v);
+        }}
+        className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground"
+      >
+        {isOpen ? "▲" : "▼"}
+      </AppButton>
+
+      {isOpen && groupedVars && groupedVars.length > 0 && (
         <div
-          className={cx(
-            "fixed z-[9999]",
-            "rounded border border-[#303030] bg-[#1a1a1a] shadow-lg"
-          )}
-          style={{
-            top: dropdownPosition.top,
-            left: dropdownPosition.left,
-            width: dropdownPosition.width,
-            maxHeight: "400px",
-            overflowY: "auto",
-            overflowX: "hidden",
-          }}
+          className="absolute left-0 top-full z-50 mt-1 w-[min(100vw-2rem,28rem)] max-h-[360px] overflow-y-auto rounded-md border border-border bg-popover text-xs shadow-lg"
+          onMouseDown={(e) => e.preventDefault()} // keep input focus
         >
           {groupedVars.map(([groupName, vars]) => (
             <div key={groupName}>
               <button
                 type="button"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => toggleGroup(groupName)}
                 className={cx(
-                  "w-full px-3 py-2 text-left text-[12px] font-medium",
-                  "flex items-center justify-between",
-                  "hover:bg-[#252525] transition-colors",
-                  "border-b border-[#303030]",
-                  "sticky top-0 bg-[#1f1f1f] z-10"
+                  "flex w-full items-center justify-between border-b border-border px-3 py-2 text-left text-xs font-medium",
+                  "sticky top-0 bg-muted hover:bg-muted/80",
                 )}
               >
-                <span className="text-[#a6a6a6]">
+                <span className="text-muted-foreground">
                   {expandedGroups.has(groupName) ? "▼" : "▶"} {groupName}
                 </span>
-                <span className="text-[#595959] text-[11px]">({vars.length})</span>
+                <span className="text-[11px] text-muted-foreground">({vars.length})</span>
               </button>
               {expandedGroups.has(groupName) && (
                 <div>
@@ -106,13 +99,13 @@ export const CollapsibleSelect = memo(({ value, onChange, groupedVars }) => {
                     <button
                       key={varName}
                       type="button"
+                      onMouseDown={(e) => e.preventDefault()}
                       onClick={() => handleSelect(varName)}
                       className={cx(
-                        "w-full px-4 py-2 text-left text-[12px]",
-                        "hover:bg-[#2a2a2a] transition-colors",
+                        "w-full px-4 py-2 text-left text-xs hover:bg-muted",
                         varName === value
-                          ? "bg-emerald-500/20 text-emerald-300 font-medium"
-                          : "text-[#d9d9d9]"
+                          ? cx(crmAccent.bgMedium, "font-medium", crmAccent.textMuted)
+                          : "text-foreground",
                       )}
                     >
                       {varName}

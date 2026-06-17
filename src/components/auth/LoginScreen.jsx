@@ -19,7 +19,10 @@ export const LoginScreen = memo(({ onLogin, onForgotPassword }) => {
             isReady ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"
           )}
         >
-          <Logo className="mx-auto h-14 w-auto max-w-[280px]" />
+          <div className="flex items-center justify-center gap-3">
+            <Logo className="h-14 w-auto max-w-[280px]" />
+            <span className="text-2xl font-semibold tracking-tight">QuantSandbox</span>
+          </div>
         </div>
 
         <div
@@ -63,6 +66,7 @@ export const LoginScreen = memo(({ onLogin, onForgotPassword }) => {
               </div>
             </div>
             <button
+              type="button"
               onClick={onLogin}
               className={cx(
                 "mt-2 w-full h-9 transition-all duration-200 ease-out hover:scale-[1.01] active:scale-[0.99] motion-reduce:transform-none",

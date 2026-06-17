@@ -1,8 +1,25 @@
-import React, { memo, useEffect, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { cx, ui } from "../../constants/ui";
 import { HEATMAP_CELL_PX } from "../../utils/heatmap";
 import { HeatmapFiltersEditor } from "./HeatmapFiltersEditor";
 import { filtersConfigToFilterRoot, filterRootToFiltersConfig } from "./heatmapFilterPresets";
+
+function computeTooltipPosFromRect(rect) {
+  const pad = 10;
+  const tooltipW = 400;
+  const tooltipH = 420;
+  const vw = typeof window !== "undefined" ? window.innerWidth : 1000;
+  const vh = typeof window !== "undefined" ? window.innerHeight : 800;
+
+  let left = rect.right + pad;
+  let top = rect.top;
+
+  if (left + tooltipW > vw - pad) left = Math.max(pad, rect.left - tooltipW - pad);
+  if (top + tooltipH > vh - pad) top = Math.max(pad, vh - tooltipH - pad);
+  if (top < pad) top = pad;
+
+  return { left, top };
+}
 
 export const HeatMapView = memo(function HeatMapView({
   heatMapData,
@@ -33,6 +50,113 @@ export const HeatMapView = memo(function HeatMapView({
     setFilterDraft(filtersConfigToFilterRoot(config?.filters));
     setFilterPresetDraft(config?.filterPreset || "");
   }, [config?.filters, config?.filterPreset]);
+
+  // Color scale only depends on the data, not on hover state — memoize so
+  // hovering cells doesn't recompute min/max over every cell each time.
+  const getCellColor = useMemo(() => {
+    const allCells = heatMapData?.cells;
+    if (!allCells) return () => "#14532d";
+    const scoredCells = allCells
+      .flat()
+      .filter((c) => c && c.count > 0 && typeof c.avgScore === "number" && Number.isFinite(c.avgScore));
+    const minScore = scoredCells.length ? Math.min(...scoredCells.map((c) => c.avgScore)) : 0;
+    const maxScore = scoredCells.length ? Math.max(...scoredCells.map((c) => c.avgScore)) : 1;
+    const lerp = (a, b, t) => a + (b - a) * t;
+    return (avgScore) => {
+      if (!scoredCells.length || !Number.isFinite(avgScore) || minScore === maxScore) {
+        return "#14532d";
+      }
+      const t = Math.min(Math.max((avgScore - minScore) / (maxScore - minScore), 0), 1);
+      const red = { r: 220, g: 38, b: 38 };
+      const orange = { r: 249, g: 115, b: 22 };
+      const green = { r: 22, g: 163, b: 74 };
+      let from, to, localT;
+      if (t <= 0.5) {
+        from = red;
+        to = orange;
+        localT = t / 0.5;
+      } else {
+        from = orange;
+        to = green;
+        localT = (t - 0.5) / 0.5;
+      }
+      const r = Math.round(lerp(from.r, to.r, localT));
+      const g = Math.round(lerp(from.g, to.g, localT));
+      const b = Math.round(lerp(from.b, to.b, localT));
+      return `rgb(${r}, ${g}, ${b})`;
+    };
+  }, [heatMapData]);
+
+  // Stable handlers so the memoized grid below isn't invalidated on every render.
+  const handleCellEnter = useCallback((cell, e) => {
+    if (!cell || cell.count === 0) return;
+    setHoveredCell(cell);
+    const rect = e?.currentTarget?.getBoundingClientRect?.();
+    if (rect) setTooltipPos(computeTooltipPosFromRect(rect));
+  }, []);
+
+  const handleCellLeave = useCallback(() => {
+    setHoveredCell(null);
+    setTooltipPos(null);
+  }, []);
+
+  // The cell grid is the heavy part (hundreds of buttons). It only depends on
+  // the data + stable handlers, NOT on hover state — so memoize it. This keeps
+  // hovering from re-rendering/reconciling every cell on each mouse move.
+  const gridElement = useMemo(() => {
+    const allCells = heatMapData?.cells;
+    if (!allCells) return null;
+    const gridW = heatMapData.W ?? allCells[0]?.length ?? 1;
+    const gridH = heatMapData.H ?? allCells.length ?? 1;
+    return (
+      <div
+        className="inline-grid gap-px w-fit"
+        style={{
+          gridTemplateColumns: `repeat(${gridW}, ${HEATMAP_CELL_PX}px)`,
+          gridTemplateRows: `repeat(${gridH}, ${HEATMAP_CELL_PX}px)`,
+        }}
+      >
+        {allCells.map((row, rowIndex) =>
+          row.map((cell, colIndex) => {
+            const empty = !cell || cell.count === 0;
+            return (
+              <button
+                key={`${rowIndex}-${colIndex}`}
+                type="button"
+                className={cx(
+                  "flex flex-col items-center justify-center rounded border font-mono text-[9px] leading-tight transition-[filter,border-color] overflow-hidden",
+                  empty
+                    ? "cursor-default border-white/[0.09] bg-[#111111]"
+                    : "cursor-pointer border-white/10 hover:brightness-110 hover:border-white/20",
+                )}
+                style={
+                  empty
+                    ? { width: HEATMAP_CELL_PX, height: HEATMAP_CELL_PX }
+                    : {
+                        width: HEATMAP_CELL_PX,
+                        height: HEATMAP_CELL_PX,
+                        backgroundColor: getCellColor(cell.avgScore),
+                      }
+                }
+                onMouseEnter={(e) => !empty && handleCellEnter(cell, e)}
+                onMouseLeave={handleCellLeave}
+                onClick={() => !empty && onCellClick?.(cell)}
+              >
+                {!empty && (
+                  <>
+                    <span className="leading-tight text-white/90">
+                      {cell.avgScore != null ? cell.avgScore.toFixed(2) : "—"}
+                    </span>
+                    <span className="text-[9px] text-white/80 mt-0.5">n={cell.count}</span>
+                  </>
+                )}
+              </button>
+            );
+          }),
+        )}
+      </div>
+    );
+  }, [heatMapData, getCellColor, handleCellEnter, handleCellLeave, onCellClick]);
 
   if (error) {
     return (
@@ -73,9 +197,7 @@ export const HeatMapView = memo(function HeatMapView({
 
   if (!heatMapData || !heatMapData.cells) return null;
 
-  const { cells, xKeys = [], yKeys = [] } = heatMapData;
-  const gridW = heatMapData.W ?? cells[0]?.length ?? 1;
-  const gridH = heatMapData.H ?? cells.length ?? 1;
+  const { xKeys = [], yKeys = [] } = heatMapData;
 
   const handleApplyFilter = () => {
     onApplyFilters?.({
@@ -140,39 +262,6 @@ export const HeatMapView = memo(function HeatMapView({
         })}
       </div>
     );
-  };
-
-  // Compute score range for coloring
-  const scoredCells = cells
-    .flat()
-    .filter((c) => c && c.count > 0 && typeof c.avgScore === "number" && Number.isFinite(c.avgScore));
-  const minScore = scoredCells.length ? Math.min(...scoredCells.map((c) => c.avgScore)) : 0;
-  const maxScore = scoredCells.length ? Math.max(...scoredCells.map((c) => c.avgScore)) : 1;
-
-  const lerp = (a, b, t) => a + (b - a) * t;
-  const getCellColor = (avgScore) => {
-    if (!scoredCells.length || !Number.isFinite(avgScore) || minScore === maxScore) {
-      return "#14532d";
-    }
-    const t = Math.min(Math.max((avgScore - minScore) / (maxScore - minScore), 0), 1);
-    // 0   -> red, 0.5 -> orange, 1 -> green
-    const red = { r: 220, g: 38, b: 38 };
-    const orange = { r: 249, g: 115, b: 22 };
-    const green = { r: 22, g: 163, b: 74 };
-    let from, to, localT;
-    if (t <= 0.5) {
-      from = red;
-      to = orange;
-      localT = t / 0.5;
-    } else {
-      from = orange;
-      to = green;
-      localT = (t - 0.5) / 0.5;
-    }
-    const r = Math.round(lerp(from.r, to.r, localT));
-    const g = Math.round(lerp(from.g, to.g, localT));
-    const b = Math.round(lerp(from.b, to.b, localT));
-    return `rgb(${r}, ${g}, ${b})`;
   };
 
   const formatParamValue = (v, rawKey) => {
@@ -332,35 +421,6 @@ export const HeatMapView = memo(function HeatMapView({
     });
   })();
 
-  const computeTooltipPosFromRect = (rect) => {
-    const pad = 10;
-    const tooltipW = 400;
-    const tooltipH = 420;
-    const vw = typeof window !== "undefined" ? window.innerWidth : 1000;
-    const vh = typeof window !== "undefined" ? window.innerHeight : 800;
-
-    let left = rect.right + pad;
-    let top = rect.top;
-
-    if (left + tooltipW > vw - pad) left = Math.max(pad, rect.left - tooltipW - pad);
-    if (top + tooltipH > vh - pad) top = Math.max(pad, vh - tooltipH - pad);
-    if (top < pad) top = pad;
-
-    return { left, top };
-  };
-
-  const handleCellEnter = (cell, e) => {
-    if (!cell || cell.count === 0) return;
-    setHoveredCell(cell);
-    const rect = e?.currentTarget?.getBoundingClientRect?.();
-    if (rect) setTooltipPos(computeTooltipPosFromRect(rect));
-  };
-
-  const handleCellLeave = () => {
-    setHoveredCell(null);
-    setTooltipPos(null);
-  };
-
   return (
     <div className={cx(ui.radius, ui.panelMuted, "p-3 w-fit max-w-full")}>
       <div className="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[11px]">
@@ -423,52 +483,7 @@ export const HeatMapView = memo(function HeatMapView({
 
       <div className="flex items-start gap-3">
         <div className="overflow-auto shrink-0">
-          <div
-            className="inline-grid gap-px w-fit"
-            style={{
-              gridTemplateColumns: `repeat(${gridW}, ${HEATMAP_CELL_PX}px)`,
-              gridTemplateRows: `repeat(${gridH}, ${HEATMAP_CELL_PX}px)`,
-            }}
-          >
-            {cells.map((row, rowIndex) =>
-              row.map((cell, colIndex) => {
-                const empty = !cell || cell.count === 0;
-                return (
-                  <button
-                    key={`${rowIndex}-${colIndex}`}
-                    type="button"
-                    className={cx(
-                      "flex flex-col items-center justify-center rounded border font-mono text-[9px] leading-tight transition-[filter,border-color] overflow-hidden",
-                      empty
-                        ? "cursor-default border-white/[0.09] bg-[#111111]"
-                        : "cursor-pointer border-white/10 hover:brightness-110 hover:border-white/20",
-                    )}
-                    style={
-                      empty
-                        ? { width: HEATMAP_CELL_PX, height: HEATMAP_CELL_PX }
-                        : {
-                            width: HEATMAP_CELL_PX,
-                            height: HEATMAP_CELL_PX,
-                            backgroundColor: getCellColor(cell.avgScore),
-                          }
-                    }
-                    onMouseEnter={(e) => !empty && handleCellEnter(cell, e)}
-                    onMouseLeave={handleCellLeave}
-                    onClick={() => !empty && onCellClick?.(cell)}
-                  >
-                    {!empty && (
-                      <>
-                        <span className="leading-tight text-white/90">
-                          {cell.avgScore != null ? cell.avgScore.toFixed(2) : "—"}
-                        </span>
-                        <span className="text-[9px] text-white/80 mt-0.5">n={cell.count}</span>
-                      </>
-                    )}
-                  </button>
-                );
-              }),
-            )}
-          </div>
+          {gridElement}
         </div>
 
         <div className="flex flex-col items-stretch w-[340px] shrink-0 max-h-[min(480px,55vh)] overflow-x-hidden min-w-0">
