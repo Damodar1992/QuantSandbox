@@ -4,6 +4,7 @@ import { useOutsideClose } from "../../hooks/useOutsideClose";
 import { Logo, MenuIcon } from "../common";
 import { PillTabs, ProdButton, UiVariantToggle } from "../prod";
 import { QueueIcon, DragHandleIcon, TrashIcon } from "./Icons";
+import { FeatureFlagsDropdown } from "./FeatureFlagsDropdown";
 
 export const HeaderProd = memo(function HeaderProd({
   onLogout,
@@ -22,6 +23,8 @@ export const HeaderProd = memo(function HeaderProd({
   onQueueRemove,
   hyperoptRun = "Admin run",
   onHyperoptRunChange,
+  miniBacktestEnabled = false,
+  onMiniBacktestEnabledChange,
 }) {
   const queueRef = useOutsideClose(queueOpen, onQueueClose);
   const [draggedIndex, setDraggedIndex] = useState(null);
@@ -158,6 +161,10 @@ export const HeaderProd = memo(function HeaderProd({
             <option value="Pipeline">Quant</option>
             <option value="Admin run">Admin</option>
           </select>
+          <FeatureFlagsDropdown
+            miniBacktestEnabled={miniBacktestEnabled}
+            onMiniBacktestEnabledChange={onMiniBacktestEnabledChange}
+          />
           <span className="hidden sm:inline-flex items-center gap-2 text-[12px] text-muted-foreground">
             User: <span className="font-medium text-foreground">bogdan</span>
           </span>

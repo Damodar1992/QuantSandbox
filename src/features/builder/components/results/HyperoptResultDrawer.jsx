@@ -39,6 +39,7 @@ export const HyperoptResultDrawer = memo(function HyperoptResultDrawer({
         <div className="min-w-0">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-[12px] font-semibold text-[#f5f5f5]">{formatHyperoptDateTime(run.date)}</span>
+            <span className="rounded bg-[#2a2a2a] px-1 py-0.5 text-[10px] font-medium text-[#a6a6a6]">#{run.hyperoptNumber ?? "—"}</span>
             <RunStatusBadge status={run.status} />
           </div>
           <div className="mt-0.5 text-[10px] text-[#8c8c8c]">{children.length} post-processing</div>
@@ -91,15 +92,17 @@ export const HyperoptResultDrawer = memo(function HyperoptResultDrawer({
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-            {showPostProcessing && (
-              <AppButton type="button" variant="default" size="xs" onClick={() => onPostProcessing?.()}>
-                Post-processing
+          <div className="border-t border-[#303030]/50 mt-2.5 pt-2.5">
+            <div className="flex flex-wrap items-center gap-2">
+              {showPostProcessing && (
+                <AppButton type="button" variant="primary" size="sm" onClick={() => onPostProcessing?.()}>
+                  Post-processing
+                </AppButton>
+              )}
+              <AppButton type="button" variant="outline" size="sm" onClick={() => onTagsComments?.(run)}>
+                Tags &amp; comments
               </AppButton>
-            )}
-            <AppButton type="button" variant="outline" size="xs" onClick={() => onTagsComments?.(run)}>
-              Tags &amp; comments
-            </AppButton>
+            </div>
           </div>
         </div>
 
@@ -111,21 +114,25 @@ export const HyperoptResultDrawer = memo(function HyperoptResultDrawer({
             No post-processing results for this run.
           </div>
         ) : (
-          <div className="space-y-3">
-            {children.map((sub) => (
-              <PostProcessingCard
-                key={sub.id}
-                rowId={run.id}
-                sub={sub}
-                onShowDetails={onShowPostProcessingDetails}
-                onConfigureHeatMap={onConfigureHeatMap}
-                onGenerateReport={onGenerateReport}
-                onAddTruncate={onAddTruncate}
-                onShowHeatmap={onShowHeatmap}
-                onDownloadReport={onDownloadReport}
-                onShowItemFilters={onShowItemFilters}
-              />
-            ))}
+          <div className="relative ml-4">
+            {/* Vertical connector line */}
+            <div className="absolute left-0 top-2 bottom-2 w-px bg-sky-500/20" />
+            <div className="space-y-3 pl-4">
+              {children.map((sub) => (
+                <PostProcessingCard
+                  key={sub.id}
+                  rowId={run.id}
+                  sub={sub}
+                  onShowDetails={onShowPostProcessingDetails}
+                  onConfigureHeatMap={onConfigureHeatMap}
+                  onGenerateReport={onGenerateReport}
+                  onAddTruncate={onAddTruncate}
+                  onShowHeatmap={onShowHeatmap}
+                  onDownloadReport={onDownloadReport}
+                  onShowItemFilters={onShowItemFilters}
+                />
+              ))}
+            </div>
           </div>
         )}
       </div>

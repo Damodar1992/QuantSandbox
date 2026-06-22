@@ -62,6 +62,7 @@ export const HyperoptRunDetail = memo(function HyperoptRunDetail({
           <div className="min-w-0">
             <div className="flex items-center gap-2 min-w-0">
               <div className="text-[12px] font-semibold text-[#f5f5f5]">{formatHyperoptDateTime(run.date)}</div>
+              <span className="rounded bg-[#2a2a2a] px-1 py-0.5 text-[10px] font-medium text-[#a6a6a6]">#{run.hyperoptNumber ?? "—"}</span>
               <RunStatusBadge status={run.status} />
             </div>
             <div className="mt-0.5 text-[10px] text-[#8c8c8c]">

@@ -6,6 +6,11 @@ export function pickByStage(activeStage, { signal, entry, exit, risk }) {
   return signal;
 }
 
+/** Human-readable stage name for Builder stage id (1=Signal … 4=Risk). */
+export function getStageLabel(activeStage) {
+  return getBuilderStageCopy(activeStage).stageTag;
+}
+
 /** UI copy for Builder sections that differ per stage. */
 export function getBuilderStageCopy(activeStage) {
   switch (activeStage) {

@@ -19,3 +19,5 @@ export { HyperoptResultDrawer } from "./results/HyperoptResultDrawer";
 export { PostProcessingCard } from "./results/PostProcessingCard";
 export { HyperoptRunDetail } from "./results/HyperoptRunDetail";
 export { RunStatusBadge } from "./results/RunStatusBadge";
+export { MiniBacktestModal } from "./results/MiniBacktestModal";
+export { MiniBacktestSummaryTable } from "./results/MiniBacktestSummaryTable";

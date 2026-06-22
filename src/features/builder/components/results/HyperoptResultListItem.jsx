@@ -43,6 +43,7 @@ export const HyperoptResultListItem = memo(function HyperoptResultListItem({
           <span className={cx("text-[12px] font-semibold", crmSurface.textBright)}>
             {formatHyperoptDateTime(row.date)}
           </span>
+          <span className="rounded bg-[#2a2a2a] px-1 py-0.5 text-[10px] font-medium text-[#a6a6a6]">#{row.hyperoptNumber ?? "—"}</span>
           <RunStatusBadge status={row.status} />
         </div>
         <span className="shrink-0 text-[10px] text-[#8c8c8c]">{ppCount} post-processing</span>

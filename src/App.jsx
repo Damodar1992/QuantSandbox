@@ -5,6 +5,7 @@ import Editor from "@monaco-editor/react";
 // Import constants from separate files
 import { cx, ui } from "./constants/ui";
 import { isProdUi, resolveBuilderLayout } from "./constants/uiVariant";
+import { getFeatureFlags, setFeatureFlag } from "./constants/featureFlags";
 import { SECTIONS, DISABLED_SECTIONS, PAIR_OPTIONS, TIME_RANGES, INITIAL_STRATEGIES, MOCK_OPTIMIZATION_RUNS } from "./constants/app";
 import { SOURCE_OPTIONS, MA_TYPES, INDICATOR_GROUPS, BASE_INDICATORS } from "./constants/indicators";
 import { HEATMAP_FILTER_KEYS, FILTER_OPERATIONS } from "./constants/heatmap";
@@ -90,9 +91,12 @@ import {
   HyperoptResultDrawer,
   HyperoptRunDetail,
   RunStatusBadge,
+  MiniBacktestModal,
+  MiniBacktestSummaryTable,
 } from "./features/builder/components";
 import { getDefaultDisplayName, formatIndicatorSnapshot } from "./features/builder/utils/indicatorHelpers";
 import { formatHyperoptDateTime, normalizeHyperoptRunStatus } from "./features/builder/utils/hyperoptFormatters";
+import { MINI_BACKTEST_DEFAULTS } from "./constants/miniBacktest";
 import { getStageVersionsForStrategy } from "./constants/mockStageVersionTree";
 import {
   STAGE_ID_TO_TYPE,
@@ -147,6 +151,15 @@ const BuilderStepper = memo(function BuilderStepper({
   onHyperoptRunChange,
   versionComments = {},
   onOpenVersionComment,
+  miniBacktestEnabled = false,
+  onMiniBacktestEnabledChange,
+  miniBacktestResults = [],
+  miniBacktestExpandedEpochId = null,
+  onMiniBacktestExpandedEpochIdChange,
+  onSaveMiniBacktestResult,
+  onRemoveMiniBacktestResult,
+  onOpenMiniBacktestModal,
+  onCloseMiniBacktestModal,
 }) {
   // Indicators state (separate for Signal and Entry)
   const [signalIndicators, setSignalIndicators] = useState([]);
@@ -374,7 +387,7 @@ const BuilderStepper = memo(function BuilderStepper({
     const num = Number(value);
     return Number.isFinite(num) ? num.toFixed(3) : "-";
   }, []);
-  
+
   // Normalization formulas: Intermediate + Final (tables shown after dropdown selection)
   const [signalIntermediateScoreFormula, setSignalIntermediateScoreFormula] = useState("Base formula");
   const [signalFinalScoreFormula, setSignalFinalScoreFormula] = useState("Base formula");
@@ -987,6 +1000,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
   const [hyperoptResultsRows, setHyperoptResultsRows] = useState(() => [
     {
       id: "hr1",
+      hyperoptNumber: 1,
       date: "2024-01-15T16:09:00",
       status: "Completed",
       pairs: "BTC/USDT",
@@ -996,16 +1010,17 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
       tags: ["baseline", "btc"],
       comment: "First production sweep; watch drawdown in unknow range.",
       children: [
-      { id: "hr1-1", date: "2024-01-15T12:04:00", status: "Finished", minScore: "0.20", avgScore: "0.55", maxScore: "0.99", foldSize: "24", truncScores: { min: "-0.14", avg: "-0.45", max: "0.84" }, heatmapsAndReports: [
+      { id: "hr1-1", analyzerNumber: 1, date: "2024-01-15T12:04:00", status: "Finished", minScore: "0.20", avgScore: "0.55", maxScore: "0.99", foldSize: "24", truncScores: { min: "-0.14", avg: "-0.45", max: "0.84" }, heatmapsAndReports: [
         { id: "hr1-1-h1", date: "2024-01-15", type: "Heatmap", status: "Finished" },
         { id: "hr1-1-r1", date: "2024-01-15", type: "Report", status: "Completed" },
       ]},
-      { id: "hr1-2", date: "2024-01-16T10:15:00", status: "Finished", minScore: "0.18", avgScore: "0.52", maxScore: "0.87", heatmapsAndReports: [
+      { id: "hr1-2", analyzerNumber: 2, date: "2024-01-16T10:15:00", status: "Finished", minScore: "0.18", avgScore: "0.52", maxScore: "0.87", heatmapsAndReports: [
         { id: "hr1-2-h1", date: "2024-01-16", type: "Heatmap", status: "Finished" },
       ]},
     ]},
     {
       id: "hr2",
+      hyperoptNumber: 2,
       date: "2024-01-14T11:58:00",
       status: "In Progress",
       pairs: "ETH/USDT",
@@ -1015,7 +1030,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
       tags: ["eth", "4h"],
       comment: "Needs re-run after fee model update.",
       children: [
-      { id: "hr2-1", date: "2024-01-14T09:22:00", status: "Finished", minScore: "0.22", avgScore: "0.58", maxScore: "0.91", heatmapsAndReports: [
+      { id: "hr2-1", analyzerNumber: 1, date: "2024-01-14T09:22:00", status: "Finished", minScore: "0.22", avgScore: "0.58", maxScore: "0.91", heatmapsAndReports: [
         { id: "hr2-1-h1", date: "2024-01-14", type: "Heatmap", status: "Finished" },
         { id: "hr2-1-r1", date: "2024-01-14", type: "Report", status: "Completed" },
       ]},
@@ -1402,10 +1417,17 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
             detailId: detail.id,
             detailLabel: detail.label,
             date: sub.date || row.date,
+            hyperoptNumber: row.hyperoptNumber,
+            analyzerNumber: sub.analyzerNumber,
           },
           timeRangeOverride: row.timeFrame,
         });
-        return [...prev, best];
+        return [...prev, {
+          ...best,
+          epochNumber: prev.length + 1,
+          hyperoptNumber: row.hyperoptNumber,
+          analyzerNumber: sub.analyzerNumber,
+        }];
       });
     },
     [setBestResults, buildBestResult, pairs],
@@ -1453,6 +1475,8 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
   const handleSaveBestCandidates = useCallback(() => {
     if (bestCandidates.length === 0) return;
     let heatMapTimeFrame = null;
+    let hyperoptNumber = null;
+    let analyzerNumber = null;
     if (heatMapViewModalId) {
       const id = String(heatMapViewModalId);
       const prefix = "hyperopt-";
@@ -1465,6 +1489,13 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
           for (const row of hyperoptResultsRows) {
             if (row.id === rowId) {
               heatMapTimeFrame = row.timeFrame;
+              hyperoptNumber = row.hyperoptNumber;
+              for (const sub of row.children || []) {
+                if (sub.id === subId) {
+                  analyzerNumber = sub.analyzerNumber;
+                  break;
+                }
+              }
               break;
             }
           }
@@ -1473,18 +1504,26 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
     }
     setBestResults((prev) => {
       const startIndex = prev.length;
-      const added = bestCandidates.map((cand, idx) =>
-        buildBestResult({
+      const added = bestCandidates.map((cand, idx) => {
+        const best = buildBestResult({
           label: `Heatmap cell #${startIndex + idx + 1}`,
           source: "heatmap",
           scores: { avg: cand.score },
           meta: {
             ...cand.meta,
             heatmapParams: cand.params,
+            hyperoptNumber,
+            analyzerNumber,
           },
           timeRangeOverride: heatMapTimeFrame,
-        }),
-      );
+        });
+        return {
+          ...best,
+          epochNumber: startIndex + idx + 1,
+          hyperoptNumber,
+          analyzerNumber,
+        };
+      });
       return [...prev, ...added];
     });
     setBestCandidates([]);
@@ -3249,6 +3288,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                       <thead className="bg-[#1a1a1a] text-[#8c8c8c]">
                         <tr>
                           <th className="px-2 py-2 text-left font-medium border-b border-[#303030] w-8"></th>
+                          <th className="px-2 py-2 text-center font-medium border-b border-[#303030]">#</th>
                           <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Date</th>
                           {(isEntryStage || isExitStage || isRiskStage) && (
                             <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Source</th>
@@ -3277,6 +3317,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                   {hyperoptResultsExpanded.has(row.id) ? "▼" : "▶"}
                                 </button>
                               </td>
+                              <td className="px-2 py-2 text-center text-[#8c8c8c]">{row.hyperoptNumber ?? "—"}</td>
                               <td className="px-3 py-2 whitespace-nowrap">{formatHyperoptDateTime(row.date)}</td>
                               {(isEntryStage || isExitStage || isRiskStage) && (
                                 <td
@@ -3373,6 +3414,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                         <thead className="bg-[#1a1a1a] text-[#8c8c8c]">
                                           <tr>
                                             <th className="px-2 py-1.5 text-left font-medium border-b border-[#303030] w-8"></th>
+                                            <th className="px-2 py-1.5 text-center font-medium border-b border-[#303030]">#</th>
                                             <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030] w-24">Date</th>
                                             <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Post-processing formula info</th>
                                             <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Status</th>
@@ -3401,6 +3443,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                       {isDetailsExpanded ? "▼" : "▶"}
                                                     </button>
                                                   </td>
+                                                  <td className="px-2 py-2 text-center text-[#8c8c8c]">{sub.analyzerNumber ?? "—"}</td>
                                                   <td className="px-3 py-2 text-[#a6a6a6] whitespace-nowrap">{formatHyperoptDateTime(sub.date)}</td>
                                                   <td className="px-3 py-2">
                                                     <HyperoptDetailsTooltip
@@ -3753,7 +3796,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
               collapsed={collapsedSections.has(favoritesSectionNum)}
               onToggle={() => toggleSection(favoritesSectionNum)}
             >
-              <div className="mb-3 flex justify-end">
+              <div className="mb-3 flex items-center justify-between">
                 <span className="rounded-md border border-border bg-background px-2 py-0.5 text-[10px] text-muted-foreground">
                   {bestResults.length} saved
                 </span>
@@ -3784,84 +3827,106 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                             </tr>
                           </thead>
                           <tbody className="text-[#d9d9d9]">
-                            {bestResults.map((best) => (
-                              <tr key={best.id} className="border-b border-[#303030]/60 hover:bg-[#141414]">
-                                <td className="px-3 py-2 align-middle">
-                                  <span title={best.timestamp} className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
-                                </td>
-                                <td className="px-3 py-2">
-                                  <div className="flex flex-col gap-0.5">
-                                    <span className="font-medium text-[11px] text-[#f5f5f5]">
-                                      {best.label || "Best result"}
-                                    </span>
-                                    <span className={cx("text-[10px]", ui.textMuted)}>
-                                      {best.pairs || pairs || "-"} · {best.timeRange || timeRange || "-"}
-                                    </span>
-                                  </div>
-                                </td>
-                                <td className="px-3 py-2">{best.score != null ? best.score.toFixed(3) : "-"}</td>
-                                <td className="px-3 py-2">{best.mfe != null ? best.mfe.toFixed(3) : "-"}</td>
-                                <td className="px-3 py-2">{best.mae != null ? best.mae.toFixed(3) : "-"}</td>
-                                <td className="px-3 py-2">{best.air != null ? best.air.toFixed(3) : "-"}</td>
-                                <td className="px-3 py-2">
-                                  {best.stability != null ? best.stability.toFixed(3) : "-"}
-                                </td>
-                                <td className="px-3 py-2">
-                                  <div className="flex flex-wrap gap-1">
-                                    {(best.indicators || []).map((ind) => {
-                                      const params = formatIndicatorSnapshot(ind);
-                                      return (
-                                        <span
-                                          key={ind.id}
-                                          className="inline-flex items-center gap-1 rounded-full bg-[#1a1a1a] border border-[#303030] px-2 py-0.5"
-                                        >
-                                          <span className="text-[10px] text-[#f5f5f5]">
-                                            {ind.displayName || getDefaultDisplayName(ind.type || "")}
-                                          </span>
-                                          {params && (
-                                            <span className="text-[9px] text-[#a6a6a6] truncate max-w-[160px]">
-                                              {params}
-                                            </span>
-                                          )}
+                            {bestResults.map((best) => {
+                              const isMbtOpen = miniBacktestEnabled && miniBacktestExpandedEpochId === best.id;
+                              const mbtResult = miniBacktestResults.find((r) => r.epochId === best.id);
+                              return (
+                                <React.Fragment key={best.id}>
+                                  <tr className="border-b border-[#303030]/60 hover:bg-[#141414]">
+                                    <td className="px-3 py-2 align-middle">
+                                      <span title={best.timestamp} className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <div className="flex flex-col gap-0.5">
+                                        <span className="font-medium text-[11px] text-[#f5f5f5]">
+                                          {best.label || "Best result"}
                                         </span>
-                                      );
-                                    })}
-                                  </div>
-                                </td>
-                                <td className="px-3 py-2 capitalize text-[#a6a6a6]">
-                                  {best.source === "heatmap" ? "HeatMap" : best.source || "Manual"}
-                                </td>
-                                <td className="px-3 py-2">
-                                  <div className="flex items-center gap-2">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setSelectedBestResult(best);
-                                        setShowBestResultDetailsModal(true);
-                                      }}
-                                      className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
-                                    >
-                                      View
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        if (!confirm("Remove this Best result?")) return;
-                                        setBestResults((prev) =>
-                                          prev.filter((item) => item.id !== best.id),
-                                        );
-                                      }}
-                                      className={cx(
-                                        ui.btn,
-                                        "h-7 px-2 text-[10px] whitespace-nowrap text-red-400 border-red-500/60 hover:bg-red-500/10",
-                                      )}
-                                    >
-                                      Remove
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
+                                        <span className={cx("text-[10px]", ui.textMuted)}>
+                                          {best.pairs || pairs || "-"} · {best.timeRange || timeRange || "-"}
+                                        </span>
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-2">{best.score != null ? best.score.toFixed(3) : "-"}</td>
+                                    <td className="px-3 py-2">{best.mfe != null ? best.mfe.toFixed(3) : "-"}</td>
+                                    <td className="px-3 py-2">{best.mae != null ? best.mae.toFixed(3) : "-"}</td>
+                                    <td className="px-3 py-2">{best.air != null ? best.air.toFixed(3) : "-"}</td>
+                                    <td className="px-3 py-2">
+                                      {best.stability != null ? best.stability.toFixed(3) : "-"}
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <div className="flex flex-wrap gap-1">
+                                        {(best.indicators || []).map((ind) => {
+                                          const indParams = formatIndicatorSnapshot(ind);
+                                          return (
+                                            <span
+                                              key={ind.id}
+                                              className="inline-flex items-center gap-1 rounded-full bg-[#1a1a1a] border border-[#303030] px-2 py-0.5"
+                                            >
+                                              <span className="text-[10px] text-[#f5f5f5]">
+                                                {ind.displayName || getDefaultDisplayName(ind.type || "")}
+                                              </span>
+                                              {indParams && (
+                                                <span className="text-[9px] text-[#a6a6a6] truncate max-w-[160px]">
+                                                  {indParams}
+                                                </span>
+                                              )}
+                                            </span>
+                                          );
+                                        })}
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-2 capitalize text-[#a6a6a6]">
+                                      {best.source === "heatmap" ? "HeatMap" : best.source || "Manual"}
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <div className="flex items-center gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setSelectedBestResult(best);
+                                            setShowBestResultDetailsModal(true);
+                                          }}
+                                          className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
+                                        >
+                                          View
+                                        </button>
+                                        {miniBacktestEnabled && (
+                                          <button
+                                            type="button"
+                                            onClick={() => onOpenMiniBacktestModal(best, activeStage)}
+                                            className={cx(
+                                              ui.btn,
+                                              "h-7 px-2 text-[10px] whitespace-nowrap",
+                                              mbtResult
+                                                ? "bg-amber-500/20 text-amber-200 border-amber-500/40"
+                                                : ""
+                                            )}
+                                            title="Run Mini Backtest for this epoch"
+                                          >
+                                            Mini BT
+                                          </button>
+                                        )}
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (!confirm("Remove this Best result?")) return;
+                                            setBestResults((prev) =>
+                                              prev.filter((item) => item.id !== best.id),
+                                            );
+                                          }}
+                                          className={cx(
+                                            ui.btn,
+                                            "h-7 px-2 text-[10px] whitespace-nowrap text-red-400 border-red-500/60 hover:bg-red-500/10",
+                                          )}
+                                        >
+                                          Remove
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                </React.Fragment>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>
@@ -5152,6 +5217,11 @@ export default function App() {
   const [newStrategyTemplate, setNewStrategyTemplate] = useState("Strategy Builder");
   const [newStrategyDescription, setNewStrategyDescription] = useState("");
 
+  // Mini Backtest Modal state
+  const [miniBacktestModalEpoch, setMiniBacktestModalEpoch] = useState(null);
+  const [miniBacktestModalOpen, setMiniBacktestModalOpen] = useState(false);
+  const [miniBacktestLaunchStageId, setMiniBacktestLaunchStageId] = useState(1);
+
   // Navigation
   const [activeSection, setActiveSection] = useState("Strategies");
   const [settingsSubSection, setSettingsSubSection] = useState("indicators"); // "indicators" | "formulas"
@@ -5162,6 +5232,32 @@ export default function App() {
 
   // Detail view
   const [actionsDropdownOpen, setActionsDropdownOpen] = useState(false);
+
+  // Strategy detail tabs
+  const [activeStrategyTab, setActiveStrategyTab] = useState("builder");
+
+  // --- Mini Backtest Analyzer ---
+  const [miniBacktestEnabled, setMiniBacktestEnabled] = useState(() => getFeatureFlags().miniBacktest);
+  const [miniBacktestResults, setMiniBacktestResults] = useState([]);
+  const [miniBacktestExpandedEpochId, setMiniBacktestExpandedEpochId] = useState(null);
+
+  const handleSaveMiniBacktestResult = useCallback((result) => {
+    setMiniBacktestResults((prev) => {
+      const existing = prev.findIndex(
+        (r) => r.epochId === result.epochId && r.paramsHash === result.paramsHash
+      );
+      if (existing >= 0) {
+        const updated = [...prev];
+        updated[existing] = result;
+        return updated;
+      }
+      return [...prev, result];
+    });
+  }, []);
+
+  const handleRemoveMiniBacktestResult = useCallback((id) => {
+    setMiniBacktestResults((prev) => prev.filter((r) => r.id !== id));
+  }, []);
 
   // Builder fields (mock)
   const [builderStage, setBuilderStage] = useState(1);
@@ -5577,26 +5673,38 @@ export default function App() {
           onQueueRemove={handleQueueRemove}
           hyperoptRun={builderHyperoptRun}
           onHyperoptRunChange={setBuilderHyperoptRun}
+          miniBacktestEnabled={miniBacktestEnabled}
+          onMiniBacktestEnabledChange={(v) => {
+            const value = typeof v === "function" ? v(miniBacktestEnabled) : v;
+            setFeatureFlag("miniBacktest", value);
+            setMiniBacktestEnabled(value);
+          }}
         />
       ) : (
         <Header
           onLogout={handleLogout}
-        sections={SECTIONS}
-        activeSection={activeSection}
-        onSectionChange={handleSectionChange}
-        settingsSubSection={settingsSubSection}
-        onSettingsSubChange={setSettingsSubSection}
-        strategiesCount={strategies.length}
-        disabledSections={DISABLED_SECTIONS}
-        queueOpen={showQueuePanel}
-        onQueueToggle={() => setShowQueuePanel((v) => !v)}
-        onQueueClose={() => setShowQueuePanel(false)}
-        queueItems={queueItems}
-        onQueueReorder={handleQueueReorder}
-        onQueueRemove={handleQueueRemove}
-        hyperoptRun={builderHyperoptRun}
-        onHyperoptRunChange={setBuilderHyperoptRun}
-      />
+          sections={SECTIONS}
+          activeSection={activeSection}
+          onSectionChange={handleSectionChange}
+          settingsSubSection={settingsSubSection}
+          onSettingsSubChange={setSettingsSubSection}
+          strategiesCount={strategies.length}
+          disabledSections={DISABLED_SECTIONS}
+          queueOpen={showQueuePanel}
+          onQueueToggle={() => setShowQueuePanel((v) => !v)}
+          onQueueClose={() => setShowQueuePanel(false)}
+          queueItems={queueItems}
+          onQueueReorder={handleQueueReorder}
+          onQueueRemove={handleQueueRemove}
+          hyperoptRun={builderHyperoptRun}
+          onHyperoptRunChange={setBuilderHyperoptRun}
+          miniBacktestEnabled={miniBacktestEnabled}
+          onMiniBacktestEnabledChange={(v) => {
+            const value = typeof v === "function" ? v(miniBacktestEnabled) : v;
+            setFeatureFlag("miniBacktest", value);
+            setMiniBacktestEnabled(value);
+          }}
+        />
       )}
 
       <main className="flex-1 overflow-visible p-6">
@@ -5786,24 +5894,102 @@ export default function App() {
               </div>
             </div>
 
-            <BuilderStepper
-              strategyId={selectedStrategy.s.id}
-              strategyName={selectedStrategy.s.name}
-              activeStage={builderStage}
-              onStageChange={setBuilderStage}
-              pairs={builderPairs}
-              onPairsChange={setBuilderPairs}
-              timeRange={builderTimeRange}
-              onTimeRangeChange={setBuilderTimeRange}
-              timeFrameStart={builderTimeFrameStart}
-              onTimeFrameStartChange={setBuilderTimeFrameStart}
-              timeFrameEnd={builderTimeFrameEnd}
-              onTimeFrameEndChange={setBuilderTimeFrameEnd}
-              hyperoptRun={builderHyperoptRun}
-              onHyperoptRunChange={setBuilderHyperoptRun}
+            {/* Strategy tabs */}
+            <div className="mb-4 flex items-center gap-1 border-b border-[#303030]">
+              <button
+                type="button"
+                onClick={() => setActiveStrategyTab("builder")}
+                className={cx(
+                  "px-4 py-2 text-[12px] font-medium border-b-2 -mb-px transition-colors",
+                  activeStrategyTab === "builder"
+                    ? "border-emerald-500 text-emerald-300"
+                    : "border-transparent text-[#8c8c8c] hover:text-[#d9d9d9]"
+                )}
+              >
+                Builder
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveStrategyTab("miniBacktest")}
+                className={cx(
+                  "px-4 py-2 text-[12px] font-medium border-b-2 -mb-px transition-colors inline-flex items-center gap-1.5",
+                  activeStrategyTab === "miniBacktest"
+                    ? "border-amber-500 text-amber-300"
+                    : "border-transparent text-[#8c8c8c] hover:text-[#d9d9d9]"
+                )}
+              >
+                Mini Backtest
+                {miniBacktestResults.length > 0 && (
+                  <span className="rounded-full bg-amber-500/20 text-amber-300 text-[9px] px-1.5 py-0.5">
+                    {miniBacktestResults.length}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* Builder tab */}
+            {activeStrategyTab === "builder" && (
+              <BuilderStepper
+                strategyId={selectedStrategy.s.id}
+                strategyName={selectedStrategy.s.name}
+                activeStage={builderStage}
+                onStageChange={setBuilderStage}
+                pairs={builderPairs}
+                onPairsChange={setBuilderPairs}
+                timeRange={builderTimeRange}
+                onTimeRangeChange={setBuilderTimeRange}
+                timeFrameStart={builderTimeFrameStart}
+                onTimeFrameStartChange={setBuilderTimeFrameStart}
+                timeFrameEnd={builderTimeFrameEnd}
+                onTimeFrameEndChange={setBuilderTimeFrameEnd}
+                hyperoptRun={builderHyperoptRun}
+                onHyperoptRunChange={setBuilderHyperoptRun}
               versionComments={versionComments}
               onOpenVersionComment={handleOpenVersionComment}
+              miniBacktestEnabled={miniBacktestEnabled}
+              onMiniBacktestEnabledChange={(v) => {
+                const value = typeof v === "function" ? v(miniBacktestEnabled) : v;
+                setFeatureFlag("miniBacktest", value);
+                setMiniBacktestEnabled(value);
+              }}
+              miniBacktestResults={miniBacktestResults}
+              miniBacktestExpandedEpochId={miniBacktestExpandedEpochId}
+              onMiniBacktestExpandedEpochIdChange={setMiniBacktestExpandedEpochId}
+              onSaveMiniBacktestResult={handleSaveMiniBacktestResult}
+              onRemoveMiniBacktestResult={handleRemoveMiniBacktestResult}
+              onOpenMiniBacktestModal={(epoch, stageId) => {
+                setMiniBacktestModalEpoch(epoch);
+                setMiniBacktestLaunchStageId(stageId ?? 1);
+                setMiniBacktestModalOpen(true);
+              }}
+              onCloseMiniBacktestModal={() => {
+                setMiniBacktestModalOpen(false);
+                setMiniBacktestModalEpoch(null);
+              }}
             />
+          )}
+
+            {/* Mini Backtest tab */}
+            {activeStrategyTab === "miniBacktest" && (
+              <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
+                <div className="px-4 py-3 border-b border-[#303030]">
+                  <div className="text-[14px] font-medium text-[#f5f5f5]">Mini Backtest Summary</div>
+                  <div className={cx("mt-0.5 text-[11px]", ui.textMuted)}>
+                    Overview of all Mini Backtest runs across epochs for this strategy
+                  </div>
+                </div>
+                <div className="p-4">
+                  <MiniBacktestSummaryTable
+                    results={miniBacktestResults}
+                    onViewDetails={(result) => {
+                      setActiveStrategyTab("builder");
+                      setMiniBacktestExpandedEpochId(result.epochId);
+                    }}
+                    onRemoveResult={handleRemoveMiniBacktestResult}
+                  />
+                </div>
+              </div>
+            )}
           </>
         )}
 
@@ -6167,6 +6353,23 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Mini Backtest Modal */}
+      {miniBacktestModalOpen && miniBacktestModalEpoch && (
+        <MiniBacktestModal
+          epoch={miniBacktestModalEpoch}
+          existingResult={miniBacktestResults.find((r) => r.epochId === miniBacktestModalEpoch.id)}
+          open={miniBacktestModalOpen}
+          launchStageId={miniBacktestLaunchStageId}
+          onClose={() => {
+            setMiniBacktestModalOpen(false);
+            setMiniBacktestModalEpoch(null);
+          }}
+          onSaveResult={handleSaveMiniBacktestResult}
+          onRemoveResult={handleRemoveMiniBacktestResult}
+        />
+      )}
+
     </div>
   );
 }

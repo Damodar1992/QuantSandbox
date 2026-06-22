@@ -6,6 +6,7 @@ export const HyperoptDetailsTooltip = memo(function HyperoptDetailsTooltip({
   onShowDetails,
   title = "Formulas info",
   ariaLabel = "Show formulas info",
+  label = "Info",
 }) {
   return (
     <Tooltip>
@@ -18,7 +19,7 @@ export const HyperoptDetailsTooltip = memo(function HyperoptDetailsTooltip({
           aria-label={ariaLabel}
           className="h-6 rounded-full px-2 text-[10px] text-[#8c8c8c] hover:text-[#d9d9d9]"
         >
-          Info
+          {label}
         </AppButton>
       </TooltipTrigger>
       <TooltipContent side="top" className="text-xs">
