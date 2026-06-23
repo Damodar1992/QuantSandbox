@@ -1,64 +1,20 @@
-const STORAGE_KEY = "uiVariant";
-const LAYOUT_KEY = "builderLayout";
-const VALID = new Set(["legacy", "prod"]);
-const VALID_LAYOUT = new Set(["horizontal", "sidebar"]);
+/** Prod-only UI — legacy variant removed. */
 
-/** @returns {'legacy' | 'prod'} */
 export function resolveUiVariant() {
-  if (typeof window !== "undefined") {
-    try {
-      const stored = window.localStorage.getItem(STORAGE_KEY);
-      if (stored && VALID.has(stored)) return stored;
-    } catch {
-      /* ignore */
-    }
-  }
-  const env = import.meta.env.VITE_UI_THEME;
-  if (env && VALID.has(env)) return env;
-  return "legacy";
+  return "prod";
 }
 
-/** @returns {'horizontal' | 'sidebar'} */
 export function resolveBuilderLayout() {
-  if (typeof window !== "undefined") {
-    try {
-      const stored = window.localStorage.getItem(LAYOUT_KEY);
-      if (stored && VALID_LAYOUT.has(stored)) return stored;
-    } catch {
-      /* ignore */
-    }
-  }
-  return resolveUiVariant() === "prod" ? "sidebar" : "horizontal";
+  return "sidebar";
 }
 
 export function isProdUi() {
-  return resolveUiVariant() === "prod";
+  return true;
 }
 
-export function applyUiVariant(variant = resolveUiVariant()) {
-  const v = VALID.has(variant) ? variant : "legacy";
+export function applyUiVariant() {
   if (typeof document !== "undefined") {
-    document.documentElement.setAttribute("data-ui", v);
+    document.documentElement.setAttribute("data-ui", "prod");
   }
-  return v;
-}
-
-/** Persist and reload so module-level `ui` facade picks up the new variant. */
-export function setUiVariant(variant) {
-  const v = VALID.has(variant) ? variant : "legacy";
-  try {
-    window.localStorage.setItem(STORAGE_KEY, v);
-    if (v === "prod") {
-      window.localStorage.setItem(LAYOUT_KEY, "sidebar");
-    } else {
-      window.localStorage.setItem(LAYOUT_KEY, "horizontal");
-    }
-  } catch {
-    /* ignore */
-  }
-  window.location.reload();
-}
-
-export function toggleUiVariant() {
-  setUiVariant(resolveUiVariant() === "prod" ? "legacy" : "prod");
+  return "prod";
 }

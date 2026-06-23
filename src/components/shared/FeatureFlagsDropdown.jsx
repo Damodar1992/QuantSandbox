@@ -1,25 +1,24 @@
 import React, { memo, useState } from "react";
 import { cx, ui } from "../../constants/ui";
 import { useOutsideClose } from "../../hooks/useOutsideClose";
-import { getFeatureFlags, setFeatureFlag } from "../../constants/featureFlags";
+import { setFeatureFlag } from "../../constants/featureFlags";
 
 const FEATURES = [
   { key: "miniBacktest", label: "Mini Backtest" },
+  { key: "formulas", label: "Formulas" },
 ];
 
 export const FeatureFlagsDropdown = memo(function FeatureFlagsDropdown({
-  miniBacktestEnabled,
-  onMiniBacktestEnabledChange,
+  flags = {},
+  onFlagChange,
 }) {
   const [open, setOpen] = useState(false);
   const ref = useOutsideClose(open, () => setOpen(false));
 
-  const handleToggle = (key, currentValue) => {
-    const newValue = !currentValue;
+  const handleToggle = (key) => {
+    const newValue = !flags[key];
     setFeatureFlag(key, newValue);
-    if (key === "miniBacktest") {
-      onMiniBacktestEnabledChange?.(newValue);
-    }
+    onFlagChange?.(key, newValue);
   };
 
   return (
@@ -49,14 +48,14 @@ export const FeatureFlagsDropdown = memo(function FeatureFlagsDropdown({
           role="menu"
         >
           {FEATURES.map((feature) => {
-            const checked = feature.key === "miniBacktest" ? miniBacktestEnabled : false;
+            const checked = Boolean(flags[feature.key]);
             return (
               <div
                 key={feature.key}
                 role="menuitemcheckbox"
                 aria-checked={checked}
                 className="flex items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-[12px] hover:bg-accent cursor-pointer"
-                onClick={() => handleToggle(feature.key, checked)}
+                onClick={() => handleToggle(feature.key)}
               >
                 <span className="text-foreground">{feature.label}</span>
                 <span

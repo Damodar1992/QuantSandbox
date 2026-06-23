@@ -4,6 +4,7 @@ import { crmAccent, crmSurface } from "../../../../constants/crmAccent";
 import { HyperoptDetailsTooltip } from "../../../../components/heatmap";
 import { AppButton } from "../../../../components/common/AppButton";
 import { formatHyperoptDateTime } from "../../utils/hyperoptFormatters";
+import { resolveTagNames } from "../../../../features/tags/utils/tagStore";
 import { RunStatusBadge } from "./RunStatusBadge";
 
 /**
@@ -17,10 +18,13 @@ export const HyperoptResultCard = memo(function HyperoptResultCard({
   showPostProcessing = false,
   onOpen,
   onPostProcessing,
-  onTagsComments,
+  onEditTags,
+  onEditComment,
   onShowDetails,
+  tagsRegistry = [],
 }) {
   const ppCount = row.children?.length ?? 0;
+  const tagNames = resolveTagNames(row.tagIds, tagsRegistry);
 
   return (
     <div
@@ -82,9 +86,9 @@ export const HyperoptResultCard = memo(function HyperoptResultCard({
         )}
         <div className="text-[#8c8c8c]">Tags</div>
         <div className="text-right min-w-0">
-          {row.tags?.length ? (
+          {tagNames.length ? (
             <div className="flex flex-wrap justify-end gap-1">
-              {row.tags.slice(0, 4).map((t) => (
+              {tagNames.slice(0, 4).map((t) => (
                 <span
                   key={t}
                   className="rounded border border-[#303030] bg-[#0f0f0f] px-1.5 py-0.5 text-[10px] text-[#a6a6a6]"
@@ -92,9 +96,9 @@ export const HyperoptResultCard = memo(function HyperoptResultCard({
                   {t}
                 </span>
               ))}
-              {row.tags.length > 4 && (
+              {tagNames.length > 4 && (
                 <span className="self-center text-[10px] text-[#8c8c8c]">
-                  +{row.tags.length - 4}
+                  +{tagNames.length - 4}
                 </span>
               )}
             </div>
@@ -117,8 +121,11 @@ export const HyperoptResultCard = memo(function HyperoptResultCard({
             Post-processing
           </AppButton>
         )}
-        <AppButton type="button" variant="outline" size="xs" onClick={() => onTagsComments?.(row)}>
-          Tags &amp; comments
+        <AppButton type="button" variant="outline" size="xs" onClick={() => onEditTags?.(row)}>
+          Tags
+        </AppButton>
+        <AppButton type="button" variant="outline" size="xs" onClick={() => onEditComment?.(row)}>
+          Comment
         </AppButton>
         <AppButton type="button" variant="outline" size="xs" className="ml-auto" onClick={() => onOpen?.(row.id)}>
           Open

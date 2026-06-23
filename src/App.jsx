@@ -4,9 +4,15 @@ import Editor from "@monaco-editor/react";
 
 // Import constants from separate files
 import { cx, ui } from "./constants/ui";
-import { isProdUi, resolveBuilderLayout } from "./constants/uiVariant";
+import { HeaderProd, TableViewIcon, CardViewIcon } from "./components/shared";
 import { getFeatureFlags, setFeatureFlag } from "./constants/featureFlags";
 import { SECTIONS, DISABLED_SECTIONS, PAIR_OPTIONS, TIME_RANGES, INITIAL_STRATEGIES, MOCK_OPTIMIZATION_RUNS } from "./constants/app";
+import {
+  INITIAL_TAGS_REGISTRY,
+  INITIAL_TAG_RELATIONS,
+  INITIAL_HYPEROPT_RESULTS_ROWS,
+  MOCK_CURRENT_USER,
+} from "./constants/tags";
 import { SOURCE_OPTIONS, MA_TYPES, INDICATOR_GROUPS, BASE_INDICATORS } from "./constants/indicators";
 import { HEATMAP_FILTER_KEYS, FILTER_OPERATIONS } from "./constants/heatmap";
 import {
@@ -54,9 +60,6 @@ import { generateMockResults } from "./utils/mockResults";
 import { useOutsideClose } from "./hooks/useOutsideClose";
 import { Logo, Badge, MoreIcon, EyeIcon, MenuIcon, ModalShell } from "./components/common";
 import { LoginScreen, ForgotPasswordModal } from "./components/auth";
-import { Header, HeaderProd, TableViewIcon, CardViewIcon } from "./components/shared";
-import { UiVariantToggle } from "./components/prod";
-import { BuilderStageNavHorizontal } from "./features/builder/layout/BuilderStageNav";
 import { BuilderSectionShell } from "./features/builder/layout/BuilderSectionShell";
 import { BuilderStepsSidebar } from "./components/prod";
 import { CreateStrategyModal, EditDescriptionModal, StrategyRow } from "./components/strategies";
@@ -75,7 +78,6 @@ import { IndicatorActionsMenu, AddIndicatorPageModal } from "./components/indica
 import {
   StageIcon,
   IndicatorLibrary,
-  IndicatorItem,
   SelectedIndicatorCard,
   selectedIndicatorsGridClass,
   AddIndicatorModal,
@@ -117,6 +119,13 @@ import {
   getVersionById,
   hasVersionComment,
 } from "./features/versioning";
+import {
+  findOrCreateTagByName,
+  getAvailableTagIdsForFilter,
+  resolveTagNames,
+  syncHyperoptTagIds,
+} from "./features/tags/utils/tagStore";
+import { TagsPage } from "./components/tags";
 
 /**
  * Quant Sandbox CRM Mock — Properly structured React app
@@ -160,6 +169,23 @@ const BuilderStepper = memo(function BuilderStepper({
   onRemoveMiniBacktestResult,
   onOpenMiniBacktestModal,
   onCloseMiniBacktestModal,
+  tagsRegistry = [],
+  setTagsRegistry,
+  tagRelations = [],
+  setTagRelations,
+  hyperoptResultsRows = [],
+  setHyperoptResultsRows,
+  currentUserRole = "Admin",
+  currentUserId = MOCK_CURRENT_USER.id,
+  hyperoptTagFilter = [],
+  setHyperoptTagFilter,
+  hyperoptTagsModalRowId = null,
+  hyperoptTagsDraft = { tagIds: [], tagInput: "" },
+  setHyperoptTagsDraft,
+  openHyperoptTagsModal,
+  closeHyperoptTagsModal,
+  commitHyperoptTagsDraftTag,
+  saveHyperoptTagsModal,
 }) {
   // Indicators state (separate for Signal and Entry)
   const [signalIndicators, setSignalIndicators] = useState([]);
@@ -971,96 +997,39 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
     });
   }, []);
   // Hyperopt Results three-level table data (level 1: runs; level 2: normalization results; level 3: HeatMaps & Reports)
-  const [hyperoptMetaModalRowId, setHyperoptMetaModalRowId] = useState(null);
-  const [hyperoptMetaDraft, setHyperoptMetaDraft] = useState({
-    tags: [],
-    comment: "",
-    tagInput: "",
-  });
-  const openHyperoptMetaModal = useCallback((row) => {
-    setHyperoptMetaModalRowId(row.id);
-    setHyperoptMetaDraft({
-      tags: Array.isArray(row.tags) ? [...row.tags] : [],
+  const [hyperoptCommentModalRowId, setHyperoptCommentModalRowId] = useState(null);
+  const [hyperoptCommentDraft, setHyperoptCommentDraft] = useState({ comment: "" });
+  const openHyperoptCommentModal = useCallback((row) => {
+    setHyperoptCommentModalRowId(row.id);
+    setHyperoptCommentDraft({
       comment: typeof row.comment === "string" ? row.comment : "",
-      tagInput: "",
     });
   }, []);
-  const closeHyperoptMetaModal = useCallback(() => {
-    setHyperoptMetaModalRowId(null);
-    setHyperoptMetaDraft({ tags: [], comment: "", tagInput: "" });
+  const closeHyperoptCommentModal = useCallback(() => {
+    setHyperoptCommentModalRowId(null);
+    setHyperoptCommentDraft({ comment: "" });
   }, []);
-  const commitHyperoptMetaDraftTag = useCallback(() => {
-    setHyperoptMetaDraft((prev) => {
-      const t = prev.tagInput.trim();
-      if (!t) return prev;
-      if (prev.tags.includes(t)) return { ...prev, tagInput: "" };
-      return { ...prev, tags: [...prev.tags, t], tagInput: "" };
-    });
-  }, []);
-  const [hyperoptResultsRows, setHyperoptResultsRows] = useState(() => [
-    {
-      id: "hr1",
-      hyperoptNumber: 1,
-      date: "2024-01-15T16:09:00",
-      status: "Completed",
-      pairs: "BTC/USDT",
-      timeFrame: "1h",
-      knowRange: "2020-01-01 – 2023-06-01",
-      unknowRange: "2023-06-01 – 2023-12-31",
-      tags: ["baseline", "btc"],
-      comment: "First production sweep; watch drawdown in unknow range.",
-      children: [
-      { id: "hr1-1", analyzerNumber: 1, date: "2024-01-15T12:04:00", status: "Finished", minScore: "0.20", avgScore: "0.55", maxScore: "0.99", foldSize: "24", truncScores: { min: "-0.14", avg: "-0.45", max: "0.84" }, heatmapsAndReports: [
-        { id: "hr1-1-h1", date: "2024-01-15", type: "Heatmap", status: "Finished" },
-        { id: "hr1-1-r1", date: "2024-01-15", type: "Report", status: "Completed" },
-      ]},
-      { id: "hr1-2", analyzerNumber: 2, date: "2024-01-16T10:15:00", status: "Finished", minScore: "0.18", avgScore: "0.52", maxScore: "0.87", heatmapsAndReports: [
-        { id: "hr1-2-h1", date: "2024-01-16", type: "Heatmap", status: "Finished" },
-      ]},
-    ]},
-    {
-      id: "hr2",
-      hyperoptNumber: 2,
-      date: "2024-01-14T11:58:00",
-      status: "In Progress",
-      pairs: "ETH/USDT",
-      timeFrame: "4h",
-      knowRange: "2021-01-01 – 2023-09-01",
-      unknowRange: "2023-09-01 – 2024-01-01",
-      tags: ["eth", "4h"],
-      comment: "Needs re-run after fee model update.",
-      children: [
-      { id: "hr2-1", analyzerNumber: 1, date: "2024-01-14T09:22:00", status: "Finished", minScore: "0.22", avgScore: "0.58", maxScore: "0.91", heatmapsAndReports: [
-        { id: "hr2-1-h1", date: "2024-01-14", type: "Heatmap", status: "Finished" },
-        { id: "hr2-1-r1", date: "2024-01-14", type: "Report", status: "Completed" },
-      ]},
-    ]},
-  ]);
-  const [hyperoptTagFilter, setHyperoptTagFilter] = useState([]);
   const [hyperoptTagFilterOpen, setHyperoptTagFilterOpen] = useState(false);
   const hyperoptTagFilterRef = useOutsideClose(hyperoptTagFilterOpen, () => setHyperoptTagFilterOpen(false));
-  const hyperoptAvailableTags = useMemo(() => {
-    const tags = new Set();
-    for (const row of hyperoptResultsRows) {
-      for (const tag of row.tags || []) tags.add(tag);
-    }
-    return Array.from(tags).sort((a, b) => a.localeCompare(b));
-  }, [hyperoptResultsRows]);
+  const hyperoptAvailableTagIds = useMemo(
+    () => getAvailableTagIdsForFilter(hyperoptResultsRows, tagsRegistry, currentUserRole, currentUserId),
+    [hyperoptResultsRows, tagsRegistry, currentUserRole, currentUserId],
+  );
   const filteredHyperoptResultsRows = useMemo(() => {
     if (hyperoptTagFilter.length === 0) return hyperoptResultsRows;
-    return hyperoptResultsRows.filter((row) => (row.tags || []).some((tag) => hyperoptTagFilter.includes(tag)));
+    return hyperoptResultsRows.filter((row) =>
+      (row.tagIds || []).some((tagId) => hyperoptTagFilter.includes(tagId)),
+    );
   }, [hyperoptResultsRows, hyperoptTagFilter]);
-  const saveHyperoptMetaModal = useCallback(() => {
-    if (!hyperoptMetaModalRowId) return;
+  const saveHyperoptCommentModal = useCallback(() => {
+    if (!hyperoptCommentModalRowId) return;
     setHyperoptResultsRows((rows) =>
       rows.map((r) =>
-        r.id === hyperoptMetaModalRowId
-          ? { ...r, tags: [...hyperoptMetaDraft.tags], comment: hyperoptMetaDraft.comment }
-          : r
+        r.id === hyperoptCommentModalRowId ? { ...r, comment: hyperoptCommentDraft.comment } : r
       )
     );
-    closeHyperoptMetaModal();
-  }, [hyperoptMetaModalRowId, hyperoptMetaDraft.tags, hyperoptMetaDraft.comment, closeHyperoptMetaModal]);
+    closeHyperoptCommentModal();
+  }, [hyperoptCommentModalRowId, hyperoptCommentDraft.comment, closeHyperoptCommentModal]);
   const selectedSourceBestResults = pickByStage(activeStage, {
     signal: [],
     entry: signalBestResults,
@@ -1693,8 +1662,6 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
   const [openRunId, setOpenRunId] = useState(null);
   const [resultsViewMode, setResultsViewMode] = useState("table");
 
-  const builderLayout = resolveBuilderLayout();
-
   const stageNavRows = useMemo(
     () =>
       stages.map((s) => {
@@ -1723,21 +1690,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
   );
 
   return (
-    <div className={cx(isProdUi() ? "space-y-6" : cx(ui.radius, ui.panel, "overflow-visible"))}>
-      {builderLayout === "horizontal" ? (
-        <BuilderStageNavHorizontal
-          stages={stageNavRows}
-          activeStage={activeStage}
-          onStageChange={onStageChange}
-          selectedVersionByStage={selectedVersionByStage}
-          onStageVersionChange={handleStageVersionChange}
-          onAddNewStageVersion={handleAddNewStageVersion}
-          onOpenVersionComment={openVersionCommentForStage}
-          onOpenVersionTree={() => setShowVersionTree(true)}
-          versionBreadcrumb={versionBreadcrumb}
-        />
-      ) : null}
-
+    <div className="space-y-6">
       <StageVersionTreeModal
         open={showVersionTree}
         onClose={() => setShowVersionTree(false)}
@@ -1748,31 +1701,23 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
         onSelectNode={handleTreeNodeSelect}
       />
 
-      {/* Stage content */}
-      <div className={isProdUi() ? "space-y-6" : builderLayout === "sidebar" ? "space-y-4 p-4" : "p-3"}>
-        {builderLayout === "sidebar" ? (
-          <div
-            className={cx(
-              isProdUi() &&
-                "sticky z-10 top-[var(--header-height)] border-b border-[rgba(60,40,80,0.35)] bg-[#0f0d1e]/95 py-3 backdrop-blur supports-[backdrop-filter]:bg-[#0f0d1e]/80",
-            )}
-          >
-            <BuilderStepsSidebar
-              stages={stageNavRows}
-              activeStageId={activeStage}
-              onStageChange={onStageChange}
-              selectedVersionByStage={selectedVersionByStage}
-              onStageVersionChange={handleStageVersionChange}
-              onAddNewStageVersion={handleAddNewStageVersion}
-              onOpenVersionComment={openVersionCommentForStage}
-              onOpenVersionTree={() => setShowVersionTree(true)}
-              versionBreadcrumb={versionBreadcrumb}
-            />
-          </div>
-        ) : null}
-        <div className={builderLayout === "sidebar" ? "min-w-0" : undefined}>
+      <div className="space-y-6">
+        <div className="sticky z-10 top-[var(--header-height)] border-b border-[rgba(60,40,80,0.35)] bg-[#0f0d1e]/95 py-3 backdrop-blur supports-[backdrop-filter]:bg-[#0f0d1e]/80">
+          <BuilderStepsSidebar
+            stages={stageNavRows}
+            activeStageId={activeStage}
+            onStageChange={onStageChange}
+            selectedVersionByStage={selectedVersionByStage}
+            onStageVersionChange={handleStageVersionChange}
+            onAddNewStageVersion={handleAddNewStageVersion}
+            onOpenVersionComment={openVersionCommentForStage}
+            onOpenVersionTree={() => setShowVersionTree(true)}
+            versionBreadcrumb={versionBreadcrumb}
+          />
+        </div>
+        <div className="min-w-0">
         {active.id === 1 || active.id === 2 || active.id === 3 || active.id === 4 ? (
-          <div className={isProdUi() ? "space-y-6" : "space-y-4"}>
+          <div className="space-y-6">
             {isRiskStage && (
               <RiskStagePanel
                 collapsedSections={collapsedSections}
@@ -1809,22 +1754,15 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
 
                   {/* Selected indicators (right) — 70% */}
                   <div className="min-w-0">
-                <div
-                  className={cx(
-                    "h-full flex flex-col",
-                    isProdUi()
-                      ? ui.builderColumn
-                      : cx(ui.radius, ui.panel, "overflow-hidden"),
-                  )}
-                >
-                  <div className={cx(isProdUi() ? "mb-2" : cx("px-4 py-3", ui.panelMuted, "border-0 border-b", ui.divider))}>
+                <div className={cx("h-full flex flex-col", ui.builderColumn)}>
+                  <div className="mb-2">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <div className={cx(isProdUi() ? "text-[12px] font-medium mb-1 text-[#faf7fd]" : "text-sm font-medium mb-1 text-[#d9d9d9]")}>
+                        <div className="text-[12px] font-medium mb-1 text-[#faf7fd]">
                           Selected Indicators
                         </div>
                         <div className={cx("text-[10px]", ui.textMuted)}>
-                          {isProdUi() ? "Added indicators" : "Ranges are edited in section 3."}
+                          Added indicators
                         </div>
                       </div>
                     </div>
@@ -1837,26 +1775,15 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                           No indicators yet. Add one from the library.
                         </div>
                       ) : (
-                        <div className={isProdUi() ? selectedIndicatorsGridClass : "space-y-2"}>
-                          {indicators.map((ind, idx) =>
-                            isProdUi() ? (
+                        <div className={selectedIndicatorsGridClass}>
+                          {indicators.map((ind) => (
                               <SelectedIndicatorCard
                                 key={ind.id}
                                 indicator={ind}
                                 variant="compact"
                                 onDelete={() => handleDeleteIndicator(ind.id)}
                               />
-                            ) : (
-                              <IndicatorItem
-                                key={ind.id}
-                                indicator={ind}
-                                index={idx}
-                                total={indicators.length}
-                                variant="summary"
-                                onDelete={() => handleDeleteIndicator(ind.id)}
-                              />
-                            ),
-                          )}
+                          ))}
                         </div>
                       )
                     ) : (
@@ -1909,11 +1836,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
               subtitle="Min, max, and step for each selected indicator. Remove indicators in section 1."
               collapsed={collapsedSections.has(3)}
               onToggle={() => toggleSection(3)}
-              headerRight={
-                isProdUi() ? (
-                  <TotalCombinationsBadge totalCombinations={totalCombinations} />
-                ) : null
-              }
+              headerRight={<TotalCombinationsBadge totalCombinations={totalCombinations} />}
             >
                   <IndicatorRangesPanel
                     indicators={indicators}
@@ -3246,7 +3169,9 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                           aria-expanded={hyperoptTagFilterOpen}
                         >
                           <span className="truncate text-left">
-                            {hyperoptTagFilter.length === 0 ? "Tags: All" : `Tags: ${hyperoptTagFilter.join(", ")}`}
+                            {hyperoptTagFilter.length === 0
+                              ? "Tags: All"
+                              : `Tags: ${resolveTagNames(hyperoptTagFilter, tagsRegistry).join(", ")}`}
                           </span>
                           <span className="text-[#8c8c8c]">{hyperoptTagFilterOpen ? "▲" : "▼"}</span>
                         </button>
@@ -3259,21 +3184,25 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                             >
                               All
                             </button>
-                            {hyperoptAvailableTags.map((tag) => {
-                              const checked = hyperoptTagFilter.includes(tag);
+                            {hyperoptAvailableTagIds.map((tagId) => {
+                              const tagName =
+                                tagsRegistry.find((tag) => tag.id === tagId)?.name || tagId;
+                              const checked = hyperoptTagFilter.includes(tagId);
                               return (
-                                <label key={tag} className="flex items-center gap-2 h-7 px-2 rounded text-[10px] text-[#d9d9d9] hover:bg-[#1a1a1a] cursor-pointer">
+                                <label key={tagId} className="flex items-center gap-2 h-7 px-2 rounded text-[10px] text-[#d9d9d9] hover:bg-[#1a1a1a] cursor-pointer">
                                   <input
                                     type="checkbox"
                                     checked={checked}
                                     onChange={() =>
                                       setHyperoptTagFilter((prev) =>
-                                        prev.includes(tag) ? prev.filter((item) => item !== tag) : [...prev, tag]
+                                        prev.includes(tagId)
+                                          ? prev.filter((item) => item !== tagId)
+                                          : [...prev, tagId],
                                       )
                                     }
                                     className="h-3 w-3 accent-emerald-500"
                                   />
-                                  <span className="truncate">{tag}</span>
+                                  <span className="truncate">{tagName}</span>
                                 </label>
                               );
                             })}
@@ -3304,7 +3233,9 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                         </tr>
                       </thead>
                       <tbody className="text-[#d9d9d9]">
-                        {filteredHyperoptResultsRows.map((row) => (
+                        {filteredHyperoptResultsRows.map((row) => {
+                          const rowTagNames = resolveTagNames(row.tagIds, tagsRegistry);
+                          return (
                           <React.Fragment key={row.id}>
                             <tr className="border-b border-[#303030] bg-[#141414] hover:bg-[#1f1f1f]">
                               <td className="px-2 py-2 align-middle">
@@ -3341,11 +3272,11 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                               </td>
                               <td
                                 className="px-3 py-2 max-w-[200px] align-top"
-                                title={row.tags?.length ? row.tags.join(", ") : undefined}
+                                title={rowTagNames.length ? rowTagNames.join(", ") : undefined}
                               >
-                                {row.tags?.length ? (
+                                {rowTagNames.length ? (
                                   <div className="flex flex-wrap gap-1">
-                                    {row.tags.slice(0, 3).map((t) => (
+                                    {rowTagNames.slice(0, 3).map((t) => (
                                       <span
                                         key={t}
                                         className="rounded border border-[#303030] bg-[#0f0f0f] px-1.5 py-0.5 text-[10px] text-[#a6a6a6]"
@@ -3353,9 +3284,9 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                         {t}
                                       </span>
                                     ))}
-                                    {row.tags.length > 3 && (
+                                    {rowTagNames.length > 3 && (
                                       <span className="self-center text-[10px] text-[#8c8c8c]">
-                                        +{row.tags.length - 3}
+                                        +{rowTagNames.length - 3}
                                       </span>
                                     )}
                                   </div>
@@ -3393,10 +3324,17 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                   )}
                                   <button
                                     type="button"
-                                    onClick={() => openHyperoptMetaModal(row)}
+                                    onClick={() => openHyperoptTagsModal(row)}
                                     className={cx(ui.btnPrimary, "h-7 px-2 text-[10px] whitespace-nowrap")}
                                   >
-                                    Tags & comments
+                                    Tags
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => openHyperoptCommentModal(row)}
+                                    className={cx(ui.btnPrimary, "h-7 px-2 text-[10px] whitespace-nowrap")}
+                                  >
+                                    Comment
                                   </button>
                                 </div>
                               </td>
@@ -3703,7 +3641,8 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                               </tr>
                             )}
                           </React.Fragment>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -3738,6 +3677,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                   onSelect={(id) => setOpenRunId(id)}
                                   showSource={showSource}
                                   sourceText={sourceText}
+                                  tagsRegistry={tagsRegistry}
                                 />
                               ))
                             )}
@@ -3752,9 +3692,11 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                 sourceText={sourceText}
                                 sourceTitle={sourceTitle}
                                 showPostProcessing={showPostProcessing}
+                                tagsRegistry={tagsRegistry}
                                 onClose={() => setOpenRunId(null)}
                                 onPostProcessing={() => setShowNormalizationModal(true)}
-                                onTagsComments={(row) => openHyperoptMetaModal(row)}
+                                onEditTags={(row) => openHyperoptTagsModal(row)}
+                                onEditComment={(row) => openHyperoptCommentModal(row)}
                                 onShowHyperoptDetails={() => {
                                   setHyperoptDetailsModalType("hyperopt");
                                   setShowHyperoptDetailsModal(true);
@@ -4506,12 +4448,12 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
           </div>
         </div>
       )}
-      {hyperoptMetaModalRowId &&
+      {hyperoptTagsModalRowId &&
         typeof document !== "undefined" &&
         createPortal(
           <div
             className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/70"
-            onClick={closeHyperoptMetaModal}
+            onClick={closeHyperoptTagsModal}
           >
             <div
               className={cx(
@@ -4536,11 +4478,11 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                       fill="currentColor"
                     />
                   </svg>
-                  Tags & comments
+                  Tags
                 </span>
                 <button
                   type="button"
-                  onClick={closeHyperoptMetaModal}
+                  onClick={closeHyperoptTagsModal}
                   className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1"
                   aria-label="Close"
                 >
@@ -4553,14 +4495,14 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                   <div className="flex gap-2">
                     <input
                       type="text"
-                      value={hyperoptMetaDraft.tagInput}
+                      value={hyperoptTagsDraft.tagInput}
                       onChange={(e) =>
-                        setHyperoptMetaDraft((prev) => ({ ...prev, tagInput: e.target.value }))
+                        setHyperoptTagsDraft((prev) => ({ ...prev, tagInput: e.target.value }))
                       }
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
                           e.preventDefault();
-                          commitHyperoptMetaDraftTag();
+                          commitHyperoptTagsDraftTag();
                         }
                       }}
                       className={cx(ui.input, "h-8 flex-1 text-[12px]")}
@@ -4568,7 +4510,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                     />
                     <button
                       type="button"
-                      onClick={commitHyperoptMetaDraftTag}
+                      onClick={commitHyperoptTagsDraftTag}
                       title="Add tag"
                       aria-label="Add tag"
                       className={cx(
@@ -4589,24 +4531,27 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                       </svg>
                     </button>
                   </div>
-                  {hyperoptMetaDraft.tags.length > 0 && (
+                  {hyperoptTagsDraft.tagIds.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 pt-1">
-                      {hyperoptMetaDraft.tags.map((t, i) => (
+                      {hyperoptTagsDraft.tagIds.map((tagId) => {
+                        const tagName =
+                          tagsRegistry.find((tag) => tag.id === tagId)?.name || tagId;
+                        return (
                         <span
-                          key={`${t}-${i}`}
+                          key={tagId}
                           className="inline-flex items-center gap-1 rounded border border-[#303030] bg-[#0f0f0f] pl-2 pr-0.5 py-0.5 text-[11px] text-[#d9d9d9]"
                         >
-                          {t}
+                          {tagName}
                           <button
                             type="button"
                             onClick={() =>
-                              setHyperoptMetaDraft((prev) => ({
+                              setHyperoptTagsDraft((prev) => ({
                                 ...prev,
-                                tags: prev.tags.filter((_, idx) => idx !== i),
+                                tagIds: prev.tagIds.filter((id) => id !== tagId),
                               }))
                             }
                             className="p-0.5 rounded text-[#8c8c8c] hover:text-[#d9d9d9]"
-                            aria-label={`Remove tag ${t}`}
+                            aria-label={`Remove tag ${tagName}`}
                           >
                             <svg
                               viewBox="0 0 24 24"
@@ -4621,27 +4566,16 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                             </svg>
                           </button>
                         </span>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
-                </div>
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] font-medium text-[#d9d9d9]">Comment</label>
-                  <textarea
-                    value={hyperoptMetaDraft.comment}
-                    onChange={(e) =>
-                      setHyperoptMetaDraft((prev) => ({ ...prev, comment: e.target.value }))
-                    }
-                    rows={4}
-                    className={cx(ui.input, "w-full text-[12px] resize-y min-h-[96px] py-2")}
-                    placeholder="Notes for this run…"
-                  />
                 </div>
               </div>
               <div className="flex items-center justify-end gap-2 border-t border-[#303030] px-4 py-3 bg-[#101010]">
                 <button
                   type="button"
-                  onClick={closeHyperoptMetaModal}
+                  onClick={closeHyperoptTagsModal}
                   className={cx(
                     ui.btnGhost,
                     "h-8 w-8 p-0 inline-flex items-center justify-center",
@@ -4663,7 +4597,97 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                 </button>
                 <button
                   type="button"
-                  onClick={saveHyperoptMetaModal}
+                  onClick={saveHyperoptTagsModal}
+                  className={cx(
+                    ui.btnPrimary,
+                    "h-8 w-8 p-0 inline-flex items-center justify-center",
+                  )}
+                  title="Save"
+                  aria-label="Save"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+      {hyperoptCommentModalRowId &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/70"
+            onClick={closeHyperoptCommentModal}
+          >
+            <div
+              className={cx(
+                ui.radius,
+                "bg-[#141414] border border-[#303030] max-w-[480px] w-full max-h-[90vh] overflow-hidden flex flex-col shadow-xl",
+              )}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-4 py-3 border-b border-[#303030]">
+                <span className="text-[14px] font-medium text-[#d9d9d9]">Comment</span>
+                <button
+                  type="button"
+                  onClick={closeHyperoptCommentModal}
+                  className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1"
+                  aria-label="Close"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="overflow-auto p-4">
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-medium text-[#d9d9d9]">Comment</label>
+                  <textarea
+                    value={hyperoptCommentDraft.comment}
+                    onChange={(e) =>
+                      setHyperoptCommentDraft((prev) => ({ ...prev, comment: e.target.value }))
+                    }
+                    rows={6}
+                    className={cx(ui.input, "w-full text-[12px] resize-y min-h-[120px] py-2")}
+                    placeholder="Notes for this run…"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-2 border-t border-[#303030] px-4 py-3 bg-[#101010]">
+                <button
+                  type="button"
+                  onClick={closeHyperoptCommentModal}
+                  className={cx(
+                    ui.btnGhost,
+                    "h-8 w-8 p-0 inline-flex items-center justify-center",
+                  )}
+                  title="Cancel"
+                  aria-label="Cancel"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    aria-hidden
+                  >
+                    <path d="M18 6 6 18M6 6l12 12" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={saveHyperoptCommentModal}
                   className={cx(
                     ui.btnPrimary,
                     "h-8 w-8 p-0 inline-flex items-center justify-center",
@@ -5238,8 +5262,89 @@ export default function App() {
 
   // --- Mini Backtest Analyzer ---
   const [miniBacktestEnabled, setMiniBacktestEnabled] = useState(() => getFeatureFlags().miniBacktest);
+  const [formulasEnabled, setFormulasEnabled] = useState(() => getFeatureFlags().formulas);
   const [miniBacktestResults, setMiniBacktestResults] = useState([]);
   const [miniBacktestExpandedEpochId, setMiniBacktestExpandedEpochId] = useState(null);
+
+  // Global tags + hyperopt results (lifted from BuilderStepper)
+  const [tagsRegistry, setTagsRegistry] = useState(() => INITIAL_TAGS_REGISTRY);
+  const [tagRelations, setTagRelations] = useState(() => INITIAL_TAG_RELATIONS);
+  const [hyperoptResultsRows, setHyperoptResultsRows] = useState(() => INITIAL_HYPEROPT_RESULTS_ROWS);
+  const [hyperoptTagFilter, setHyperoptTagFilter] = useState([]);
+  const [hyperoptTagsModalRowId, setHyperoptTagsModalRowId] = useState(null);
+  const [hyperoptTagsDraft, setHyperoptTagsDraft] = useState({ tagIds: [], tagInput: "" });
+
+  const handleTagIdsRemoved = useCallback((removedIds) => {
+    setHyperoptTagFilter((prev) => prev.filter((id) => !removedIds.includes(id)));
+  }, []);
+
+  const openHyperoptTagsModal = useCallback((row) => {
+    setHyperoptTagsModalRowId(row.id);
+    setHyperoptTagsDraft({
+      tagIds: Array.isArray(row.tagIds) ? [...row.tagIds] : [],
+      tagInput: "",
+    });
+  }, []);
+
+  const closeHyperoptTagsModal = useCallback(() => {
+    setHyperoptTagsModalRowId(null);
+    setHyperoptTagsDraft({ tagIds: [], tagInput: "" });
+  }, []);
+
+  const commitHyperoptTagsDraftTag = useCallback(() => {
+    const name = hyperoptTagsDraft.tagInput.trim();
+    if (!name) return;
+
+    const existing = tagsRegistry.find((tag) => tag.name === name);
+    if (existing) {
+      setHyperoptTagsDraft((prev) => ({
+        ...prev,
+        tagIds: prev.tagIds.includes(existing.id) ? prev.tagIds : [...prev.tagIds, existing.id],
+        tagInput: "",
+      }));
+      return;
+    }
+
+    const { registry: nextRegistry, tag } = findOrCreateTagByName(
+      tagsRegistry,
+      name,
+      MOCK_CURRENT_USER,
+    );
+    setTagsRegistry(nextRegistry);
+    if (!tag) return;
+    setHyperoptTagsDraft((prev) => ({
+      ...prev,
+      tagIds: prev.tagIds.includes(tag.id) ? prev.tagIds : [...prev.tagIds, tag.id],
+      tagInput: "",
+    }));
+  }, [hyperoptTagsDraft.tagInput, tagsRegistry]);
+
+  const saveHyperoptTagsModal = useCallback(() => {
+    if (!hyperoptTagsModalRowId) return;
+    const row = hyperoptResultsRows.find((item) => item.id === hyperoptTagsModalRowId);
+    if (!row) return;
+
+    const result = syncHyperoptTagIds({
+      row,
+      tagIds: hyperoptTagsDraft.tagIds,
+      registry: tagsRegistry,
+      relations: tagRelations,
+      hyperoptResultsRows,
+      currentUser: MOCK_CURRENT_USER,
+    });
+
+    setTagsRegistry(result.registry);
+    setTagRelations(result.relations);
+    setHyperoptResultsRows(result.hyperoptResultsRows);
+    closeHyperoptTagsModal();
+  }, [
+    hyperoptTagsModalRowId,
+    hyperoptResultsRows,
+    hyperoptTagsDraft.tagIds,
+    tagsRegistry,
+    tagRelations,
+    closeHyperoptTagsModal,
+  ]);
 
   const handleSaveMiniBacktestResult = useCallback((result) => {
     setMiniBacktestResults((prev) => {
@@ -5563,6 +5668,23 @@ export default function App() {
     setSelected(null);
   }, []);
 
+  const handleFeatureFlagChange = useCallback((key, value) => {
+    setFeatureFlag(key, value);
+    if (key === "miniBacktest") setMiniBacktestEnabled(value);
+    if (key === "formulas") setFormulasEnabled(value);
+  }, []);
+
+  const headerFeatureFlags = useMemo(
+    () => ({ miniBacktest: miniBacktestEnabled, formulas: formulasEnabled }),
+    [miniBacktestEnabled, formulasEnabled],
+  );
+
+  useEffect(() => {
+    if (!formulasEnabled && activeSection === "Settings" && settingsSubSection === "formulas") {
+      setSettingsSubSection("indicators");
+    }
+  }, [formulasEnabled, activeSection, settingsSubSection]);
+
   const handleSelectVersion = useCallback(
     (strategyId, versionId) => {
       setSelected({ strategyId, versionId });
@@ -5655,8 +5777,7 @@ export default function App() {
 
   return (
     <div className={cx("min-h-screen", ui.page, "flex flex-col")}>
-      {isProdUi() ? (
-        <HeaderProd
+      <HeaderProd
           onLogout={handleLogout}
           sections={SECTIONS}
           activeSection={activeSection}
@@ -5673,39 +5794,10 @@ export default function App() {
           onQueueRemove={handleQueueRemove}
           hyperoptRun={builderHyperoptRun}
           onHyperoptRunChange={setBuilderHyperoptRun}
-          miniBacktestEnabled={miniBacktestEnabled}
-          onMiniBacktestEnabledChange={(v) => {
-            const value = typeof v === "function" ? v(miniBacktestEnabled) : v;
-            setFeatureFlag("miniBacktest", value);
-            setMiniBacktestEnabled(value);
-          }}
-        />
-      ) : (
-        <Header
-          onLogout={handleLogout}
-          sections={SECTIONS}
-          activeSection={activeSection}
-          onSectionChange={handleSectionChange}
-          settingsSubSection={settingsSubSection}
-          onSettingsSubChange={setSettingsSubSection}
-          strategiesCount={strategies.length}
-          disabledSections={DISABLED_SECTIONS}
-          queueOpen={showQueuePanel}
-          onQueueToggle={() => setShowQueuePanel((v) => !v)}
-          onQueueClose={() => setShowQueuePanel(false)}
-          queueItems={queueItems}
-          onQueueReorder={handleQueueReorder}
-          onQueueRemove={handleQueueRemove}
-          hyperoptRun={builderHyperoptRun}
-          onHyperoptRunChange={setBuilderHyperoptRun}
-          miniBacktestEnabled={miniBacktestEnabled}
-          onMiniBacktestEnabledChange={(v) => {
-            const value = typeof v === "function" ? v(miniBacktestEnabled) : v;
-            setFeatureFlag("miniBacktest", value);
-            setMiniBacktestEnabled(value);
-          }}
-        />
-      )}
+          formulasEnabled={formulasEnabled}
+          featureFlags={headerFeatureFlags}
+          onFeatureFlagChange={handleFeatureFlagChange}
+      />
 
       <main className="flex-1 overflow-visible p-6">
         {!(activeSection === "Strategies" && selectedStrategy) && (
@@ -5715,6 +5807,8 @@ export default function App() {
             <p className={cx("mt-1 text-[12px]", ui.textMuted)}>
               {activeSection === "Users"
                 ? "Manage application users (mock data only)."
+                : activeSection === "Tags"
+                ? "Manage tags and their links to Hyperopt results (mock only)."
                 : activeSection === "Settings" && settingsSubSection === "indicators"
                 ? "Manage indicator library (mock)."
                 : activeSection === "Settings" && settingsSubSection === "formulas"
@@ -5739,7 +5833,7 @@ export default function App() {
               Add indicator
             </button>
           )}
-          {activeSection === "Settings" && settingsSubSection === "formulas" && (
+          {formulasEnabled && activeSection === "Settings" && settingsSubSection === "formulas" && (
             <button onClick={handleOpenAddFormula} className={ui.btnPrimary}>
               Add Formula
             </button>
@@ -5838,9 +5932,7 @@ export default function App() {
                   <button
                     onClick={openEditDescription}
                     className={cx(
-                      "inline-flex h-5 w-5 items-center justify-center rounded border text-[#a6a6a6] hover:bg-secondary",
-                      ui.divider,
-                      isProdUi() ? "border-[rgba(60,40,80,0.5)] bg-[#170f29]" : "border-[#303030] bg-[#0f0f0f] hover:bg-[#1f1f1f]",
+                      "inline-flex h-5 w-5 items-center justify-center rounded border text-[#a6a6a6] hover:bg-secondary border-[rgba(60,40,80,0.5)] bg-[#170f29]",
                     )}
                     title="Edit description"
                     aria-label="Edit description"
@@ -5871,8 +5963,7 @@ export default function App() {
                 {actionsDropdownOpen && (
                   <div
                     className={cx(
-                      "absolute right-0 top-full z-50 mt-1 min-w-[180px] rounded-md border py-1 shadow-lg",
-                      isProdUi() ? "border-[rgba(60,40,80,0.5)] bg-[#170f29]" : "border-[#303030] bg-[#1a1a1a]",
+                      "absolute right-0 top-full z-50 mt-1 min-w-[180px] rounded-md border py-1 shadow-lg border-[rgba(60,40,80,0.5)] bg-[#170f29]",
                     )}
                   >
                     <button
@@ -5966,6 +6057,23 @@ export default function App() {
                 setMiniBacktestModalOpen(false);
                 setMiniBacktestModalEpoch(null);
               }}
+              tagsRegistry={tagsRegistry}
+              setTagsRegistry={setTagsRegistry}
+              tagRelations={tagRelations}
+              setTagRelations={setTagRelations}
+              hyperoptResultsRows={hyperoptResultsRows}
+              setHyperoptResultsRows={setHyperoptResultsRows}
+              currentUserRole={currentUserRole}
+              currentUserId={MOCK_CURRENT_USER.id}
+              hyperoptTagFilter={hyperoptTagFilter}
+              setHyperoptTagFilter={setHyperoptTagFilter}
+              hyperoptTagsModalRowId={hyperoptTagsModalRowId}
+              hyperoptTagsDraft={hyperoptTagsDraft}
+              setHyperoptTagsDraft={setHyperoptTagsDraft}
+              openHyperoptTagsModal={openHyperoptTagsModal}
+              closeHyperoptTagsModal={closeHyperoptTagsModal}
+              commitHyperoptTagsDraftTag={commitHyperoptTagsDraftTag}
+              saveHyperoptTagsModal={saveHyperoptTagsModal}
             />
           )}
 
@@ -6044,6 +6152,21 @@ export default function App() {
           </div>
         )}
 
+        {/* Tags page */}
+        {activeSection === "Tags" && (
+          <TagsPage
+            currentUserRole={currentUserRole}
+            currentUserId={MOCK_CURRENT_USER.id}
+            tagsRegistry={tagsRegistry}
+            setTagsRegistry={setTagsRegistry}
+            tagRelations={tagRelations}
+            setTagRelations={setTagRelations}
+            hyperoptResultsRows={hyperoptResultsRows}
+            setHyperoptResultsRows={setHyperoptResultsRows}
+            onTagIdsRemoved={handleTagIdsRemoved}
+          />
+        )}
+
         {/* Indicators page (mock) */}
         {(activeSection === "Settings" && settingsSubSection === "indicators") && (
           <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
@@ -6099,7 +6222,7 @@ export default function App() {
         )}
 
         {/* Formulas page (Settings → Formulas) */}
-        {(activeSection === "Settings" && settingsSubSection === "formulas") && (
+        {formulasEnabled && activeSection === "Settings" && settingsSubSection === "formulas" && (
           <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
             <div className={cx("flex items-center justify-between px-4 py-3", ui.panelMuted, "border-0 border-b", ui.divider)}>
               <div>

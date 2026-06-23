@@ -3,6 +3,7 @@ import { cx, ui } from "../../../../constants/ui";
 import { HyperoptDetailsTooltip } from "../../../../components/heatmap";
 import { AppButton } from "../../../../components/common/AppButton";
 import { formatHyperoptDateTime } from "../../utils/hyperoptFormatters";
+import { resolveTagNames } from "../../../../features/tags/utils/tagStore";
 import { PostProcessingCard } from "./PostProcessingCard";
 import { RunStatusBadge } from "./RunStatusBadge";
 
@@ -18,7 +19,8 @@ export const HyperoptRunDetail = memo(function HyperoptRunDetail({
   showPostProcessing = false,
   onBack,
   onPostProcessing,
-  onTagsComments,
+  onEditTags,
+  onEditComment,
   onShowHyperoptDetails,
   onShowPostProcessingDetails,
   onConfigureHeatMap,
@@ -27,9 +29,11 @@ export const HyperoptRunDetail = memo(function HyperoptRunDetail({
   onShowHeatmap,
   onDownloadReport,
   onShowItemFilters,
+  tagsRegistry = [],
 }) {
   if (!run) return null;
   const children = run.children || [];
+  const tagNames = resolveTagNames(run.tagIds, tagsRegistry);
 
   return (
     <div className="space-y-3">
@@ -84,9 +88,9 @@ export const HyperoptRunDetail = memo(function HyperoptRunDetail({
         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px]">
           <div className="text-[#8c8c8c]">Tags</div>
           <div className="min-w-0">
-            {run.tags?.length > 0 ? (
+            {tagNames.length > 0 ? (
               <div className="flex flex-wrap gap-1">
-                {run.tags.map((t) => (
+                {tagNames.map((t) => (
                   <span
                     key={t}
                     className="rounded border border-[#303030] bg-[#0f0f0f] px-1.5 py-0.5 text-[10px] text-[#a6a6a6]"
@@ -114,8 +118,11 @@ export const HyperoptRunDetail = memo(function HyperoptRunDetail({
               Post-processing
             </AppButton>
           )}
-          <AppButton type="button" variant="outline" size="xs" onClick={() => onTagsComments?.(run)}>
-            Tags &amp; comments
+          <AppButton type="button" variant="outline" size="xs" onClick={() => onEditTags?.(run)}>
+            Tags
+          </AppButton>
+          <AppButton type="button" variant="outline" size="xs" onClick={() => onEditComment?.(run)}>
+            Comment
           </AppButton>
         </div>
       </div>

@@ -2,7 +2,7 @@ import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { cx, ui } from "../../constants/ui";
 import { useOutsideClose } from "../../hooks/useOutsideClose";
 import { Logo, MenuIcon } from "../common";
-import { PillTabs, ProdButton, UiVariantToggle } from "../prod";
+import { PillTabs, ProdButton } from "../prod";
 import { QueueIcon, DragHandleIcon, TrashIcon } from "./Icons";
 import { FeatureFlagsDropdown } from "./FeatureFlagsDropdown";
 
@@ -23,8 +23,9 @@ export const HeaderProd = memo(function HeaderProd({
   onQueueRemove,
   hyperoptRun = "Admin run",
   onHyperoptRunChange,
-  miniBacktestEnabled = false,
-  onMiniBacktestEnabledChange,
+  formulasEnabled = true,
+  featureFlags = {},
+  onFeatureFlagChange,
 }) {
   const queueRef = useOutsideClose(queueOpen, onQueueClose);
   const [draggedIndex, setDraggedIndex] = useState(null);
@@ -75,7 +76,7 @@ export const HeaderProd = memo(function HeaderProd({
       if (item === "Users" && hyperoptRun === "Pipeline") continue;
       if (item === "Settings") {
         items.push({ id: "indicators", label: "Indicators", section: "Settings", sub: "indicators" });
-        if (hyperoptRun !== "Pipeline") {
+        if (hyperoptRun !== "Pipeline" && formulasEnabled) {
           items.push({ id: "formulas", label: "Formulas", section: "Settings", sub: "formulas" });
         }
         continue;
@@ -83,7 +84,7 @@ export const HeaderProd = memo(function HeaderProd({
       items.push({ id: item, label: item, section: item });
     }
     return items;
-  }, [sections, hyperoptRun]);
+  }, [sections, hyperoptRun, formulasEnabled]);
 
   const activeNavId = useMemo(() => {
     if (activeSection === "Settings") {
@@ -151,7 +152,6 @@ export const HeaderProd = memo(function HeaderProd({
         </nav>
 
         <div ref={queueRef} className="relative flex items-center gap-2 justify-self-end">
-          <UiVariantToggle />
           <select
             value={hyperoptRun}
             onChange={(e) => onHyperoptRunChange?.(e.target.value)}
@@ -161,10 +161,7 @@ export const HeaderProd = memo(function HeaderProd({
             <option value="Pipeline">Quant</option>
             <option value="Admin run">Admin</option>
           </select>
-          <FeatureFlagsDropdown
-            miniBacktestEnabled={miniBacktestEnabled}
-            onMiniBacktestEnabledChange={onMiniBacktestEnabledChange}
-          />
+          <FeatureFlagsDropdown flags={featureFlags} onFlagChange={onFeatureFlagChange} />
           <span className="hidden sm:inline-flex items-center gap-2 text-[12px] text-muted-foreground">
             User: <span className="font-medium text-foreground">bogdan</span>
           </span>

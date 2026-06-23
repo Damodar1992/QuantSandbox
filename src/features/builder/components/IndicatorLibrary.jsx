@@ -1,6 +1,5 @@
 import React, { memo, useCallback, useMemo, useState } from "react";
 import { cx, ui } from "../../../constants/ui";
-import { isProdUi } from "../../../constants/uiVariant";
 import { crmSurface } from "../../../constants/crmAccent";
 import { BASE_INDICATORS, INDICATOR_GROUPS } from "../../../constants/indicators";
 
@@ -95,16 +94,9 @@ export const IndicatorLibrary = memo(({ query, onQueryChange, groupFilter, onGro
   );
 
   return (
-    <div
-      className={cx(
-        "h-full flex flex-col",
-        isProdUi()
-          ? ui.builderColumn
-          : cx(ui.radius, ui.panel, "overflow-hidden"),
-      )}
-    >
-      <div className={cx(isProdUi() ? "mb-2" : cx("px-3 py-2.5", ui.panelMuted, "border-0 border-b", ui.divider))}>
-        <div className={cx(isProdUi() ? "text-[12px] font-medium mb-1" : "text-sm font-medium mb-1", crmSurface.textHeading)}>
+    <div className={cx("h-full flex flex-col", ui.builderColumn)}>
+      <div className="mb-2">
+        <div className={cx("text-[12px] font-medium mb-1", crmSurface.textHeading)}>
           Indicator Library
         </div>
         <div className={cx("text-[10px]", ui.textMuted, "mb-2")}>

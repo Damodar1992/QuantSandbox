@@ -1,7 +1,6 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Editor from "@monaco-editor/react";
 import { cx, ui } from "../../../constants/ui";
-import { isProdUi } from "../../../constants/uiVariant";
 import { crmAccent, successAccent } from "../../../constants/crmAccent";
 import { TableBasedEditor } from "./TableBasedEditor";
 import { getDefaultDisplayName, getIndicatorOutputAliases } from "../utils/indicatorHelpers";
@@ -53,9 +52,6 @@ export const FormulaEditor = memo(({ value, onChange, indicators, mode = "signal
   const [pythonCodeManuallyEdited, setPythonCodeManuallyEdited] = useState(false);
   const [generatedPythonCode, setGeneratedPythonCode] = useState('');
   const [aliasesOpen, setAliasesOpen] = useState(false);
-  const modeActiveClass = isProdUi()
-    ? "bg-[rgba(168,96,240,0.16)] text-[#ddd6fe] font-medium"
-    : "bg-emerald-500/20 text-emerald-300 font-medium";
   
   // Initialize table rules if empty
   useEffect(() => {
@@ -577,48 +573,35 @@ def custom_exit(self, pair: str, trade, current_time, current_rate, current_prof
     onChange(generatedPythonCode);
   }, [generatedPythonCode, onChange]);
 
-  const prod = isProdUi();
   const monacoTheme = getMonacoThemeId();
   const editorReadOnly = editingLocked;
 
-  const renderModeSwitcher = (variant = "legacy") => {
-    const isProdToggle = variant === "prod";
-    const wrapClass = isProdToggle
-      ? "inline-flex items-center rounded-lg bg-[#251937] p-0.5"
-      : "flex border border-[#303030] rounded overflow-hidden";
-
+  const renderModeSwitcher = () => {
     const btnClass = (targetMode) => {
       const active = editorMode === targetMode;
-      if (isProdToggle) {
-        return active
-          ? "bg-violet-700 text-[#faf7fd]"
-          : "text-[#b8aecc] hover:text-[#faf7fd]";
-      }
       return active
-        ? modeActiveClass
-        : "bg-[#1a1a1a] text-[#8c8c8c] hover:text-[#d9d9d9]";
+        ? "bg-violet-700 text-[#faf7fd]"
+        : "text-[#b8aecc] hover:text-[#faf7fd]";
     };
 
     return (
-      <div className={wrapClass}>
+      <div className="inline-flex items-center rounded-lg bg-[#251937] p-0.5">
         <button
           type="button"
           onClick={() => handleModeSwitch("python")}
           className={cx(
-            "inline-flex h-7 items-center gap-1.5 px-3 transition-colors",
-            isProdToggle ? "text-[11px]" : "text-[10px]",
+            "inline-flex h-7 items-center gap-1.5 px-3 transition-colors text-[11px]",
             btnClass("python"),
           )}
           title="Python Code Editor"
         >
-          {isProdToggle ? <CodeModeIcon className="h-3.5 w-3.5 shrink-0" /> : "🐍 Python"}
+          <CodeModeIcon className="h-3.5 w-3.5 shrink-0" />
         </button>
         <button
           type="button"
           onClick={() => handleModeSwitch("table")}
           className={cx(
-            "inline-flex h-7 items-center gap-1.5 px-3 transition-colors",
-            isProdToggle ? "text-[11px]" : "text-[10px] border-l border-[#303030]",
+            "inline-flex h-7 items-center gap-1.5 px-3 transition-colors text-[11px] border-l border-[#303030]",
             btnClass("table"),
           )}
           title="Builder"
@@ -630,21 +613,21 @@ def custom_exit(self, pair: str, trade, current_time, current_rate, current_prof
     );
   };
 
-  const renderTips = (variant = "legacy") => (
+  const renderTips = () => (
     <div
       className={cx(
         "px-3 py-2 text-[10px] border-0 border-t",
         ui.divider,
-        variant === "prod"
-          ? cx("border-l-4", successAccent.borderL, successAccent.bg, successAccent.text)
-          : ui.textMuted,
+        "border-l-4",
+        successAccent.borderL,
+        successAccent.bg,
+        successAccent.text,
       )}
     >
       💡 <strong>Tips:</strong> Click &quot;Add New Rule&quot; to create trading conditions •{" "}
       Combine multiple conditions with{" "}
-      <code className={variant === "prod" ? "text-[var(--crm-success)]" : "text-amber-300"}>AND</code>/
-      <code className={variant === "prod" ? "text-[var(--crm-success)]" : "text-amber-300"}>OR</code> •{" "}
-      Switch to Code mode to see generated formula
+      <code className="text-[var(--crm-success)]">AND</code>/
+      <code className="text-[var(--crm-success)]">OR</code> • Switch to Code mode to see generated formula
     </div>
   );
 
@@ -670,11 +653,10 @@ def custom_exit(self, pair: str, trade, current_time, current_rate, current_prof
     "semanticHighlighting.enabled": false,
   };
 
-  if (prod) {
-    return (
-      <div className="space-y-3">
-        <div className="flex items-center justify-end gap-2">
-          {renderModeSwitcher("prod")}
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-end gap-2">
+        {renderModeSwitcher()}
           {editorMode === "python" && pythonCodeManuallyEdited && (
             <button
               type="button"
@@ -774,108 +756,9 @@ def custom_exit(self, pair: str, trade, current_time, current_rate, current_prof
                 groupedVars={groupedVars}
               />
             </div>
-            {renderTips("prod")}
+            {renderTips()}
           </>
         )}
       </div>
     );
-  }
-
-  return (
-    <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
-      <div className={cx("flex items-center justify-between px-3 py-2", ui.panelMuted, "border-0 border-b", ui.divider)}>
-        <div className="flex-1">
-          <div className="text-[12px] font-medium text-[#d9d9d9]">
-            {mode === "entry"
-              ? "Entry formulas"
-              : mode === "exit"
-                ? "Exit formulas"
-                : mode === "risk"
-                  ? "Risk formulas"
-                  : "Signal Formulas"}
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {renderModeSwitcher("legacy")}
-          
-          {editorMode === 'python' && (
-            <>
-              <button
-                type="button"
-                onClick={() => setAliasesOpen((v) => !v)}
-                className={cx(
-                  ui.btn,
-                  "h-7 px-2 text-[10px]",
-                  aliasesOpen && "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
-                )}
-                title="View indicator aliases"
-              >
-                Aliases
-              </button>
-              {pythonCodeManuallyEdited && (
-                <button 
-                  onClick={handleResetPythonCode}
-                  className={cx(ui.btn, "h-7 px-2 text-[10px] bg-amber-500/20 text-amber-300 hover:bg-amber-500/30")}
-                  title="Reset to auto-generated code"
-                >
-                  Reset
-                </button>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-      
-      {editorMode === 'python' ? (
-        <>
-          {pythonCodeManuallyEdited && (
-            <div className={cx("mx-3 mt-3 p-2 rounded border border-amber-500/30 bg-amber-500/10 text-[11px]", ui.textMuted)}>
-              ⚠️ <strong>Warning:</strong> This code has been manually edited. Changes made in Table mode will overwrite your manual edits. 
-              Click <button onClick={handleResetPythonCode} className="text-amber-300 underline hover:text-amber-200">Reset</button> to restore auto-generated code.
-            </div>
-          )}
-          <div className="flex" style={{ height: 400 }}>
-            <div className="relative flex-1 min-w-0 bg-[#0f0f0f]" style={{ height: 400 }}>
-              <Editor
-                height="400px"
-                defaultLanguage="python"
-                language="python"
-                theme={monacoTheme}
-                value={value}
-                onChange={(newValue) => handlePythonCodeChange(newValue || '')}
-                beforeMount={handleEditorWillMount}
-                onMount={handleEditorDidMount}
-                loading={<div className="h-full w-full bg-[#0f0f0f]" />}
-                options={editorOptions}
-              />
-            </div>
-            <IndicatorAliasesPanel
-              indicators={indicators}
-              open={aliasesOpen}
-              onClose={() => setAliasesOpen(false)}
-              className="h-[400px]"
-            />
-          </div>
-          
-          <div className={cx("px-3 py-2 border-0 border-t", ui.divider, "flex justify-end")}>
-            <button type="button" className={cx(ui.btnPrimary, "h-8 px-3 text-[11px]")}>
-              Validate
-            </button>
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="p-3" style={{ maxHeight: '600px', overflowY: 'auto' }}>
-            <TableBasedEditor 
-              rules={tableRules}
-              onChange={handleTableRulesChange}
-              groupedVars={groupedVars}
-            />
-          </div>
-          
-          {renderTips("legacy")}
-        </>
-      )}
-    </div>
-  );
 });

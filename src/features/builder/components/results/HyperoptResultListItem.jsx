@@ -2,6 +2,7 @@ import React, { memo } from "react";
 import { cx } from "../../../../constants/ui";
 import { crmAccent, crmSurface } from "../../../../constants/crmAccent";
 import { formatHyperoptDateTime } from "../../utils/hyperoptFormatters";
+import { resolveTagNames } from "../../../../features/tags/utils/tagStore";
 import { RunStatusBadge } from "./RunStatusBadge";
 
 /**
@@ -13,8 +14,10 @@ export const HyperoptResultListItem = memo(function HyperoptResultListItem({
   onSelect,
   showSource = false,
   sourceText = "—",
+  tagsRegistry = [],
 }) {
   const ppCount = row.children?.length ?? 0;
+  const tagNames = resolveTagNames(row.tagIds, tagsRegistry);
 
   return (
     <div
@@ -64,9 +67,9 @@ export const HyperoptResultListItem = memo(function HyperoptResultListItem({
         )}
       </div>
 
-      {row.tags?.length ? (
+      {tagNames.length ? (
         <div className="flex flex-wrap items-center gap-1">
-          {row.tags.slice(0, 5).map((t) => (
+          {tagNames.slice(0, 5).map((t) => (
             <span
               key={t}
               className="rounded border border-[#303030] bg-[#0f0f0f] px-1.5 py-0.5 text-[10px] text-[#a6a6a6]"
@@ -74,8 +77,8 @@ export const HyperoptResultListItem = memo(function HyperoptResultListItem({
               {t}
             </span>
           ))}
-          {row.tags.length > 5 && (
-            <span className="self-center text-[10px] text-[#8c8c8c]">+{row.tags.length - 5}</span>
+          {tagNames.length > 5 && (
+            <span className="self-center text-[10px] text-[#8c8c8c]">+{tagNames.length - 5}</span>
           )}
         </div>
       ) : null}

@@ -1,37 +1,27 @@
-import { isProdUi } from "../../../constants/uiVariant";
-
 /** Prod Python editor palette aligned with quants.grogutrade.dev reference. */
 export function registerMonacoThemes(monaco) {
-  const prod = isProdUi();
-  const accent = prod ? "A78BFA" : "10B981";
-  const editorBg = prod ? "#110e1f" : "#0f0f0f";
-  const editorFg = prod ? "#f0eaf8" : "#d9d9d9";
-  const gutterBg = prod ? "#0f0d1e" : "#0f0f0f";
-  const lineHighlight = prod ? "#1a1430" : "#1f1f1f";
-  const lineNumber = prod ? "#6e6682" : "#595959";
-
   monaco.editor.defineTheme("tradingDark", {
     base: "vs-dark",
     inherit: true,
     rules: [
-      { token: "comment", foreground: prod ? "7A7394" : "6A9955", fontStyle: "italic" },
-      { token: "keyword", foreground: prod ? "D946EF" : "C586C0", fontStyle: prod ? "bold" : undefined },
-      { token: "keyword.control", foreground: accent, fontStyle: "bold" },
+      { token: "comment", foreground: "7A7394", fontStyle: "italic" },
+      { token: "keyword", foreground: "D946EF", fontStyle: "bold" },
+      { token: "keyword.control", foreground: "A78BFA", fontStyle: "bold" },
       { token: "constant.language", foreground: "569CD6" },
-      { token: "number", foreground: prod ? "C4B5FD" : "B5CEA8" },
-      { token: "operator", foreground: prod ? "F0EAF8" : "D4D4D4" },
-      { token: "string", foreground: prod ? "FB923C" : "CE9178" },
+      { token: "number", foreground: "C4B5FD" },
+      { token: "operator", foreground: "F0EAF8" },
+      { token: "string", foreground: "FB923C" },
     ],
     colors: {
-      "editor.background": editorBg,
-      "editor.foreground": editorFg,
-      "editorLineNumber.foreground": lineNumber,
-      "editorLineNumber.activeForeground": prod ? "#b8aecc" : "#858585",
-      "editor.lineHighlightBackground": lineHighlight,
+      "editor.background": "#110e1f",
+      "editor.foreground": "#f0eaf8",
+      "editorLineNumber.foreground": "#6e6682",
+      "editorLineNumber.activeForeground": "#b8aecc",
+      "editor.lineHighlightBackground": "#1a1430",
       "editor.lineHighlightBorder": "#00000000",
-      "editor.selectionBackground": prod ? "#6d28d966" : "#264f78",
-      "editorCursor.foreground": prod ? "#A78BFA" : "#10B981",
-      "editorGutter.background": gutterBg,
+      "editor.selectionBackground": "#6d28d966",
+      "editorCursor.foreground": "#A78BFA",
+      "editorGutter.background": "#0f0d1e",
     },
   });
 
@@ -86,5 +76,5 @@ export function registerMonacoThemes(monaco) {
 }
 
 export function getMonacoThemeId() {
-  return isProdUi() ? "pythonProdDark" : "vs-dark";
+  return "pythonProdDark";
 }
