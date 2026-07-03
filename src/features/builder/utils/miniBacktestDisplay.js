@@ -119,6 +119,35 @@ export function formatMbNum(v, d = 2) {
   return Number(v).toFixed(d);
 }
 
+/**
+ * Growth % for balance KPIs vs run start (total/tradable vs initialBalance; reserve vs 0 → % of start).
+ * @param {object} summary
+ * @param {number} [fallbackStartBalance]
+ */
+export function getMiniBacktestBalanceGrowth(summary, fallbackStartBalance) {
+  if (!summary) return { total: null, tradable: null, reserve: null };
+
+  const startBal = summary.initialBalance ?? fallbackStartBalance ?? 0;
+  if (startBal <= 0) return { total: null, tradable: null, reserve: null };
+
+  const equity = summary.equity ?? summary.finalBalance ?? 0;
+  const tradable = summary.tradable ?? equity - (summary.reserve ?? 0);
+  const reserve = summary.reserve ?? 0;
+
+  const total =
+    summary.roiTotal ??
+    summary.roi ??
+    ((equity / startBal - 1) * 100);
+  const tradableGrowth =
+    summary.roiTradable ??
+    ((tradable / startBal - 1) * 100);
+  const reserveGrowth =
+    summary.roiReserve ??
+    ((reserve / startBal) * 100);
+
+  return { total, tradable: tradableGrowth, reserve: reserveGrowth };
+}
+
 /** True when entry has full v5 result payload (epoch + rows). */
 export function isFullMiniBacktestResult(entry) {
   return Boolean(entry?.result?.epoch && entry?.result?.rows?.length);

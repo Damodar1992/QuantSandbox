@@ -16,6 +16,7 @@ import {
   formatMbMoney,
   formatMbPct,
   formatMbNum,
+  getMiniBacktestBalanceGrowth,
 } from "../../utils/miniBacktestDisplay";
 import {
   MINI_BACKTEST_LABELS,
@@ -38,6 +39,29 @@ function MetricCard({ label, value, valueClassName, detail }) {
         {value}
       </div>
       {detail && <div className="text-[9px] text-[#6b6b6b] mt-1">{detail}</div>}
+    </div>
+  );
+}
+
+function BalanceMetricCard({ label, value, growth, valueClassName }) {
+  const growthClassName =
+    growth == null || Number.isNaN(growth)
+      ? "text-[#6b6b6b]"
+      : growth >= 0
+        ? "text-emerald-400"
+        : "text-red-400";
+
+  return (
+    <div className="rounded-lg border border-[rgba(60,40,80,0.35)] bg-[#120a20] px-3 py-2.5 min-w-0">
+      <div className="text-[9px] font-medium uppercase tracking-wide text-[#8c8c8c]">{label}</div>
+      <div className={cx("mt-1 text-[18px] font-semibold font-mono leading-tight", valueClassName || "text-[#f5f5f5]")}>
+        {value}
+      </div>
+      {growth != null && !Number.isNaN(growth) && (
+        <div className={cx("mt-0.5 text-[11px] font-mono font-medium", growthClassName)}>
+          {formatMbPct(growth)}
+        </div>
+      )}
     </div>
   );
 }
@@ -153,10 +177,14 @@ export const MiniBacktestDashboard = memo(function MiniBacktestDashboard({
   const leverage = runParams.leverage ?? 1;
   const roi = s.roiTotal ?? s.roi ?? 0;
   const equity = s.equity ?? s.finalBalance ?? 0;
+  const tradable = s.tradable ?? equity - (s.reserve ?? 0);
   const reserve = s.reserve ?? 0;
-  const maxDDTrad = s.maxDDTradIntra ?? s.maxDrawdown ?? 0;
-  const maxDDTotal = s.maxDDIntra ?? s.maxDD ?? 0;
+  const maxDDIntra = s.maxDDIntra ?? s.maxDD ?? 0;
   const pf = s.pfNet ?? s.profitFactor ?? 0;
+  const netPnl = s.pnlNet ?? s.totalPnL ?? 0;
+  const calmar = s.calmar;
+  const cagrPct = s.annual != null ? s.annual * 100 : null;
+  const balanceGrowth = getMiniBacktestBalanceGrowth(s, runParams.initialBalance);
   const contextChips = getMiniBacktestContextChips(entry);
 
   const hyperoptIdDisplay = entry.hyperoptId || (entry.hyperoptNumber != null ? String(entry.hyperoptNumber) : null);
@@ -165,17 +193,12 @@ export const MiniBacktestDashboard = memo(function MiniBacktestDashboard({
   const epochSuffix = epochNumber != null ? ` (Epoch #${epochNumber})` : "";
   const title = `${stageWithVersion}${epochSuffix}`;
 
-  const kpiSixthLabel = futures && leverage > 1 ? "Liquidations" : "Win Rate";
-  const kpiSixthValue =
-    futures && leverage > 1
-      ? `${s.liqCount ?? 0} / ${s.execCount ?? s.cyclesExecuted ?? 0}`
-      : `${s.winRate.toFixed(1)}%`;
-  const kpiSixthDetail =
-    futures && leverage > 1
-      ? `@ ${leverage}× lev`
-      : em?.hitRate != null
-        ? `vs hit ${em.hitRate.toFixed(0)}%`
-        : undefined;
+  const formatCalmar = (val) => {
+    if (val == null || Number.isNaN(val)) return "—";
+    if (val === Infinity) return "∞";
+    if (val === -Infinity) return "−∞";
+    return formatMbNum(val);
+  };
 
   return (
     <div className="space-y-4">
@@ -242,38 +265,38 @@ export const MiniBacktestDashboard = memo(function MiniBacktestDashboard({
         <>
           <MiniBacktestRunStatus result={entry.result} params={runParams} />
 
-          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-2">
             <MetricCard
-              label="ROI Total"
+              label="ROI (Total)"
               value={formatMbPct(roi)}
               valueClassName={roi >= 0 ? "text-emerald-400" : "text-red-400"}
-              detail="balance / start"
             />
-            <MetricCard label="Total Balance" value={formatMbMoney(equity)} detail={`from ${formatMbMoney(s.initialBalance)}`} />
-            <MetricCard label="Reserve" value={formatMbMoney(reserve)} valueClassName="text-teal-400" detail="locked profit" />
             <MetricCard
-              label="Max DD · tradable"
-              value={`${maxDDTrad.toFixed(2)}%`}
+              label="Net PnL"
+              value={formatMbMoney(netPnl)}
+              valueClassName={netPnl >= 0 ? "text-emerald-400" : "text-red-400"}
+            />
+            <MetricCard
+              label="Max DD (intra-cycle)"
+              value={`${Number(maxDDIntra).toFixed(2)}%`}
               valueClassName="text-orange-400"
-              detail={`total (incl. reserve) ${maxDDTotal.toFixed(2)}%`}
+            />
+            <MetricCard label="Calmar" value={formatCalmar(calmar)} />
+            <MetricCard
+              label="Win Rate"
+              value={`${s.winRate.toFixed(1)}%`}
+              valueClassName={s.winRate >= 50 ? "text-emerald-400" : "text-red-400"}
+              detail={em?.hitRate != null ? `vs hit ${em.hitRate.toFixed(0)}%` : undefined}
             />
             <MetricCard
-              label="Profit Factor"
+              label="Profit Factor (net)"
               value={formatMbNum(pf)}
               valueClassName={pf >= 1 ? "text-emerald-400" : "text-red-400"}
-              detail="net"
             />
             <MetricCard
-              label={kpiSixthLabel}
-              value={kpiSixthValue}
-              valueClassName={
-                futures && leverage > 1 && (s.liqCount ?? 0) > 0
-                  ? "text-red-400"
-                  : s.winRate >= 50
-                    ? "text-emerald-400"
-                    : "text-red-400"
-              }
-              detail={kpiSixthDetail}
+              label="CAGR"
+              value={cagrPct != null ? formatMbPct(cagrPct) : "—"}
+              valueClassName={cagrPct != null && cagrPct >= 0 ? "text-emerald-400" : "text-red-400"}
             />
           </div>
 
@@ -284,9 +307,27 @@ export const MiniBacktestDashboard = memo(function MiniBacktestDashboard({
                 AFTER · realized
               </span>
             </div>
-            <p className={cx("text-[10px] mb-2", ui.textMuted)}>
+            <p className={cx("text-[10px] mb-3", ui.textMuted)}>
               Total, tradable, and reserve pots across executed cycles.
             </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
+              <BalanceMetricCard
+                label="Total balance"
+                value={formatMbMoney(equity)}
+                growth={balanceGrowth.total}
+              />
+              <BalanceMetricCard
+                label="Tradable balance"
+                value={formatMbMoney(tradable)}
+                growth={balanceGrowth.tradable}
+              />
+              <BalanceMetricCard
+                label="Reserved balance"
+                value={formatMbMoney(reserve)}
+                growth={balanceGrowth.reserve}
+                valueClassName="text-teal-400"
+              />
+            </div>
             <MiniBacktestBalanceChart
               trades={entry.result.trades}
               initialBalance={s.initialBalance}
