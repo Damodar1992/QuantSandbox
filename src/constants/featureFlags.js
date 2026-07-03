@@ -1,5 +1,5 @@
 const STORAGE_KEY = "featureFlags";
-const DEFAULTS = { miniBacktest: true, formulas: true };
+const DEFAULTS = { miniBacktest: true, formulas: false };
 
 export function getFeatureFlags() {
   if (typeof window !== "undefined") {

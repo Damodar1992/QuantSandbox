@@ -94,11 +94,17 @@ import {
   HyperoptRunDetail,
   RunStatusBadge,
   MiniBacktestModal,
-  MiniBacktestSummaryTable,
+  MiniBacktestPage,
+  BestEpochsModal,
+  PostProcessingEpochMenu,
 } from "./features/builder/components";
 import { getDefaultDisplayName, formatIndicatorSnapshot } from "./features/builder/utils/indicatorHelpers";
 import { formatHyperoptDateTime, normalizeHyperoptRunStatus } from "./features/builder/utils/hyperoptFormatters";
+import { buildEpochFromHyperoptContext } from "./features/builder/utils/hyperoptEpoch";
 import { MINI_BACKTEST_DEFAULTS } from "./constants/miniBacktest";
+import { INITIAL_MINI_BACKTEST_DEMO_RESULTS } from "./constants/miniBacktestSeed";
+import { dedupeMiniBacktestResultIds } from "./features/builder/utils/miniBacktestEngine";
+import { buildMiniBacktestLaunchContext } from "./features/builder/utils/miniBacktestDisplay";
 import { getStageVersionsForStrategy } from "./constants/mockStageVersionTree";
 import {
   STAGE_ID_TO_TYPE,
@@ -126,6 +132,8 @@ import {
   syncHyperoptTagIds,
 } from "./features/tags/utils/tagStore";
 import { TagsPage } from "./components/tags";
+import { ReleaseNotesPage, ReleaseNoteModal } from "./components/releaseNotes";
+import { INITIAL_RELEASE_NOTES } from "./constants/releaseNotes";
 
 /**
  * Quant Sandbox CRM Mock — Properly structured React app
@@ -369,6 +377,9 @@ const BuilderStepper = memo(function BuilderStepper({
   const [selectedBestResult, setSelectedBestResult] = useState(null);
   const [showBestResultDetailsModal, setShowBestResultDetailsModal] = useState(false);
   const [showAddBestResultModal, setShowAddBestResultModal] = useState(false);
+  const [showBestEpochsModal, setShowBestEpochsModal] = useState(false);
+  const [bestEpochsContext, setBestEpochsContext] = useState(null);
+  const [bestEpochsModalMode, setBestEpochsModalMode] = useState("add-favorites");
   const [manualBestResultSelectionKey, setManualBestResultSelectionKey] = useState("");
   const [signalBestCandidates, setSignalBestCandidates] = useState([]);
   const [entryBestCandidates, setEntryBestCandidates] = useState([]);
@@ -1505,6 +1516,83 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
     [setBestCandidates],
   );
 
+  const openBestEpochsModal = useCallback((row, sub, heatMapId) => {
+    setBestEpochsContext({ row, sub, heatMapId });
+    setBestEpochsModalMode("add-favorites");
+    setShowBestEpochsModal(true);
+  }, []);
+
+  const openMiniBacktestEpochModal = useCallback((row, sub, heatMapId) => {
+    setBestEpochsContext({ row, sub, heatMapId });
+    setBestEpochsModalMode("mini-backtest");
+    setShowBestEpochsModal(true);
+  }, []);
+
+  const closeBestEpochsModal = useCallback(() => {
+    setShowBestEpochsModal(false);
+    setBestEpochsContext(null);
+  }, []);
+
+  const handleAddBestEpochs = useCallback(
+    (epochNumbers) => {
+      if (!bestEpochsContext) return;
+      const { row, sub, heatMapId } = bestEpochsContext;
+      const heatmapResults =
+        generatedHeatMap?.runId === heatMapId ? generatedHeatMap.fullResults : null;
+
+      setBestResults((prev) => {
+        const existingEpochs = new Set(prev.map((b) => b.epochNumber).filter((n) => n != null));
+        const toAdd = [];
+
+        for (const epochNum of epochNumbers) {
+          if (existingEpochs.has(epochNum)) continue;
+
+          const heatmapResult = heatmapResults?.[epochNum - 1];
+          const best = buildBestResult({
+            label: `Epoch #${epochNum}`,
+            source: "best-epochs",
+            scores: heatmapResult
+              ? { avg: heatmapResult.score, min: heatmapResult.score, max: heatmapResult.score }
+              : { min: sub.minScore, avg: sub.avgScore, max: sub.maxScore },
+            meta: {
+              rowId: row.id,
+              subId: sub.id,
+              detailId: `epoch-${epochNum}`,
+              detailLabel: `Epoch #${epochNum}`,
+              date: sub.date || row.date,
+              hyperoptNumber: row.hyperoptNumber,
+              analyzerNumber: sub.analyzerNumber,
+              heatmapParams: heatmapResult?.params,
+            },
+            timeRangeOverride: row.timeFrame,
+          });
+
+          toAdd.push({
+            ...best,
+            ...(heatmapResult && {
+              score: heatmapResult.score,
+              mfe: heatmapResult.mfe ?? best.mfe,
+              mae: heatmapResult.mae ?? best.mae,
+              air: heatmapResult.air ?? best.air,
+              hitRate: heatmapResult.hitRate,
+            }),
+            epochNumber: epochNum,
+            hyperoptNumber: row.hyperoptNumber,
+            analyzerNumber: sub.analyzerNumber,
+            pairs: row.pairs ?? pairs,
+            timeRange: row.timeFrame ?? timeRange,
+          });
+          existingEpochs.add(epochNum);
+        }
+
+        return toAdd.length ? [...prev, ...toAdd] : prev;
+      });
+
+      closeBestEpochsModal();
+    },
+    [bestEpochsContext, generatedHeatMap, buildBestResult, setBestResults, pairs, timeRange, closeBestEpochsModal],
+  );
+
   const handleLoadBestResultIntoSignal = useCallback(
     (best) => {
       if (!best || !Array.isArray(best.indicatorsRaw)) return;
@@ -1630,6 +1718,79 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
   const versionBreadcrumb = useMemo(
     () => getVersionBreadcrumb(stageVersions, selectedVersionByStage),
     [stageVersions, selectedVersionByStage],
+  );
+
+  const handleRunMiniBacktestFromHyperopt = useCallback(
+    (epochNumbers) => {
+      if (!bestEpochsContext || !miniBacktestEnabled) return;
+      const epochNum = epochNumbers[0];
+      if (!epochNum) return;
+
+      const { row, sub, heatMapId } = bestEpochsContext;
+      const epoch = buildEpochFromHyperoptContext({
+        row,
+        sub,
+        heatMapId,
+        epochNum,
+        generatedHeatMap,
+        buildBestResult,
+        pairs,
+        timeRange,
+      });
+
+      const stageType = STAGE_ID_TO_TYPE[activeStage];
+      const version = getVersionById(stageVersions, selectedVersionByStage[stageType]);
+      onOpenMiniBacktestModal?.(
+        epoch,
+        activeStage,
+        version
+          ? {
+              id: version.id,
+              label: version.label,
+              lineageCode: version.lineageCode,
+              localVersion: version.localVersion,
+            }
+          : null,
+        buildMiniBacktestLaunchContext({
+          tradingMode,
+          exchange,
+          pairs: row.pairs ?? pairs,
+          timeframe: row.timeFrame ?? timeRange,
+          knowRange: row.knowRange,
+          timeFrameStart,
+          timeFrameEnd,
+        }),
+      );
+      closeBestEpochsModal();
+    },
+    [
+      bestEpochsContext,
+      miniBacktestEnabled,
+      generatedHeatMap,
+      buildBestResult,
+      pairs,
+      timeRange,
+      activeStage,
+      stageVersions,
+      selectedVersionByStage,
+      tradingMode,
+      exchange,
+      timeFrameStart,
+      timeFrameEnd,
+      onOpenMiniBacktestModal,
+      closeBestEpochsModal,
+    ],
+  );
+
+  const handleBestEpochsModalSubmit = useCallback(
+    (epochNumbers) => {
+      if (bestEpochsModalMode === "mini-backtest") {
+        handleRunMiniBacktestFromHyperopt(epochNumbers);
+      } else {
+        handleAddBestEpochs(epochNumbers);
+      }
+    },
+    [bestEpochsModalMode, handleRunMiniBacktestFromHyperopt, handleAddBestEpochs],
   );
 
   const handleStageVersionChange = useCallback(
@@ -3410,6 +3571,12 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                       >
                                                         Generate Report
                                                       </button>
+                                                      <PostProcessingEpochMenu
+                                                        useLegacyBtn
+                                                        miniBacktestEnabled={miniBacktestEnabled}
+                                                        onBestEpochs={() => openBestEpochsModal(row, sub, heatMapId)}
+                                                        onRunMiniBacktest={() => openMiniBacktestEpochModal(row, sub, heatMapId)}
+                                                      />
                                                       <button
                                                         type="button"
                                                         onClick={() => {
@@ -3555,6 +3722,12 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                                           >
                                                                             Generate Report
                                                                           </button>
+                                                                          <PostProcessingEpochMenu
+                                                                            useLegacyBtn
+                                                                            miniBacktestEnabled={miniBacktestEnabled}
+                                                                            onBestEpochs={() => openBestEpochsModal(row, sub, heatMapId)}
+                                                                            onRunMiniBacktest={() => openMiniBacktestEpochModal(row, sub, heatMapId)}
+                                                                          />
                                                                         </div>
                                                                       </td>
                                                                       </tr>
@@ -3711,6 +3884,11 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                   setSelectedNormalizationRow(sub);
                                   setShowTruncateModal(true);
                                 }}
+                                onBestEpochs={(sub) => openBestEpochsModal(openRun, sub, `hyperopt-${openRun.id}-${sub.id}`)}
+                                onRunMiniBacktest={(sub) =>
+                                  openMiniBacktestEpochModal(openRun, sub, `hyperopt-${openRun.id}-${sub.id}`)
+                                }
+                                miniBacktestEnabled={miniBacktestEnabled}
                                 onShowHeatmap={(heatMapId) => setHeatMapViewModalId(heatMapId)}
                                 onDownloadReport={() => setShowReportModal(true)}
                                 onShowItemFilters={(item) => setHeatmapItemFiltersModalItem(item)}
@@ -3835,7 +4013,33 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                         {miniBacktestEnabled && (
                                           <button
                                             type="button"
-                                            onClick={() => onOpenMiniBacktestModal(best, activeStage)}
+                                            onClick={() => {
+                                              const stageType = STAGE_ID_TO_TYPE[activeStage];
+                                              const version = getVersionById(
+                                                stageVersions,
+                                                selectedVersionByStage[stageType],
+                                              );
+                                              onOpenMiniBacktestModal(
+                                                best,
+                                                activeStage,
+                                                version
+                                                  ? {
+                                                      id: version.id,
+                                                      label: version.label,
+                                                      lineageCode: version.lineageCode,
+                                                      localVersion: version.localVersion,
+                                                    }
+                                                  : null,
+                                                buildMiniBacktestLaunchContext({
+                                                  tradingMode,
+                                                  exchange,
+                                                  pairs: best.pairs ?? pairs,
+                                                  timeframe: best.timeframe ?? timeRange,
+                                                  timeFrameStart,
+                                                  timeFrameEnd,
+                                                }),
+                                              );
+                                            }}
                                             className={cx(
                                               ui.btn,
                                               "h-7 px-2 text-[10px] whitespace-nowrap",
@@ -5222,6 +5426,13 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
           onSave={handleEditIndicator}
         />
       )}
+      <BestEpochsModal
+        open={showBestEpochsModal}
+        context={bestEpochsContext}
+        mode={bestEpochsModalMode}
+        onClose={closeBestEpochsModal}
+        onSubmit={handleBestEpochsModalSubmit}
+      />
     </div>
   );
 });
@@ -5245,6 +5456,8 @@ export default function App() {
   const [miniBacktestModalEpoch, setMiniBacktestModalEpoch] = useState(null);
   const [miniBacktestModalOpen, setMiniBacktestModalOpen] = useState(false);
   const [miniBacktestLaunchStageId, setMiniBacktestLaunchStageId] = useState(1);
+  const [miniBacktestLaunchStageVersion, setMiniBacktestLaunchStageVersion] = useState(null);
+  const [miniBacktestLaunchContext, setMiniBacktestLaunchContext] = useState(null);
 
   // Navigation
   const [activeSection, setActiveSection] = useState("Strategies");
@@ -5263,12 +5476,16 @@ export default function App() {
   // --- Mini Backtest Analyzer ---
   const [miniBacktestEnabled, setMiniBacktestEnabled] = useState(() => getFeatureFlags().miniBacktest);
   const [formulasEnabled, setFormulasEnabled] = useState(() => getFeatureFlags().formulas);
-  const [miniBacktestResults, setMiniBacktestResults] = useState([]);
+  const [miniBacktestResults, setMiniBacktestResults] = useState(() => [
+    ...INITIAL_MINI_BACKTEST_DEMO_RESULTS,
+  ]);
+  const [selectedMiniBacktestId, setSelectedMiniBacktestId] = useState(null);
   const [miniBacktestExpandedEpochId, setMiniBacktestExpandedEpochId] = useState(null);
 
   // Global tags + hyperopt results (lifted from BuilderStepper)
   const [tagsRegistry, setTagsRegistry] = useState(() => INITIAL_TAGS_REGISTRY);
   const [tagRelations, setTagRelations] = useState(() => INITIAL_TAG_RELATIONS);
+  const [tagsPageCount, setTagsPageCount] = useState(null);
   const [hyperoptResultsRows, setHyperoptResultsRows] = useState(() => INITIAL_HYPEROPT_RESULTS_ROWS);
   const [hyperoptTagFilter, setHyperoptTagFilter] = useState([]);
   const [hyperoptTagsModalRowId, setHyperoptTagsModalRowId] = useState(null);
@@ -5276,6 +5493,10 @@ export default function App() {
 
   const handleTagIdsRemoved = useCallback((removedIds) => {
     setHyperoptTagFilter((prev) => prev.filter((id) => !removedIds.includes(id)));
+  }, []);
+
+  const handleTagsPageCountChange = useCallback((count) => {
+    setTagsPageCount(count);
   }, []);
 
   const openHyperoptTagsModal = useCallback((row) => {
@@ -5347,21 +5568,38 @@ export default function App() {
   ]);
 
   const handleSaveMiniBacktestResult = useCallback((result) => {
+    let nextId = result.id;
+    const finishedResult = {
+      ...result,
+      runStatus: result.runStatus || "Finished",
+    };
     setMiniBacktestResults((prev) => {
-      const existing = prev.findIndex(
-        (r) => r.epochId === result.epochId && r.paramsHash === result.paramsHash
+      const existingIdx = prev.findIndex(
+        (r) => r.epochId === finishedResult.epochId && r.paramsHash === finishedResult.paramsHash,
       );
-      if (existing >= 0) {
+      if (existingIdx >= 0) {
         const updated = [...prev];
-        updated[existing] = result;
+        updated[existingIdx] = finishedResult;
+        nextId = finishedResult.id;
         return updated;
       }
-      return [...prev, result];
+      if (prev.some((r) => r.id === finishedResult.id)) {
+        nextId = `mbt-${finishedResult.epochId}-${Date.now()}`;
+      }
+      return [...prev, { ...finishedResult, id: nextId }];
     });
+    setSelectedMiniBacktestId(nextId);
+    setActiveStrategyTab("miniBacktest");
   }, []);
+
+  useEffect(() => {
+    if (activeStrategyTab !== "miniBacktest") return;
+    setMiniBacktestResults((prev) => dedupeMiniBacktestResultIds(prev));
+  }, [activeStrategyTab]);
 
   const handleRemoveMiniBacktestResult = useCallback((id) => {
     setMiniBacktestResults((prev) => prev.filter((r) => r.id !== id));
+    setSelectedMiniBacktestId((sel) => (sel === id ? null : sel));
   }, []);
 
   // Builder fields (mock)
@@ -5483,6 +5721,12 @@ export default function App() {
     { id: 3, name: "BB - Bollinger Bands", description: "Volatility bands placed above and below a moving average", type: "Volatility", indicatorType: "System", status: "Archived", createdAt: "2024-11-05" },
   ]);
   const [showAddIndicatorPage, setShowAddIndicatorPage] = useState(false);
+
+  // Release notes (mock)
+  const [releaseNotes, setReleaseNotes] = useState(() => INITIAL_RELEASE_NOTES);
+  const [releaseNoteModalOpen, setReleaseNoteModalOpen] = useState(false);
+  const [editingReleaseNote, setEditingReleaseNote] = useState(null);
+  const [selectedReleaseNoteId, setSelectedReleaseNoteId] = useState(null);
 
   // Formulas (Settings → Formulas)
   const formulaModalFormulaRef = useRef(null);
@@ -5685,6 +5929,50 @@ export default function App() {
     }
   }, [formulasEnabled, activeSection, settingsSubSection]);
 
+  const handleOpenReleaseNotes = useCallback(() => {
+    setActiveSection("ReleaseNotes");
+    setSelected(null);
+  }, []);
+
+  const handleOpenAddReleaseNote = useCallback(() => {
+    setEditingReleaseNote(null);
+    setReleaseNoteModalOpen(true);
+  }, []);
+
+  const handleEditReleaseNote = useCallback((note) => {
+    setEditingReleaseNote(note);
+    setReleaseNoteModalOpen(true);
+  }, []);
+
+  const handleSaveReleaseNote = useCallback(
+    (draft) => {
+      if (editingReleaseNote) {
+        setReleaseNotes((prev) =>
+          prev.map((n) =>
+            n.id === editingReleaseNote.id
+              ? { ...n, title: draft.title, releasedAt: draft.releasedAt, body: draft.body }
+              : n,
+          ),
+        );
+      } else {
+        const id = `rn-${Date.now()}`;
+        setReleaseNotes((prev) => [
+          {
+            id,
+            title: draft.title,
+            releasedAt: draft.releasedAt,
+            body: draft.body,
+            createdAt: new Date().toISOString(),
+          },
+          ...prev,
+        ]);
+        setSelectedReleaseNoteId(id);
+      }
+      setEditingReleaseNote(null);
+    },
+    [editingReleaseNote],
+  );
+
   const handleSelectVersion = useCallback(
     (strategyId, versionId) => {
       setSelected({ strategyId, versionId });
@@ -5797,18 +6085,34 @@ export default function App() {
           formulasEnabled={formulasEnabled}
           featureFlags={headerFeatureFlags}
           onFeatureFlagChange={handleFeatureFlagChange}
+          releaseNotesActive={activeSection === "ReleaseNotes"}
+          onOpenReleaseNotes={handleOpenReleaseNotes}
       />
 
       <main className="flex-1 overflow-visible p-6">
         {!(activeSection === "Strategies" && selectedStrategy) && (
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
-            <h1 className="text-[16px] font-semibold text-[#f5f5f5]">{activeSection === "Settings" ? `${activeSection} · ${settingsSubSection === "indicators" ? "Indicators" : "Formulas"}` : activeSection}</h1>
+            <h1 className="text-[16px] font-semibold text-[#f5f5f5] flex items-center gap-2">
+              {activeSection === "Settings"
+                ? `${activeSection} · ${settingsSubSection === "indicators" ? "Indicators" : "Formulas"}`
+                : activeSection === "ReleaseNotes"
+                ? "Release Notes"
+                : activeSection}
+              {activeSection === "Tags" && tagsPageCount != null && (
+                <span className="rounded-md border border-[#303030] bg-[#0f0f0f] px-2 py-0.5 text-[10px] font-normal text-[#8c8c8c] whitespace-nowrap">
+                  {tagsPageCount.shown}
+                  {tagsPageCount.shown !== tagsPageCount.total ? ` / ${tagsPageCount.total}` : ""} tags
+                </span>
+              )}
+            </h1>
             <p className={cx("mt-1 text-[12px]", ui.textMuted)}>
               {activeSection === "Users"
                 ? "Manage application users (mock data only)."
                 : activeSection === "Tags"
-                ? "Manage tags and their links to Hyperopt results (mock only)."
+                ? "View and manage tags and links to related objects (mock only)."
+                : activeSection === "ReleaseNotes"
+                ? "Product updates and changelog (mock only)."
                 : activeSection === "Settings" && settingsSubSection === "indicators"
                 ? "Manage indicator library (mock)."
                 : activeSection === "Settings" && settingsSubSection === "formulas"
@@ -5836,6 +6140,11 @@ export default function App() {
           {formulasEnabled && activeSection === "Settings" && settingsSubSection === "formulas" && (
             <button onClick={handleOpenAddFormula} className={ui.btnPrimary}>
               Add Formula
+            </button>
+          )}
+          {activeSection === "ReleaseNotes" && (
+            <button onClick={handleOpenAddReleaseNote} className={ui.btnPrimary}>
+              Add notes
             </button>
           )}
         </div>
@@ -6018,8 +6327,8 @@ export default function App() {
               </button>
             </div>
 
-            {/* Builder tab */}
-            {activeStrategyTab === "builder" && (
+            {/* Builder tab — keep mounted so indicators / heatmap / best epochs state persists */}
+            <div className={activeStrategyTab !== "builder" ? "hidden" : undefined}>
               <BuilderStepper
                 strategyId={selectedStrategy.s.id}
                 strategyName={selectedStrategy.s.name}
@@ -6048,14 +6357,18 @@ export default function App() {
               onMiniBacktestExpandedEpochIdChange={setMiniBacktestExpandedEpochId}
               onSaveMiniBacktestResult={handleSaveMiniBacktestResult}
               onRemoveMiniBacktestResult={handleRemoveMiniBacktestResult}
-              onOpenMiniBacktestModal={(epoch, stageId) => {
+              onOpenMiniBacktestModal={(epoch, stageId, stageVersion, launchContext) => {
                 setMiniBacktestModalEpoch(epoch);
                 setMiniBacktestLaunchStageId(stageId ?? 1);
+                setMiniBacktestLaunchStageVersion(stageVersion ?? null);
+                setMiniBacktestLaunchContext(launchContext ?? null);
                 setMiniBacktestModalOpen(true);
               }}
               onCloseMiniBacktestModal={() => {
                 setMiniBacktestModalOpen(false);
                 setMiniBacktestModalEpoch(null);
+                setMiniBacktestLaunchStageVersion(null);
+                setMiniBacktestLaunchContext(null);
               }}
               tagsRegistry={tagsRegistry}
               setTagsRegistry={setTagsRegistry}
@@ -6074,30 +6387,18 @@ export default function App() {
               closeHyperoptTagsModal={closeHyperoptTagsModal}
               commitHyperoptTagsDraftTag={commitHyperoptTagsDraftTag}
               saveHyperoptTagsModal={saveHyperoptTagsModal}
-            />
-          )}
+              />
+            </div>
 
             {/* Mini Backtest tab */}
-            {activeStrategyTab === "miniBacktest" && (
-              <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
-                <div className="px-4 py-3 border-b border-[#303030]">
-                  <div className="text-[14px] font-medium text-[#f5f5f5]">Mini Backtest Summary</div>
-                  <div className={cx("mt-0.5 text-[11px]", ui.textMuted)}>
-                    Overview of all Mini Backtest runs across epochs for this strategy
-                  </div>
-                </div>
-                <div className="p-4">
-                  <MiniBacktestSummaryTable
-                    results={miniBacktestResults}
-                    onViewDetails={(result) => {
-                      setActiveStrategyTab("builder");
-                      setMiniBacktestExpandedEpochId(result.epochId);
-                    }}
-                    onRemoveResult={handleRemoveMiniBacktestResult}
-                  />
-                </div>
-              </div>
-            )}
+            <div className={activeStrategyTab !== "miniBacktest" ? "hidden" : undefined}>
+              <MiniBacktestPage
+                results={miniBacktestResults}
+                selectedId={selectedMiniBacktestId}
+                onSelectId={setSelectedMiniBacktestId}
+                onRemoveResult={handleRemoveMiniBacktestResult}
+              />
+            </div>
           </>
         )}
 
@@ -6164,6 +6465,17 @@ export default function App() {
             hyperoptResultsRows={hyperoptResultsRows}
             setHyperoptResultsRows={setHyperoptResultsRows}
             onTagIdsRemoved={handleTagIdsRemoved}
+            onCountChange={handleTagsPageCountChange}
+          />
+        )}
+
+        {/* Release notes page */}
+        {activeSection === "ReleaseNotes" && (
+          <ReleaseNotesPage
+            notes={releaseNotes}
+            selectedId={selectedReleaseNoteId}
+            onSelectId={setSelectedReleaseNoteId}
+            onEditNote={handleEditReleaseNote}
           />
         )}
 
@@ -6324,6 +6636,16 @@ export default function App() {
         />
       )}
 
+      <ReleaseNoteModal
+        open={releaseNoteModalOpen}
+        onOpenChange={(open) => {
+          setReleaseNoteModalOpen(open);
+          if (!open) setEditingReleaseNote(null);
+        }}
+        editingNote={editingReleaseNote}
+        onSave={handleSaveReleaseNote}
+      />
+
       {userToEdit && (
         <EditUserModal
           draft={editUserDraft}
@@ -6481,15 +6803,27 @@ export default function App() {
       {miniBacktestModalOpen && miniBacktestModalEpoch && (
         <MiniBacktestModal
           epoch={miniBacktestModalEpoch}
-          existingResult={miniBacktestResults.find((r) => r.epochId === miniBacktestModalEpoch.id)}
+          existingResult={
+            miniBacktestResults.find(
+              (r) =>
+                r.epochId === miniBacktestModalEpoch.id &&
+                r.id === selectedMiniBacktestId,
+            ) ??
+            [...miniBacktestResults]
+              .filter((r) => r.epochId === miniBacktestModalEpoch.id)
+              .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0]
+          }
           open={miniBacktestModalOpen}
           launchStageId={miniBacktestLaunchStageId}
+          launchStageVersion={miniBacktestLaunchStageVersion}
+          launchContext={miniBacktestLaunchContext}
           onClose={() => {
             setMiniBacktestModalOpen(false);
             setMiniBacktestModalEpoch(null);
+            setMiniBacktestLaunchStageVersion(null);
+            setMiniBacktestLaunchContext(null);
           }}
           onSaveResult={handleSaveMiniBacktestResult}
-          onRemoveResult={handleRemoveMiniBacktestResult}
         />
       )}
 

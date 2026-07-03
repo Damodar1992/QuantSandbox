@@ -26,6 +26,7 @@ export const TagsPage = memo(function TagsPage({
   hyperoptResultsRows,
   setHyperoptResultsRows,
   onTagIdsRemoved,
+  onCountChange,
 }) {
   const [expandedTagIds, setExpandedTagIds] = useState(() => new Set());
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -58,6 +59,13 @@ export const TagsPage = memo(function TagsPage({
   }, [visibleTags, filterName, filterOwner]);
 
   const level1Pagination = usePagination(filteredTags, 10);
+
+  useEffect(() => {
+    onCountChange?.({
+      shown: filteredTags.length,
+      total: visibleTags.length,
+    });
+  }, [filteredTags.length, visibleTags.length, onCountChange]);
 
   useEffect(() => {
     level1Pagination.resetPage();
@@ -148,20 +156,13 @@ export const TagsPage = memo(function TagsPage({
       <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
         <div
           className={cx(
-            "flex flex-nowrap items-center justify-between gap-3 px-4 py-3",
+            "flex flex-nowrap items-center justify-end gap-2 px-4 py-3",
             ui.panelMuted,
             "border-0 border-b",
             ui.divider,
           )}
         >
-          <div className="min-w-0 shrink">
-            <div className="text-[12px] font-medium text-[#d9d9d9]">Tags</div>
-            <div className={cx("text-[11px]", ui.textMuted)}>
-              Manage tags and their links to Hyperopt results (mock only).
-            </div>
-          </div>
-          <div className="flex flex-nowrap items-center gap-2 shrink-0">
-            <input
+          <input
               value={filterName}
               onChange={(e) => setFilterName(e.target.value)}
               className={cx(ui.input, "!w-32 h-8 shrink-0 text-[12px]")}
@@ -181,11 +182,6 @@ export const TagsPage = memo(function TagsPage({
                 </option>
               ))}
             </select>
-            <span className="rounded-md border border-[#303030] bg-[#0f0f0f] px-2 py-0.5 text-[10px] text-[#8c8c8c] whitespace-nowrap">
-              {filteredTags.length}
-              {filteredTags.length !== visibleTags.length ? ` / ${visibleTags.length}` : ""} tags
-            </span>
-          </div>
         </div>
 
         {visibleTags.length === 0 ? (

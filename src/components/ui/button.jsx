@@ -40,23 +40,28 @@ const buttonVariants = cva(
   }
 )
 
-function Button({
-  className,
-  variant = "outline",
-  size = "sm",
-  asChild = false,
-  ...props
-}) {
-  const Comp = asChild ? Slot.Root : "button"
+const Button = React.forwardRef(function Button(
+  {
+    className,
+    variant = "outline",
+    size = "sm",
+    asChild = false,
+    ...props
+  },
+  ref,
+) {
+  const Comp = asChild ? Slot.Root : "button";
 
   return (
     <Comp
+      ref={ref}
       data-slot="button"
       data-variant={variant}
       data-size={size}
       className={cn(buttonVariants({ variant, size }), crm.focusRing, className)}
-      {...props} />
+      {...props}
+    />
   );
-}
+});
 
 export { Button, buttonVariants }

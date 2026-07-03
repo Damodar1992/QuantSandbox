@@ -8,6 +8,28 @@ export function QueueIcon() {
   );
 }
 
+/** Scroll changelog — release notes */
+export function ReleaseNotesIcon({ className = "h-4 w-4 shrink-0" }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M8 21h9a2 2 0 0 0 2-2v-1H9a2 2 0 0 1-2-2V5a2 2 0 1 0-4 0v14a2 2 0 0 0 2 2z" />
+      <path d="M19 17V5a2 2 0 0 0-2-2H4" />
+      <path d="M9 9h6" />
+      <path d="M9 13h6" />
+      <path d="M9 17h4" />
+    </svg>
+  );
+}
+
 export function DragHandleIcon() {
   return (
     <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-[#8c8c8c]" fill="currentColor" aria-hidden="true" title="Drag to reorder">

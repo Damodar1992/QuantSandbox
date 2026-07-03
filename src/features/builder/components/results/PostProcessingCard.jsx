@@ -5,6 +5,7 @@ import { HyperoptDetailsTooltip } from "../../../../components/heatmap";
 import { AppButton } from "../../../../components/common/AppButton";
 import { HeatMapIcon, FileTextIcon, DownloadIcon } from "../../../../components/shared";
 import { RunStatusBadge } from "./RunStatusBadge";
+import { PostProcessingEpochMenu } from "./PostProcessingEpochMenu";
 
 function CollapseChevron({ collapsed }) {
   return <span className="text-[10px] text-[#8c8c8c]">{collapsed ? "▶" : "▼"}</span>;
@@ -106,6 +107,9 @@ export const PostProcessingCard = memo(function PostProcessingCard({
   onConfigureHeatMap,
   onGenerateReport,
   onAddTruncate,
+  onBestEpochs,
+  onRunMiniBacktest,
+  miniBacktestEnabled = false,
   onShowHeatmap,
   onDownloadReport,
   onShowItemFilters,
@@ -155,6 +159,11 @@ export const PostProcessingCard = memo(function PostProcessingCard({
               <FileTextIcon className="h-3.5 w-3.5 mr-1.5 shrink-0" />
               Generate Report
             </AppButton>
+            <PostProcessingEpochMenu
+              miniBacktestEnabled={miniBacktestEnabled}
+              onBestEpochs={() => onBestEpochs?.(sub)}
+              onRunMiniBacktest={() => onRunMiniBacktest?.(sub)}
+            />
           </div>
 
           {/* HeatMaps & Reports */}

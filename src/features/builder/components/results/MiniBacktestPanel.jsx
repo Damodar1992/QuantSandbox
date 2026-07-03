@@ -34,8 +34,8 @@ export const MiniBacktestPanel = memo(function MiniBacktestPanel({
 
   const handleRun = useCallback(() => {
     setRunning(true);
-    const cycleData = generateCycleDataForEpoch(epoch, params.cycleCount || 24);
-    const backtestResult = runMiniBacktest(cycleData, params);
+    const { meta, cycles: cycleData } = generateCycleDataForEpoch(epoch, params.cycleCount || 24);
+    const backtestResult = runMiniBacktest(cycleData, params, meta);
     setCycles(cycleData);
     setResult(backtestResult);
 

@@ -27,6 +27,9 @@ export const HyperoptResultDrawer = memo(function HyperoptResultDrawer({
   onConfigureHeatMap,
   onGenerateReport,
   onAddTruncate,
+  onBestEpochs,
+  onRunMiniBacktest,
+  miniBacktestEnabled = false,
   onShowHeatmap,
   onDownloadReport,
   onShowItemFilters,
@@ -50,6 +53,26 @@ export const HyperoptResultDrawer = memo(function HyperoptResultDrawer({
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           <HyperoptDetailsTooltip onShowDetails={() => onShowHyperoptDetails?.()} />
+          <AppButton
+            type="button"
+            variant="outline"
+            size="xs"
+            onClick={() => onEditTags?.(run)}
+            aria-label="Edit tags"
+            className="h-6 rounded-full px-2 text-[10px] text-[#8c8c8c] hover:text-[#d9d9d9]"
+          >
+            Tags
+          </AppButton>
+          <AppButton
+            type="button"
+            variant="outline"
+            size="xs"
+            onClick={() => onEditComment?.(run)}
+            aria-label="Edit comment"
+            className="h-6 rounded-full px-2 text-[10px] text-[#8c8c8c] hover:text-[#d9d9d9]"
+          >
+            Comment
+          </AppButton>
           <button
             type="button"
             onClick={() => onClose?.()}
@@ -96,21 +119,13 @@ export const HyperoptResultDrawer = memo(function HyperoptResultDrawer({
             </div>
           </div>
 
-          <div className="border-t border-[#303030]/50 mt-2.5 pt-2.5">
-            <div className="flex flex-wrap items-center gap-2">
-              {showPostProcessing && (
-                <AppButton type="button" variant="primary" size="sm" onClick={() => onPostProcessing?.()}>
-                  Post-processing
-                </AppButton>
-              )}
-              <AppButton type="button" variant="outline" size="sm" onClick={() => onEditTags?.(run)}>
-                Tags
-              </AppButton>
-              <AppButton type="button" variant="outline" size="sm" onClick={() => onEditComment?.(run)}>
-                Comment
+          {showPostProcessing && (
+            <div className="border-t border-[#303030]/50 mt-2.5 pt-2.5">
+              <AppButton type="button" variant="primary" size="sm" onClick={() => onPostProcessing?.()}>
+                Post-processing
               </AppButton>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Post-processing results */}
@@ -134,6 +149,9 @@ export const HyperoptResultDrawer = memo(function HyperoptResultDrawer({
                   onConfigureHeatMap={onConfigureHeatMap}
                   onGenerateReport={onGenerateReport}
                   onAddTruncate={onAddTruncate}
+                  onBestEpochs={onBestEpochs}
+                  onRunMiniBacktest={onRunMiniBacktest}
+                  miniBacktestEnabled={miniBacktestEnabled}
                   onShowHeatmap={onShowHeatmap}
                   onDownloadReport={onDownloadReport}
                   onShowItemFilters={onShowItemFilters}

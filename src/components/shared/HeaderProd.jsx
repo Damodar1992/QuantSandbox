@@ -3,7 +3,7 @@ import { cx, ui } from "../../constants/ui";
 import { useOutsideClose } from "../../hooks/useOutsideClose";
 import { Logo, MenuIcon } from "../common";
 import { PillTabs, ProdButton } from "../prod";
-import { QueueIcon, DragHandleIcon, TrashIcon } from "./Icons";
+import { QueueIcon, ReleaseNotesIcon, DragHandleIcon, TrashIcon } from "./Icons";
 import { FeatureFlagsDropdown } from "./FeatureFlagsDropdown";
 
 export const HeaderProd = memo(function HeaderProd({
@@ -23,9 +23,11 @@ export const HeaderProd = memo(function HeaderProd({
   onQueueRemove,
   hyperoptRun = "Admin run",
   onHyperoptRunChange,
-  formulasEnabled = true,
+  formulasEnabled = false,
   featureFlags = {},
   onFeatureFlagChange,
+  releaseNotesActive = false,
+  onOpenReleaseNotes,
 }) {
   const queueRef = useOutsideClose(queueOpen, onQueueClose);
   const [draggedIndex, setDraggedIndex] = useState(null);
@@ -162,6 +164,19 @@ export const HeaderProd = memo(function HeaderProd({
             <option value="Admin run">Admin</option>
           </select>
           <FeatureFlagsDropdown flags={featureFlags} onFlagChange={onFeatureFlagChange} />
+          <ProdButton
+            variant="headerControl"
+            size="lg"
+            onClick={onOpenReleaseNotes}
+            title="Release notes"
+            aria-label="Release notes"
+            className={cx(
+              "px-2.5",
+              releaseNotesActive && "ring-1 ring-violet-500/50 text-[#ddd6fe]",
+            )}
+          >
+            <ReleaseNotesIcon />
+          </ProdButton>
           <span className="hidden sm:inline-flex items-center gap-2 text-[12px] text-muted-foreground">
             User: <span className="font-medium text-foreground">bogdan</span>
           </span>
