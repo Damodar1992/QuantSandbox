@@ -1032,6 +1032,26 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
       (row.tagIds || []).some((tagId) => hyperoptTagFilter.includes(tagId)),
     );
   }, [hyperoptResultsRows, hyperoptTagFilter]);
+  const activeHyperoptTagNames = useMemo(
+    () => resolveTagNames(hyperoptTagFilter, tagsRegistry),
+    [hyperoptTagFilter, tagsRegistry],
+  );
+  const hyperoptResultsOverview = useMemo(
+    () =>
+      filteredHyperoptResultsRows.reduce(
+        (acc, row) => {
+          acc.total += 1;
+          acc.postProcessing += row.children?.length ?? 0;
+          const status = normalizeHyperoptRunStatus(row.status);
+          if (status === "Completed") acc.completed += 1;
+          else if (status === "In Progress") acc.inProgress += 1;
+          else acc.other += 1;
+          return acc;
+        },
+        { total: 0, completed: 0, inProgress: 0, other: 0, postProcessing: 0 },
+      ),
+    [filteredHyperoptResultsRows],
+  );
   const saveHyperoptCommentModal = useCallback(() => {
     if (!hyperoptCommentModalRowId) return;
     setHyperoptResultsRows((rows) =>
@@ -3277,128 +3297,167 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
               collapsed={collapsedSections.has(resultsSectionNum)}
               onToggle={() => toggleSection(resultsSectionNum)}
             >
-              <div className="mb-3 flex justify-end">
-                <span className="rounded-md border border-border bg-background px-2 py-0.5 text-[10px] text-muted-foreground">
-                  {hyperoptResultsRows.length} runs
-                </span>
-              </div>
               <div className="overflow-auto space-y-4">
                 {/* Block 1: Hyperopt result */}
-                <div className="rounded-lg border border-[#303030] overflow-hidden border-l-4 border-l-emerald-500">
-                  <div className="px-3 py-2 font-medium border-b border-[#303030] bg-emerald-500/10 text-emerald-200 text-[12px]">
-                    Hyperopt result
-                  </div>
-                  <div className="px-3 py-2 border-b border-[#303030] bg-[#141414]">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="inline-flex rounded-md border border-[#303030] bg-[#0f0f0f] p-0.5">
-                        <button
-                          type="button"
-                          onClick={() => setResultsViewMode("table")}
-                          className={cx(
-                            "h-6 w-6 inline-flex items-center justify-center rounded transition-colors",
-                            resultsViewMode === "table"
-                              ? "bg-emerald-500 text-[#0f0f0f]"
-                              : "text-[#a6a6a6] hover:text-[#d9d9d9]",
-                          )}
-                          aria-pressed={resultsViewMode === "table"}
-                          title="Table view"
-                          aria-label="Table view"
-                        >
-                          <TableViewIcon className="h-3.5 w-3.5 shrink-0" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setResultsViewMode("card")}
-                          className={cx(
-                            "h-6 w-6 inline-flex items-center justify-center rounded transition-colors",
-                            resultsViewMode === "card"
-                              ? "bg-emerald-500 text-[#0f0f0f]"
-                              : "text-[#a6a6a6] hover:text-[#d9d9d9]",
-                          )}
-                          aria-pressed={resultsViewMode === "card"}
-                          title="Card view"
-                          aria-label="Card view"
-                        >
-                          <CardViewIcon className="h-3.5 w-3.5 shrink-0" />
-                        </button>
-                      </div>
-                      <div className="relative" ref={hyperoptTagFilterRef}>
-                        <button
-                          type="button"
-                          onClick={() => setHyperoptTagFilterOpen((prev) => !prev)}
-                          className={cx(ui.input, "h-7 px-2 text-[10px] min-w-[220px] inline-flex items-center justify-between gap-2")}
-                          aria-expanded={hyperoptTagFilterOpen}
-                        >
-                          <span className="truncate text-left">
-                            {hyperoptTagFilter.length === 0
-                              ? "Tags: All"
-                              : `Tags: ${resolveTagNames(hyperoptTagFilter, tagsRegistry).join(", ")}`}
+                <div className="rounded-xl border border-[rgba(60,40,80,0.35)] overflow-hidden bg-[#120a20] shadow-[0_10px_30px_rgba(6,3,20,0.28)]">
+                  <div className="px-4 py-3 border-b border-[rgba(60,40,80,0.3)] bg-[#1a1028]/85 flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-md border border-violet-500/35 bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold text-violet-200">
+                          Hyperopt result
+                        </span>
+                        <span className="rounded-md border border-[rgba(60,40,80,0.4)] bg-[#19102b] px-2 py-0.5 text-[10px] text-[#b8aecc]">
+                          {hyperoptResultsOverview.total} runs
+                        </span>
+                        <span className="rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-200">
+                          {hyperoptResultsOverview.completed} completed
+                        </span>
+                        <span className="rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-200">
+                          {hyperoptResultsOverview.inProgress} in progress
+                        </span>
+                        {hyperoptResultsOverview.other > 0 && (
+                          <span className="rounded-md border border-[#303030] bg-[#140f20] px-2 py-0.5 text-[10px] text-[#a6a6a6]">
+                            {hyperoptResultsOverview.other} other
                           </span>
-                          <span className="text-[#8c8c8c]">{hyperoptTagFilterOpen ? "▲" : "▼"}</span>
-                        </button>
-                        {hyperoptTagFilterOpen && (
-                          <div className="absolute right-0 z-30 mt-1 w-[260px] rounded-md border border-[#303030] bg-[#0f0f0f] shadow-lg p-1.5 space-y-1">
-                            <button
-                              type="button"
-                              onClick={() => setHyperoptTagFilter([])}
-                              className="w-full h-7 px-2 rounded text-left text-[10px] text-[#d9d9d9] hover:bg-[#1a1a1a]"
-                            >
-                              All
-                            </button>
-                            {hyperoptAvailableTagIds.map((tagId) => {
-                              const tagName =
-                                tagsRegistry.find((tag) => tag.id === tagId)?.name || tagId;
-                              const checked = hyperoptTagFilter.includes(tagId);
-                              return (
-                                <label key={tagId} className="flex items-center gap-2 h-7 px-2 rounded text-[10px] text-[#d9d9d9] hover:bg-[#1a1a1a] cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={checked}
-                                    onChange={() =>
-                                      setHyperoptTagFilter((prev) =>
-                                        prev.includes(tagId)
-                                          ? prev.filter((item) => item !== tagId)
-                                          : [...prev, tagId],
-                                      )
-                                    }
-                                    className="h-3 w-3 accent-emerald-500"
-                                  />
-                                  <span className="truncate">{tagName}</span>
-                                </label>
-                              );
-                            })}
-                          </div>
                         )}
+                        <span className="rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-[10px] text-sky-200">
+                          {hyperoptResultsOverview.postProcessing} post-processing
+                        </span>
+                      </div>
+                      <p className="mt-1 text-[10px] text-[#8c8c8c]">
+                        Review optimization runs, filter by tags, and expand post-processing trunks inline.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="px-4 py-3 border-b border-[rgba(60,40,80,0.3)] bg-[#140d24]">
+                    <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-medium uppercase tracking-wide text-[#8c8c8c]">View</span>
+                        <div className="inline-flex rounded-md border border-[rgba(60,40,80,0.45)] bg-[#0f0a1b] p-0.5">
+                          <button
+                            type="button"
+                            onClick={() => setResultsViewMode("table")}
+                            className={cx(
+                              "h-7 w-7 inline-flex items-center justify-center rounded transition-colors",
+                              resultsViewMode === "table"
+                                ? "bg-violet-500 text-[#0f0d1e]"
+                                : "text-[#a6a6a6] hover:text-[#d9d9d9]",
+                            )}
+                            aria-pressed={resultsViewMode === "table"}
+                            title="Table view"
+                            aria-label="Table view"
+                          >
+                            <TableViewIcon className="h-3.5 w-3.5 shrink-0" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setResultsViewMode("card")}
+                            className={cx(
+                              "h-7 w-7 inline-flex items-center justify-center rounded transition-colors",
+                              resultsViewMode === "card"
+                                ? "bg-violet-500 text-[#0f0d1e]"
+                                : "text-[#a6a6a6] hover:text-[#d9d9d9]",
+                            )}
+                            aria-pressed={resultsViewMode === "card"}
+                            title="Card view"
+                            aria-label="Card view"
+                          >
+                            <CardViewIcon className="h-3.5 w-3.5 shrink-0" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-start gap-1 lg:items-end">
+                        <span className="text-[10px] font-medium uppercase tracking-wide text-[#8c8c8c]">Tags filter</span>
+                        <div className="relative" ref={hyperoptTagFilterRef}>
+                          <button
+                            type="button"
+                            onClick={() => setHyperoptTagFilterOpen((prev) => !prev)}
+                            className={cx(
+                              ui.input,
+                              "h-8 min-w-[240px] px-2.5 text-[10px] inline-flex items-center justify-between gap-2 border-[rgba(60,40,80,0.45)] bg-[#0f0a1b]",
+                            )}
+                            aria-expanded={hyperoptTagFilterOpen}
+                          >
+                            <span className="truncate text-left">
+                              {activeHyperoptTagNames.length === 0
+                                ? "Tags: All"
+                                : `Tags: ${activeHyperoptTagNames.join(", ")}`}
+                            </span>
+                            <span className="text-[#8c8c8c]">{hyperoptTagFilterOpen ? "▲" : "▼"}</span>
+                          </button>
+                          {hyperoptTagFilterOpen && (
+                            <div className="absolute right-0 z-30 mt-1 w-[260px] rounded-md border border-[rgba(60,40,80,0.45)] bg-[#0f0a1b] shadow-lg p-1.5 space-y-1">
+                              <button
+                                type="button"
+                                onClick={() => setHyperoptTagFilter([])}
+                                className="w-full h-7 px-2 rounded text-left text-[10px] text-[#d9d9d9] hover:bg-[#1a1a1a]"
+                              >
+                                All
+                              </button>
+                              {hyperoptAvailableTagIds.map((tagId) => {
+                                const tagName =
+                                  tagsRegistry.find((tag) => tag.id === tagId)?.name || tagId;
+                                const checked = hyperoptTagFilter.includes(tagId);
+                                return (
+                                  <label key={tagId} className="flex items-center gap-2 h-7 px-2 rounded text-[10px] text-[#d9d9d9] hover:bg-[#1a1a1a] cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      onChange={() =>
+                                        setHyperoptTagFilter((prev) =>
+                                          prev.includes(tagId)
+                                            ? prev.filter((item) => item !== tagId)
+                                            : [...prev, tagId],
+                                        )
+                                      }
+                                      className="h-3 w-3 accent-emerald-500"
+                                    />
+                                    <span className="truncate">{tagName}</span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
                   {resultsViewMode === "table" && (
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto bg-[#120b20]">
                     <table className="w-full border-collapse text-[11px]">
-                      <thead className="bg-[#1a1a1a] text-[#8c8c8c]">
+                      <thead className="bg-[#19102b] text-[#8c8c8c]">
                         <tr>
-                          <th className="px-2 py-2 text-left font-medium border-b border-[#303030] w-8"></th>
-                          <th className="px-2 py-2 text-center font-medium border-b border-[#303030]">#</th>
-                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Date</th>
+                          <th className="px-2 py-2 text-left font-medium border-b border-[rgba(60,40,80,0.35)] w-8"></th>
+                          <th className="px-2 py-2 text-center font-medium border-b border-[rgba(60,40,80,0.35)]">#</th>
+                          <th className="px-3 py-2 text-left font-medium border-b border-[rgba(60,40,80,0.35)]">Date</th>
                           {(isEntryStage || isExitStage || isRiskStage) && (
-                            <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Source</th>
+                            <th className="px-3 py-2 text-left font-medium border-b border-[rgba(60,40,80,0.35)]">Source</th>
                           )}
-                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Pairs</th>
-                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">TimeFrame</th>
-                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Time Range</th>
-                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Status</th>
-                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Tags</th>
-                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Comment</th>
-                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Indicators</th>
-                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Actions</th>
+                          <th className="px-3 py-2 text-left font-medium border-b border-[rgba(60,40,80,0.35)]">Pairs</th>
+                          <th className="px-3 py-2 text-left font-medium border-b border-[rgba(60,40,80,0.35)]">TimeFrame</th>
+                          <th className="px-3 py-2 text-left font-medium border-b border-[rgba(60,40,80,0.35)]">Time Range</th>
+                          <th className="px-3 py-2 text-left font-medium border-b border-[rgba(60,40,80,0.35)]">Status</th>
+                          <th className="px-3 py-2 text-left font-medium border-b border-[rgba(60,40,80,0.35)]">Tags</th>
+                          <th className="px-3 py-2 text-left font-medium border-b border-[rgba(60,40,80,0.35)]">Comment</th>
+                          <th className="px-3 py-2 text-left font-medium border-b border-[rgba(60,40,80,0.35)]">Indicators</th>
+                          <th className="px-3 py-2 text-left font-medium border-b border-[rgba(60,40,80,0.35)]">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="text-[#d9d9d9]">
-                        {filteredHyperoptResultsRows.map((row) => {
+                        {filteredHyperoptResultsRows.length === 0 ? (
+                          <tr>
+                            <td
+                              colSpan={(isEntryStage || isExitStage || isRiskStage) ? 12 : 11}
+                              className="px-3 py-8 text-center text-[11px] text-[#8c8c8c]"
+                            >
+                              No optimization runs match the current tags filter.
+                            </td>
+                          </tr>
+                        ) : filteredHyperoptResultsRows.map((row) => {
                           const rowTagNames = resolveTagNames(row.tagIds, tagsRegistry);
                           return (
                           <React.Fragment key={row.id}>
-                            <tr className="border-b border-[#303030] bg-[#141414] hover:bg-[#1f1f1f]">
+                            <tr className="border-b border-[rgba(60,40,80,0.22)] bg-[#140f23] hover:bg-[#1a1430] transition-colors">
                               <td className="px-2 py-2 align-middle">
                                 <button
                                   type="button"
@@ -3440,7 +3499,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                     {rowTagNames.slice(0, 3).map((t) => (
                                       <span
                                         key={t}
-                                        className="rounded border border-[#303030] bg-[#0f0f0f] px-1.5 py-0.5 text-[10px] text-[#a6a6a6]"
+                                        className="rounded border border-[rgba(60,40,80,0.4)] bg-[#100b1c] px-1.5 py-0.5 text-[10px] text-[#b8aecc]"
                                       >
                                         {t}
                                       </span>
@@ -3502,36 +3561,38 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                             </tr>
                             {hyperoptResultsExpanded.has(row.id) && row.children && row.children.length > 0 && (
                               <tr>
-                                <td colSpan={(isEntryStage || isExitStage || isRiskStage) ? 11 : 10} className="p-0 align-top bg-[#0f0f0f]">
+                                <td colSpan={(isEntryStage || isExitStage || isRiskStage) ? 12 : 11} className="p-0 align-top bg-[#100a1a]">
                                   {/* Block 2: Normalization result (nested per expanded row) */}
-                                  <div className="ml-4 mt-2 mb-2 rounded-lg border border-[#303030] overflow-hidden border-l-4 border-l-sky-500">
-                                    <div className="px-3 py-1.5 font-medium border-b border-[#303030] bg-sky-500/10 text-sky-200 text-[11px]">
-                                      Post-processing result
+                                  <div className="mx-4 mt-3 mb-3 rounded-xl border border-[rgba(60,40,80,0.35)] overflow-hidden bg-[#110b1d] shadow-[0_10px_24px_rgba(6,3,20,0.24)]">
+                                    <div className="px-3 py-2 font-medium border-b border-[rgba(60,40,80,0.3)] bg-sky-500/10 text-sky-200 text-[11px] flex items-center justify-between gap-2">
+                                      <span>Post-processing result</span>
+                                      <span className="rounded-md border border-sky-500/25 bg-sky-500/10 px-1.5 py-0.5 text-[9px] text-sky-100">
+                                        {row.children.length} analyzers
+                                      </span>
                                     </div>
                                     <div className="overflow-x-auto">
                                       <table className="w-full border-collapse text-[11px]">
-                                        <thead className="bg-[#1a1a1a] text-[#8c8c8c]">
+                                        <thead className="bg-[#19102b] text-[#8c8c8c]">
                                           <tr>
-                                            <th className="px-2 py-1.5 text-left font-medium border-b border-[#303030] w-8"></th>
-                                            <th className="px-2 py-1.5 text-center font-medium border-b border-[#303030]">#</th>
-                                            <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030] w-24">Date</th>
-                                            <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Post-processing formula info</th>
-                                            <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Status</th>
-                                            <th className="px-3 py-1.5 text-right font-medium border-b border-[#303030]">Actions</th>
+                                            <th className="px-2 py-1.5 text-left font-medium border-b border-[rgba(60,40,80,0.35)] w-8"></th>
+                                            <th className="px-2 py-1.5 text-center font-medium border-b border-[rgba(60,40,80,0.35)]">#</th>
+                                            <th className="px-3 py-1.5 text-left font-medium border-b border-[rgba(60,40,80,0.35)] w-24">Date</th>
+                                            <th className="px-3 py-1.5 text-left font-medium border-b border-[rgba(60,40,80,0.35)]">Post-processing formula info</th>
+                                            <th className="px-3 py-1.5 text-left font-medium border-b border-[rgba(60,40,80,0.35)]">Status</th>
+                                            <th className="px-3 py-1.5 text-right font-medium border-b border-[rgba(60,40,80,0.35)]">Actions</th>
                                           </tr>
                                         </thead>
                                         <tbody>
                                           {row.children.map((sub) => {
                                             const heatMapId = `hyperopt-${row.id}-${sub.id}`;
                                             const level3Items = sub.heatmapsAndReports || [];
-                                            const isLevel3Expanded = hyperoptLevel3Expanded.has(sub.id);
                                             const hasTruncData = !!sub.truncScores;
                                             const normKey = `${row.id}::${sub.id}`;
                                             const isDetailsExpanded = normalizationDetailsExpanded.has(normKey);
 
                                             return (
                                               <React.Fragment key={sub.id}>
-                                                <tr className="border-b border-[#303030]/50 hover:bg-[#1a1a1a]">
+                                                <tr className="border-b border-[rgba(60,40,80,0.22)] hover:bg-[#1a1430]">
                                                   <td className="px-2 py-2 align-middle">
                                                     <button
                                                       type="button"
@@ -3592,15 +3653,15 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                 </tr>
                                                 {isDetailsExpanded && (
                                                   <tr>
-                                                    <td colSpan={5} className="p-0 align-top bg-[#0f0f0f]">
+                                                    <td colSpan={6} className="p-0 align-top bg-[#100a1a]">
                                                       {/* Branch A: HeatMaps & Reports (full data scope) */}
-                                                      <div className="ml-4 mt-2 mb-2 rounded-lg border border-[#303030] overflow-hidden border-l-4 border-l-amber-500 bg-[#111111]">
-                                                        <div className="px-3 py-1.5 font-medium border-b border-[#303030] bg-amber-500/10 text-amber-200 text-[11px]">
+                                                      <div className="ml-4 mt-2 mb-2 rounded-xl border border-[rgba(60,40,80,0.35)] overflow-hidden bg-[#110b1d] shadow-[0_10px_24px_rgba(6,3,20,0.2)]">
+                                                        <div className="px-3 py-1.5 font-medium border-b border-[rgba(60,40,80,0.3)] bg-amber-500/10 text-amber-200 text-[11px]">
                                                           HeatMaps &amp; Reports
                                                         </div>
                                                         <div className="overflow-x-auto">
                                                           <table className="w-full border-collapse text-[11px]">
-                                                            <thead className="bg-[#1a1a1a] text-[#8c8c8c]">
+                                                            <thead className="bg-[#19102b] text-[#8c8c8c]">
                                                               <tr>
                                                                 <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030] w-24">
                                                                   Date
@@ -3618,7 +3679,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                             </thead>
                                                             <tbody>
                                                               {level3Items.map((item) => (
-                                                                <tr key={item.id} className="border-b border-[#303030]/30 hover:bg-[#141414]">
+                                                                <tr key={item.id} className="border-b border-[rgba(60,40,80,0.22)] hover:bg-[#1a1430]">
                                                                   <td className="px-3 py-2 text-[#a6a6a6]">{item.date}</td>
                                                                   <td className="px-3 py-2">{item.type}</td>
                                                                   <td className="px-3 py-2">
@@ -3659,13 +3720,13 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
 
                                                       <>
                                                       {/* Block 2.5: Normalization details (per normalization row) */}
-                                                      <div className="ml-4 mt-2 mb-2 rounded-lg border border-[#303030] overflow-hidden border-l-4 border-l-emerald-500 bg-[#111111]">
-                                                        <div className="px-3 py-1.5 font-medium border-b border-[#303030] bg-emerald-500/10 text-emerald-200 text-[11px]">
+                                                      <div className="ml-4 mt-2 mb-2 rounded-xl border border-[rgba(60,40,80,0.35)] overflow-hidden bg-[#110b1d] shadow-[0_10px_24px_rgba(6,3,20,0.2)]">
+                                                        <div className="px-3 py-1.5 font-medium border-b border-[rgba(60,40,80,0.3)] bg-emerald-500/10 text-emerald-200 text-[11px]">
                                                           Post-processing trunk details
                                                         </div>
                                                         <div className="overflow-x-auto">
                                                           <table className="w-full border-collapse text-[11px]">
-                                                            <thead className="bg-[#1a1a1a] text-[#8c8c8c]">
+                                                            <thead className="bg-[#19102b] text-[#8c8c8c]">
                                                               <tr>
                                                                 <th className="px-2 py-1.5 text-left font-medium border-b border-[#303030] w-8"></th>
                                                                 <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030] whitespace-nowrap">Date</th>
@@ -3688,7 +3749,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                                   const isLevel3ExpandedForRow = hyperoptLevel3Expanded.has(level3Key);
                                                                   return (
                                                                     <React.Fragment key={detail.id}>
-                                                                      <tr className="border-b border-[#303030]/50 hover:bg-[#1a1a1a]">
+                                                                      <tr className="border-b border-[rgba(60,40,80,0.22)] hover:bg-[#1a1430]">
                                                                         <td className="px-2 py-2 align-middle">
                                                                           {level3Items.length > 0 && (
                                                                             <button
@@ -3733,15 +3794,15 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                                       </tr>
                                                                       {isLevel3ExpandedForRow && level3Items.length > 0 && (
                                                                         <tr>
-                                                                          <td colSpan={5} className="p-0 align-top bg-[#0a0a0a]">
+                                                                          <td colSpan={5} className="p-0 align-top bg-[#100a1a]">
                                                                           {/* Block 3: HeatMaps & Reports (child of Normalization details) */}
-                                                                          <div className="ml-4 mt-2 mb-2 rounded-lg border border-[#303030] overflow-hidden border-l-4 border-l-amber-500">
-                                                                            <div className="px-3 py-1.5 font-medium border-b border-[#303030] bg-amber-500/10 text-amber-200 text-[11px]">
+                                                                          <div className="ml-4 mt-2 mb-2 rounded-xl border border-[rgba(60,40,80,0.35)] overflow-hidden bg-[#110b1d] shadow-[0_10px_24px_rgba(6,3,20,0.2)]">
+                                                                            <div className="px-3 py-1.5 font-medium border-b border-[rgba(60,40,80,0.3)] bg-amber-500/10 text-amber-200 text-[11px]">
                                                                               HeatMaps &amp; Reports
                                                                             </div>
                                                                             <div className="overflow-x-auto">
                                                                               <table className="w-full border-collapse text-[11px]">
-                                                                                <thead className="bg-[#1a1a1a] text-[#8c8c8c]">
+                                                                                <thead className="bg-[#19102b] text-[#8c8c8c]">
                                                                                   <tr>
                                                                                     <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030] w-24">Date</th>
                                                                                     <th className="px-3 py-1.5 text-left font-medium border-b border-[#303030]">Type</th>
@@ -3751,7 +3812,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                                                 </thead>
                                                                                 <tbody>
                                                                                   {level3Items.map((item) => (
-                                                                                    <tr key={item.id} className="border-b border-[#303030]/30 hover:bg-[#141414]">
+                                                                                    <tr key={item.id} className="border-b border-[rgba(60,40,80,0.22)] hover:bg-[#1a1430]">
                                                                                       <td className="px-3 py-2 text-[#a6a6a6]">{item.date}</td>
                                                                                       <td className="px-3 py-2">{item.type}</td>
                                                                                       <td className="px-3 py-2">
