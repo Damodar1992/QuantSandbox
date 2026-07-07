@@ -124,6 +124,66 @@ function SectionHeader({ label, count }) {
   );
 }
 
+function DetailedCompareTable({ pairedRows, carriedRows, noPairRows, onGotoFormula }) {
+  return (
+    <>
+      <div className="grid grid-cols-[1fr_220px_1fr] border-b border-[rgba(60,40,80,0.3)]">
+        <div className="px-3 py-2 bg-blue-500/[0.05] border-r border-[rgba(60,40,80,0.2)]">
+          <span className="text-[9px] font-bold uppercase tracking-wider text-blue-300/70">BEFORE · Analyzer</span>
+        </div>
+        <div className="px-3 py-2 bg-[#0d0718]/40 text-center">
+          <span className="text-[9px] font-bold uppercase tracking-wider text-[#6b6b6b]">Δ · what moved it</span>
+        </div>
+        <div className="px-3 py-2 bg-violet-500/[0.05] border-l border-[rgba(60,40,80,0.2)] text-right">
+          <span className="text-[9px] font-bold uppercase tracking-wider text-violet-300/70">Mini Backtest</span>
+        </div>
+      </div>
+
+      <SectionHeader label="🔁 Paired — before ↔ after" count={pairedRows.length} />
+      {pairedRows.map((row) => (
+        <CompareRow
+          key={row.key}
+          cat="paired"
+          {...row}
+          onFormulaClick={row.formulaId && onGotoFormula ? () => onGotoFormula(row.formulaId) : undefined}
+        />
+      ))}
+
+      <SectionHeader label="＝ Carried — unchanged" count={carriedRows.length} />
+      {carriedRows.map((row) => (
+        <CompareRow
+          key={row.key}
+          cat="carried"
+          name={row.name}
+          before={row.value}
+          beforeFormula={row.formula}
+          after={row.value}
+          afterFormula={row.formula}
+          note="unchanged — carried"
+          onFormulaClick={row.formulaId && onGotoFormula ? () => onGotoFormula(row.formulaId) : undefined}
+        />
+      ))}
+
+      <SectionHeader label="— No-pair" count={noPairRows.length} />
+      {noPairRows.map((row) => (
+        <CompareRow
+          key={row.key}
+          cat="nopair"
+          name={row.name}
+          before={row.before}
+          beforeFormula={row.beforeFormula}
+          beforeDim={row.beforeDim}
+          after={row.after}
+          afterFormula={row.afterFormula}
+          afterDim={row.afterDim}
+          note={row.note}
+          onFormulaClick={row.formulaId && onGotoFormula ? () => onGotoFormula(row.formulaId) : undefined}
+        />
+      ))}
+    </>
+  );
+}
+
 /* ─── Account Result grid ─────────────────────────────────────────────── */
 function AccountResult({ summary, params, execCount, totalCount, futures }) {
   const s = summary;
@@ -320,64 +380,12 @@ export const MiniBacktestComparePairs = memo(function MiniBacktestComparePairs({
 
       {/* Comparison table */}
       <div className="rounded-xl border border-[rgba(60,40,80,0.35)] bg-[#120a20] overflow-hidden">
-
-        {/* Column header */}
-        <div className="grid grid-cols-[1fr_220px_1fr] border-b border-[rgba(60,40,80,0.3)]">
-          <div className="px-3 py-2 bg-blue-500/[0.05] border-r border-[rgba(60,40,80,0.2)]">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-blue-300/70">BEFORE · Analyzer</span>
-          </div>
-          <div className="px-3 py-2 bg-[#0d0718]/40 text-center">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-[#6b6b6b]">Δ · what moved it</span>
-          </div>
-          <div className="px-3 py-2 bg-violet-500/[0.05] border-l border-[rgba(60,40,80,0.2)] text-right">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-violet-300/70">Mini Backtest</span>
-          </div>
-        </div>
-
-        {/* 🔁 Paired */}
-        <SectionHeader label="🔁 Paired — before ↔ after" count={pairedRows.length} />
-        {pairedRows.map((row) => (
-          <CompareRow
-            key={row.key}
-            cat="paired"
-            {...row}
-            onFormulaClick={row.formulaId && onGotoFormula ? () => onGotoFormula(row.formulaId) : undefined}
-          />
-        ))}
-
-        {/* ＝ Carried */}
-        <SectionHeader label="＝ Carried — unchanged" count={carriedRows.length} />
-        {carriedRows.map((row) => (
-          <CompareRow
-            key={row.key}
-            cat="carried"
-            name={row.name}
-            before={row.value}
-            beforeFormula={row.formula}
-            after={row.value}
-            afterFormula={row.formula}
-            note="unchanged — carried"
-            onFormulaClick={row.formulaId && onGotoFormula ? () => onGotoFormula(row.formulaId) : undefined}
-          />
-        ))}
-
-        {/* — No-pair */}
-        <SectionHeader label="— No-pair" count={noPairRows.length} />
-        {noPairRows.map((row) => (
-          <CompareRow
-            key={row.key}
-            cat="nopair"
-            name={row.name}
-            before={row.before}
-            beforeFormula={row.beforeFormula}
-            beforeDim={row.beforeDim}
-            after={row.after}
-            afterFormula={row.afterFormula}
-            afterDim={row.afterDim}
-            note={row.note}
-            onFormulaClick={row.formulaId && onGotoFormula ? () => onGotoFormula(row.formulaId) : undefined}
-          />
-        ))}
+        <DetailedCompareTable
+          pairedRows={pairedRows}
+          carriedRows={carriedRows}
+          noPairRows={noPairRows}
+          onGotoFormula={onGotoFormula}
+        />
       </div>
     </div>
   );
