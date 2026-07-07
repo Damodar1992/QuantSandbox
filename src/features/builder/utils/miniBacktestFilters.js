@@ -115,3 +115,120 @@ export function countActiveMiniBacktestFilters(filters = EMPTY_MINI_BACKTEST_FIL
   if (filters.tags?.length) count += 1;
   return count;
 }
+
+/* ─── Global registry filters (all strategies) ─────────────────────────── */
+
+export const EMPTY_GLOBAL_MINI_BACKTEST_FILTERS = {
+  strategy: "",
+  stage: "",
+  tradingMode: "",
+  exchange: "",
+  pairs: "",
+  status: "",
+};
+
+function resolveTradingModeKey(entry) {
+  const raw = entry?.tradingMode ?? entry?.params?.marketType ?? "";
+  const m = String(raw).toLowerCase();
+  if (m === "futures" || m === "spot") return m;
+  return raw ? String(raw) : "";
+}
+
+function resolveExchangeKey(entry) {
+  return entry?.exchange ? String(entry.exchange).toLowerCase() : "";
+}
+
+function resolvePairsKey(entry) {
+  return entry?.pairs || entry?.cycleMeta?.pair || "";
+}
+
+function resolveStrategyKey(entry) {
+  if (entry?.strategyId != null) return String(entry.strategyId);
+  return entry?.strategyName || "";
+}
+
+export function getGlobalMiniBacktestFilterOptions(results = []) {
+  const strategies = new Map();
+  const stages = new Map();
+  const tradingModes = new Set();
+  const exchanges = new Set();
+  const pairsSet = new Set();
+  const statuses = new Set();
+
+  for (const entry of results) {
+    const strategyKey = resolveStrategyKey(entry);
+    if (strategyKey) {
+      strategies.set(strategyKey, entry.strategyName || strategyKey);
+    }
+
+    const stageKey = getMiniBacktestStageKey(entry);
+    if (stageKey) {
+      const label = entry.stageId != null ? getStageLabel(entry.stageId) : entry.stage || stageKey;
+      stages.set(stageKey, label);
+    }
+
+    const tradingMode = resolveTradingModeKey(entry);
+    if (tradingMode) tradingModes.add(tradingMode);
+
+    const exchange = resolveExchangeKey(entry);
+    if (exchange) exchanges.add(exchange);
+
+    const pairs = resolvePairsKey(entry);
+    if (pairs) pairsSet.add(pairs);
+
+    statuses.add(resolveMiniBacktestRunStatus(entry));
+  }
+
+  return {
+    strategies: [...strategies.entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label)),
+    stages: [...stages.entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => Number(a.value) - Number(b.value)),
+    tradingModes: [...tradingModes]
+      .sort()
+      .map((value) => ({
+        value,
+        label: value === "futures" ? "Futures" : value === "spot" ? "Spot" : value,
+      })),
+    exchanges: [...exchanges]
+      .sort()
+      .map((value) => ({
+        value,
+        label: value.charAt(0).toUpperCase() + value.slice(1),
+      })),
+    pairs: [...pairsSet].sort().map((value) => ({ value, label: value })),
+    statuses: [...statuses].sort((a, b) => {
+      const order = [
+        MINI_BACKTEST_RUN_STATUSES.IN_PROGRESS,
+        MINI_BACKTEST_RUN_STATUSES.FINISHED,
+        MINI_BACKTEST_RUN_STATUSES.FAIL,
+      ];
+      return order.indexOf(a) - order.indexOf(b);
+    }),
+  };
+}
+
+export function filterGlobalMiniBacktestResults(
+  results = [],
+  filters = EMPTY_GLOBAL_MINI_BACKTEST_FILTERS,
+) {
+  const { strategy, stage, tradingMode, exchange, pairs, status } = filters;
+
+  return results.filter((entry) => {
+    if (strategy && resolveStrategyKey(entry) !== strategy) return false;
+    if (stage && getMiniBacktestStageKey(entry) !== stage) return false;
+    if (tradingMode && resolveTradingModeKey(entry) !== tradingMode) return false;
+    if (exchange && resolveExchangeKey(entry) !== exchange) return false;
+    if (pairs && resolvePairsKey(entry) !== pairs) return false;
+    if (status && resolveMiniBacktestRunStatus(entry) !== status) return false;
+    return true;
+  });
+}
+
+export function countActiveGlobalMiniBacktestFilters(
+  filters = EMPTY_GLOBAL_MINI_BACKTEST_FILTERS,
+) {
+  return Object.values(filters).filter(Boolean).length;
+}

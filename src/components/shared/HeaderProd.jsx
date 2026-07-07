@@ -76,6 +76,7 @@ export const HeaderProd = memo(function HeaderProd({
     const items = [];
     for (const item of sections) {
       if (item === "Users" && hyperoptRun === "Pipeline") continue;
+      if (item === "Mini Backtest" && !featureFlags.miniBacktest) continue;
       if (item === "Settings") {
         items.push({ id: "indicators", label: "Indicators", section: "Settings", sub: "indicators" });
         if (hyperoptRun !== "Pipeline" && formulasEnabled) {
@@ -86,7 +87,7 @@ export const HeaderProd = memo(function HeaderProd({
       items.push({ id: item, label: item, section: item });
     }
     return items;
-  }, [sections, hyperoptRun, formulasEnabled]);
+  }, [sections, hyperoptRun, formulasEnabled, featureFlags.miniBacktest]);
 
   const activeNavId = useMemo(() => {
     if (activeSection === "Settings") {

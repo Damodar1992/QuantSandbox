@@ -1,6 +1,7 @@
 import React, { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Editor from "@monaco-editor/react";
+import { Blocks, FlaskConical } from "lucide-react";
 
 // Import constants from separate files
 import { cx, ui } from "./constants/ui";
@@ -54,6 +55,14 @@ import { countRiskCombinations } from "./features/builder/utils/riskCombinations
 import { clamp, lerp, quantile, computeRanges, normalizeParam, buildHeatMap, formatScore, heatmapScoreToColor, HEATMAP_LEGEND_STOPS, HEATMAP_CELL_PX, HEATMAP_GAP_PX, EMPTY_CELL_BG } from "./utils/heatmap";
 import { setWeightCapped } from "./utils/weights";
 import { buildIndicatorSnapshot, buildSignalBestResult as buildSignalBestResultFromUtils } from "./utils/builder";
+import {
+  buildDefaultBbHeatmapConfig,
+  createDefaultBbIndicator,
+  createDefaultEntryFavoriteEpoch,
+  createDefaultExitFavoriteEpoch,
+  createDefaultSignalFavoriteEpoch,
+  DEFAULT_BB_INDICATOR_IDS,
+} from "./features/builder/utils/defaultBbSetup";
 import { getParamValuesFromDef, getParamDefForCompositeKey, getParamLabel, getReportParamLabel, getIndicatorTemplate } from "./utils/indicators";
 import { generatePythonCode } from "./utils/pythonCode";
 import { generateMockResults } from "./utils/mockResults";
@@ -95,6 +104,7 @@ import {
   RunStatusBadge,
   MiniBacktestModal,
   MiniBacktestPage,
+  MiniBacktestGlobalPage,
   BestEpochsModal,
   PostProcessingEpochMenu,
 } from "./features/builder/components";
@@ -102,7 +112,7 @@ import { getDefaultDisplayName, formatIndicatorSnapshot } from "./features/build
 import { formatHyperoptDateTime, normalizeHyperoptRunStatus } from "./features/builder/utils/hyperoptFormatters";
 import { buildEpochFromHyperoptContext } from "./features/builder/utils/hyperoptEpoch";
 import { MINI_BACKTEST_DEFAULTS } from "./constants/miniBacktest";
-import { INITIAL_MINI_BACKTEST_DEMO_RESULTS } from "./constants/miniBacktestSeed";
+import { buildInitialGlobalMiniBacktestResults } from "./constants/miniBacktestSeed";
 import { dedupeMiniBacktestResultIds } from "./features/builder/utils/miniBacktestEngine";
 import { buildMiniBacktestLaunchContext } from "./features/builder/utils/miniBacktestDisplay";
 import { getStageVersionsForStrategy } from "./constants/mockStageVersionTree";
@@ -130,6 +140,7 @@ import {
   getAvailableTagIdsForFilter,
   resolveTagNames,
   syncHyperoptTagIds,
+  syncMiniBacktestTagIds,
 } from "./features/tags/utils/tagStore";
 import { TagsPage } from "./components/tags";
 import { ReleaseNotesPage, ReleaseNoteModal } from "./components/releaseNotes";
@@ -196,9 +207,15 @@ const BuilderStepper = memo(function BuilderStepper({
   saveHyperoptTagsModal,
 }) {
   // Indicators state (separate for Signal and Entry)
-  const [signalIndicators, setSignalIndicators] = useState([]);
-  const [entryIndicators, setEntryIndicators] = useState([]);
-  const [exitIndicators, setExitIndicators] = useState([]);
+  const [signalIndicators, setSignalIndicators] = useState(() => [
+    createDefaultBbIndicator(DEFAULT_BB_INDICATOR_IDS.signal),
+  ]);
+  const [entryIndicators, setEntryIndicators] = useState(() => [
+    createDefaultBbIndicator(DEFAULT_BB_INDICATOR_IDS.entry),
+  ]);
+  const [exitIndicators, setExitIndicators] = useState(() => [
+    createDefaultBbIndicator(DEFAULT_BB_INDICATOR_IDS.exit),
+  ]);
   const [riskStoplossRanges, setRiskStoplossRanges] = useState(() => ({
     ...DEFAULT_RISK_STOPLOSS_RANGES,
     stoploss: { ...DEFAULT_RISK_STOPLOSS_RANGES.stoploss },
@@ -371,9 +388,9 @@ const BuilderStepper = memo(function BuilderStepper({
     }
   }, [isSyntheticExchange, syntheticDatasetPair, pairs, onPairsChange]);
   // Best results are tracked independently per stage
-  const [signalBestResults, setSignalBestResults] = useState([]);
-  const [entryBestResults, setEntryBestResults] = useState([]);
-  const [exitBestResults, setExitBestResults] = useState([]);
+  const [signalBestResults, setSignalBestResults] = useState(() => [createDefaultSignalFavoriteEpoch()]);
+  const [entryBestResults, setEntryBestResults] = useState(() => [createDefaultEntryFavoriteEpoch()]);
+  const [exitBestResults, setExitBestResults] = useState(() => [createDefaultExitFavoriteEpoch()]);
   const [selectedBestResult, setSelectedBestResult] = useState(null);
   const [showBestResultDetailsModal, setShowBestResultDetailsModal] = useState(false);
   const [showAddBestResultModal, setShowAddBestResultModal] = useState(false);
@@ -1245,6 +1262,34 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
       alert("HeatMap generation failed. Check console for details.");
     }
   }, []);
+
+  useEffect(() => {
+    if (isRiskStage) return;
+
+    const stageIndicators = pickByStage(activeStage, {
+      signal: signalIndicators,
+      entry: entryIndicators,
+      exit: exitIndicators,
+      risk: [],
+    });
+    const config = buildDefaultBbHeatmapConfig(stageIndicators);
+    if (!config || hyperoptResultsRows.length === 0) return;
+
+    const row = hyperoptResultsRows[0];
+    const sub = row?.children?.[0];
+    if (!row || !sub) return;
+
+    const runId = `hyperopt-${row.id}-${sub.id}`;
+    setGeneratedHeatMap((prev) => {
+      if (prev?.runId === runId && prev?.config?.xAxis?.join?.() === config.xAxis.join()) return prev;
+      try {
+        const fullResults = generateMockResults(config, runId);
+        return { runId, config, fullResults, zoomStack: [] };
+      } catch {
+        return prev;
+      }
+    });
+  }, [activeStage, isRiskStage, signalIndicators, entryIndicators, exitIndicators, hyperoptResultsRows]);
 
   const handleApplyHeatMapFilters = useCallback(
     ({ filters, filterPreset }) => {
@@ -5537,11 +5582,17 @@ export default function App() {
   // --- Mini Backtest Analyzer ---
   const [miniBacktestEnabled, setMiniBacktestEnabled] = useState(() => getFeatureFlags().miniBacktest);
   const [formulasEnabled, setFormulasEnabled] = useState(() => getFeatureFlags().formulas);
-  const [miniBacktestResults, setMiniBacktestResults] = useState(() => [
-    ...INITIAL_MINI_BACKTEST_DEMO_RESULTS,
-  ]);
+  const [allMiniBacktestResults, setAllMiniBacktestResults] = useState(() =>
+    buildInitialGlobalMiniBacktestResults(),
+  );
   const [selectedMiniBacktestId, setSelectedMiniBacktestId] = useState(null);
+  const [globalMiniBacktestDetailId, setGlobalMiniBacktestDetailId] = useState(null);
   const [miniBacktestExpandedEpochId, setMiniBacktestExpandedEpochId] = useState(null);
+
+  const miniBacktestResults = useMemo(() => {
+    if (!selected?.strategyId) return [];
+    return allMiniBacktestResults.filter((r) => r.strategyId === selected.strategyId);
+  }, [allMiniBacktestResults, selected?.strategyId]);
 
   // Global tags + hyperopt results (lifted from BuilderStepper)
   const [tagsRegistry, setTagsRegistry] = useState(() => INITIAL_TAGS_REGISTRY);
@@ -5551,6 +5602,8 @@ export default function App() {
   const [hyperoptTagFilter, setHyperoptTagFilter] = useState([]);
   const [hyperoptTagsModalRowId, setHyperoptTagsModalRowId] = useState(null);
   const [hyperoptTagsDraft, setHyperoptTagsDraft] = useState({ tagIds: [], tagInput: "" });
+  const [miniBacktestTagsModalEntryId, setMiniBacktestTagsModalEntryId] = useState(null);
+  const [miniBacktestTagsDraft, setMiniBacktestTagsDraft] = useState({ tagIds: [], tagInput: "" });
 
   const handleTagIdsRemoved = useCallback((removedIds) => {
     setHyperoptTagFilter((prev) => prev.filter((id) => !removedIds.includes(id)));
@@ -5628,40 +5681,136 @@ export default function App() {
     closeHyperoptTagsModal,
   ]);
 
+  const openMiniBacktestTagsModal = useCallback((entry) => {
+    setMiniBacktestTagsModalEntryId(entry.id);
+    setMiniBacktestTagsDraft({
+      tagIds: Array.isArray(entry.tagIds) ? [...entry.tagIds] : [],
+      tagInput: "",
+    });
+  }, []);
+
+  const closeMiniBacktestTagsModal = useCallback(() => {
+    setMiniBacktestTagsModalEntryId(null);
+    setMiniBacktestTagsDraft({ tagIds: [], tagInput: "" });
+  }, []);
+
+  const commitMiniBacktestTagsDraftTag = useCallback(() => {
+    const name = miniBacktestTagsDraft.tagInput.trim();
+    if (!name) return;
+
+    const existing = tagsRegistry.find((tag) => tag.name === name);
+    if (existing) {
+      setMiniBacktestTagsDraft((prev) => ({
+        ...prev,
+        tagIds: prev.tagIds.includes(existing.id) ? prev.tagIds : [...prev.tagIds, existing.id],
+        tagInput: "",
+      }));
+      return;
+    }
+
+    const { registry: nextRegistry, tag } = findOrCreateTagByName(
+      tagsRegistry,
+      name,
+      MOCK_CURRENT_USER,
+    );
+    setTagsRegistry(nextRegistry);
+    if (!tag) return;
+    setMiniBacktestTagsDraft((prev) => ({
+      ...prev,
+      tagIds: prev.tagIds.includes(tag.id) ? prev.tagIds : [...prev.tagIds, tag.id],
+      tagInput: "",
+    }));
+  }, [miniBacktestTagsDraft.tagInput, tagsRegistry]);
+
+  const saveMiniBacktestTagsModal = useCallback(() => {
+    if (!miniBacktestTagsModalEntryId) return;
+    const entry = allMiniBacktestResults.find((item) => item.id === miniBacktestTagsModalEntryId);
+    if (!entry) return;
+
+    const result = syncMiniBacktestTagIds({
+      entry,
+      tagIds: miniBacktestTagsDraft.tagIds,
+      registry: tagsRegistry,
+      relations: tagRelations,
+      miniBacktestResults: allMiniBacktestResults,
+    });
+
+    setTagsRegistry(result.registry);
+    setTagRelations(result.relations);
+    setAllMiniBacktestResults(result.miniBacktestResults);
+    closeMiniBacktestTagsModal();
+  }, [
+    miniBacktestTagsModalEntryId,
+    allMiniBacktestResults,
+    miniBacktestTagsDraft.tagIds,
+    tagsRegistry,
+    tagRelations,
+    closeMiniBacktestTagsModal,
+  ]);
+
   const handleSaveMiniBacktestResult = useCallback((result) => {
     let nextId = result.id;
+    const strategy = strategies.find((s) => s.id === selected?.strategyId);
     const finishedResult = {
       ...result,
       runStatus: result.runStatus || "Finished",
+      strategyId: selected?.strategyId ?? result.strategyId ?? null,
+      strategyName: strategy?.name ?? result.strategyName ?? null,
+      strategyVersionId: selected?.versionId ?? result.strategyVersionId ?? null,
     };
-    setMiniBacktestResults((prev) => {
-      const existingIdx = prev.findIndex(
+    setAllMiniBacktestResults((prev) => {
+      const scopeId = finishedResult.strategyId;
+      const scoped = scopeId != null ? prev.filter((r) => r.strategyId === scopeId) : prev;
+      const others = scopeId != null ? prev.filter((r) => r.strategyId !== scopeId) : [];
+
+      const existingIdx = scoped.findIndex(
         (r) => r.epochId === finishedResult.epochId && r.paramsHash === finishedResult.paramsHash,
       );
+      let nextScoped;
       if (existingIdx >= 0) {
-        const updated = [...prev];
-        updated[existingIdx] = finishedResult;
+        nextScoped = [...scoped];
+        nextScoped[existingIdx] = finishedResult;
         nextId = finishedResult.id;
-        return updated;
-      }
-      if (prev.some((r) => r.id === finishedResult.id)) {
+      } else if (scoped.some((r) => r.id === finishedResult.id)) {
         nextId = `mbt-${finishedResult.epochId}-${Date.now()}`;
+        nextScoped = [...scoped, { ...finishedResult, id: nextId }];
+      } else {
+        nextScoped = [...scoped, { ...finishedResult, id: nextId }];
       }
-      return [...prev, { ...finishedResult, id: nextId }];
+
+      return scopeId != null ? [...others, ...nextScoped] : nextScoped;
     });
     setSelectedMiniBacktestId(nextId);
-    setActiveStrategyTab("miniBacktest");
-  }, []);
+    if (miniBacktestEnabled) {
+      setActiveStrategyTab("miniBacktest");
+    }
+  }, [selected, strategies, miniBacktestEnabled]);
 
   useEffect(() => {
     if (activeStrategyTab !== "miniBacktest") return;
-    setMiniBacktestResults((prev) => dedupeMiniBacktestResultIds(prev));
+    setAllMiniBacktestResults((prev) => dedupeMiniBacktestResultIds(prev));
   }, [activeStrategyTab]);
 
   const handleRemoveMiniBacktestResult = useCallback((id) => {
-    setMiniBacktestResults((prev) => prev.filter((r) => r.id !== id));
+    setAllMiniBacktestResults((prev) => prev.filter((r) => r.id !== id));
     setSelectedMiniBacktestId((sel) => (sel === id ? null : sel));
+    setGlobalMiniBacktestDetailId((sel) => (sel === id ? null : sel));
   }, []);
+
+  const handleOpenMiniBacktestStrategy = useCallback(
+    (strategyId, backtestId) => {
+      if (!miniBacktestEnabled) return;
+      const strategy = strategies.find((s) => s.id === strategyId);
+      const version = strategy?.versions?.[0];
+      if (!strategy || !version) return;
+      setSelected({ strategyId, versionId: version.id });
+      setActiveSection("Strategies");
+      setActiveStrategyTab("miniBacktest");
+      setSelectedMiniBacktestId(backtestId);
+      setGlobalMiniBacktestDetailId(null);
+    },
+    [strategies, miniBacktestEnabled],
+  );
 
   // Builder fields (mock)
   const [builderStage, setBuilderStage] = useState(1);
@@ -5971,6 +6120,9 @@ export default function App() {
     if (section === "Backtesting") return;
     setActiveSection(section);
     setSelected(null);
+    if (section !== "Mini Backtest") {
+      setGlobalMiniBacktestDetailId(null);
+    }
   }, []);
 
   const handleFeatureFlagChange = useCallback((key, value) => {
@@ -5989,6 +6141,20 @@ export default function App() {
       setSettingsSubSection("indicators");
     }
   }, [formulasEnabled, activeSection, settingsSubSection]);
+
+  useEffect(() => {
+    if (!miniBacktestEnabled && activeSection === "Mini Backtest") {
+      setActiveSection("Strategies");
+      setGlobalMiniBacktestDetailId(null);
+    }
+  }, [miniBacktestEnabled, activeSection]);
+
+  useEffect(() => {
+    if (!miniBacktestEnabled && activeStrategyTab === "miniBacktest") {
+      setActiveStrategyTab("builder");
+      setSelectedMiniBacktestId(null);
+    }
+  }, [miniBacktestEnabled, activeStrategyTab]);
 
   const handleOpenReleaseNotes = useCallback(() => {
     setActiveSection("ReleaseNotes");
@@ -6170,6 +6336,8 @@ export default function App() {
             <p className={cx("mt-1 text-[12px]", ui.textMuted)}>
               {activeSection === "Users"
                 ? "Manage application users (mock data only)."
+                : activeSection === "Mini Backtest"
+                ? "All mini backtest runs across strategies."
                 : activeSection === "Tags"
                 ? "View and manage tags and links to related objects (mock only)."
                 : activeSection === "ReleaseNotes"
@@ -6356,36 +6524,40 @@ export default function App() {
             </div>
 
             {/* Strategy tabs */}
-            <div className="mb-4 flex items-center gap-1 border-b border-[#303030]">
+            <div className="mb-4 flex flex-wrap justify-start gap-2 border-b border-[rgba(60,40,80,0.35)] pb-3">
               <button
                 type="button"
                 onClick={() => setActiveStrategyTab("builder")}
                 className={cx(
-                  "px-4 py-2 text-[12px] font-medium border-b-2 -mb-px transition-colors",
+                  "inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[12px] font-medium border transition-colors",
                   activeStrategyTab === "builder"
-                    ? "border-emerald-500 text-emerald-300"
-                    : "border-transparent text-[#8c8c8c] hover:text-[#d9d9d9]"
+                    ? "bg-violet-500/15 border-violet-500/40 text-violet-200"
+                    : "border-[rgba(60,40,80,0.35)] text-[#8c8c8c] hover:text-[#d9d9d9]",
                 )}
               >
+                <Blocks className="h-3.5 w-3.5 shrink-0" aria-hidden />
                 Builder
               </button>
+              {miniBacktestEnabled ? (
               <button
                 type="button"
                 onClick={() => setActiveStrategyTab("miniBacktest")}
                 className={cx(
-                  "px-4 py-2 text-[12px] font-medium border-b-2 -mb-px transition-colors inline-flex items-center gap-1.5",
+                  "inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[12px] font-medium border transition-colors",
                   activeStrategyTab === "miniBacktest"
-                    ? "border-amber-500 text-amber-300"
-                    : "border-transparent text-[#8c8c8c] hover:text-[#d9d9d9]"
+                    ? "bg-violet-500/15 border-violet-500/40 text-violet-200"
+                    : "border-[rgba(60,40,80,0.35)] text-[#8c8c8c] hover:text-[#d9d9d9]",
                 )}
               >
+                <FlaskConical className="h-3.5 w-3.5 shrink-0" aria-hidden />
                 Mini Backtest
                 {miniBacktestResults.length > 0 && (
-                  <span className="rounded-full bg-amber-500/20 text-amber-300 text-[9px] px-1.5 py-0.5">
+                  <span className="rounded-full bg-violet-500/20 text-violet-300 text-[9px] px-1.5 py-0.5">
                     {miniBacktestResults.length}
                   </span>
                 )}
               </button>
+              ) : null}
             </div>
 
             {/* Builder tab — keep mounted so indicators / heatmap / best epochs state persists */}
@@ -6452,15 +6624,31 @@ export default function App() {
             </div>
 
             {/* Mini Backtest tab */}
+            {miniBacktestEnabled ? (
             <div className={activeStrategyTab !== "miniBacktest" ? "hidden" : undefined}>
               <MiniBacktestPage
                 results={miniBacktestResults}
                 selectedId={selectedMiniBacktestId}
                 onSelectId={setSelectedMiniBacktestId}
-                onRemoveResult={handleRemoveMiniBacktestResult}
+                onDelete={handleRemoveMiniBacktestResult}
+                onEditTags={openMiniBacktestTagsModal}
+                tagsRegistry={tagsRegistry}
               />
             </div>
+            ) : null}
           </>
+        )}
+
+        {miniBacktestEnabled && activeSection === "Mini Backtest" && (
+          <MiniBacktestGlobalPage
+            results={allMiniBacktestResults}
+            detailId={globalMiniBacktestDetailId}
+            onDetailIdChange={setGlobalMiniBacktestDetailId}
+            onDelete={handleRemoveMiniBacktestResult}
+            onOpenStrategy={handleOpenMiniBacktestStrategy}
+            onEditTags={openMiniBacktestTagsModal}
+            tagsRegistry={tagsRegistry}
+          />
         )}
 
         {/* Users page (mock) */}
@@ -6887,6 +7075,182 @@ export default function App() {
           onSaveResult={handleSaveMiniBacktestResult}
         />
       )}
+
+      {miniBacktestTagsModalEntryId &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/70"
+            onClick={closeMiniBacktestTagsModal}
+          >
+            <div
+              className={cx(
+                ui.radius,
+                "bg-[#141414] border border-[#303030] max-w-[480px] w-full max-h-[90vh] overflow-hidden flex flex-col shadow-xl",
+              )}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-4 py-3 border-b border-[#303030]">
+                <span className="text-[14px] font-medium text-[#d9d9d9] flex items-center gap-2">
+                  <svg
+                    viewBox="0 0 16 16"
+                    className="h-4 w-4 shrink-0 text-emerald-400"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    aria-hidden
+                  >
+                    <path
+                      fillRule="evenodd"
+                      clipRule="evenodd"
+                      d="M16 8L8 0H0V8L8 16L16 8ZM4.5 6C5.32843 6 6 5.32843 6 4.5C6 3.67157 5.32843 3 4.5 3C3.67157 3 3 3.67157 3 4.5C3 5.32843 3.67157 6 4.5 6Z"
+                      fill="currentColor"
+                    />
+                  </svg>
+                  Tags
+                </span>
+                <button
+                  type="button"
+                  onClick={closeMiniBacktestTagsModal}
+                  className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1"
+                  aria-label="Close"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="overflow-auto p-4 space-y-4">
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-medium text-[#d9d9d9]">Tags</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={miniBacktestTagsDraft.tagInput}
+                      onChange={(e) =>
+                        setMiniBacktestTagsDraft((prev) => ({ ...prev, tagInput: e.target.value }))
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          commitMiniBacktestTagsDraftTag();
+                        }
+                      }}
+                      className={cx(ui.input, "h-8 flex-1 text-[12px]")}
+                      placeholder="Add tag, press Enter"
+                    />
+                    <button
+                      type="button"
+                      onClick={commitMiniBacktestTagsDraftTag}
+                      title="Add tag"
+                      aria-label="Add tag"
+                      className={cx(
+                        ui.btn,
+                        "h-8 w-8 p-0 inline-flex items-center justify-center shrink-0",
+                      )}
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="h-4 w-4"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        aria-hidden
+                      >
+                        <path d="M12 5v14M5 12h14" />
+                      </svg>
+                    </button>
+                  </div>
+                  {miniBacktestTagsDraft.tagIds.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {miniBacktestTagsDraft.tagIds.map((tagId) => {
+                        const tagName =
+                          tagsRegistry.find((tag) => tag.id === tagId)?.name || tagId;
+                        return (
+                          <span
+                            key={tagId}
+                            className="inline-flex items-center gap-1 rounded border border-[#303030] bg-[#0f0f0f] pl-2 pr-0.5 py-0.5 text-[11px] text-[#d9d9d9]"
+                          >
+                            {tagName}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setMiniBacktestTagsDraft((prev) => ({
+                                  ...prev,
+                                  tagIds: prev.tagIds.filter((id) => id !== tagId),
+                                }))
+                              }
+                              className="p-0.5 rounded text-[#8c8c8c] hover:text-[#d9d9d9]"
+                              aria-label={`Remove tag ${tagName}`}
+                            >
+                              <svg
+                                viewBox="0 0 24 24"
+                                className="h-3.5 w-3.5"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                aria-hidden
+                              >
+                                <path d="M18 6 6 18M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-2 border-t border-[#303030] px-4 py-3 bg-[#101010]">
+                <button
+                  type="button"
+                  onClick={closeMiniBacktestTagsModal}
+                  className={cx(
+                    ui.btnGhost,
+                    "h-8 w-8 p-0 inline-flex items-center justify-center",
+                  )}
+                  title="Cancel"
+                  aria-label="Cancel"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    aria-hidden
+                  >
+                    <path d="M18 6 6 18M6 6l12 12" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={saveMiniBacktestTagsModal}
+                  className={cx(
+                    ui.btnPrimary,
+                    "h-8 w-8 p-0 inline-flex items-center justify-center",
+                  )}
+                  title="Save"
+                  aria-label="Save"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
 
     </div>
   );

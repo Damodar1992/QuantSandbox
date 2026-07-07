@@ -45,8 +45,13 @@ function buildFinishedDemoEntry() {
     epochNumber: mockEpoch.epochNumber,
   });
   const backtestResult = runMiniBacktest(cycles, params, meta);
+  // Demo targets for Before/After compare tab (realistic epoch → replay survival)
+  backtestResult.summary.winRate = 70;
+  backtestResult.summary.pfNet = 3.02;
+  backtestResult.summary.profitFactor = 3.02;
   backtestResult.epoch = {
     ...backtestResult.epoch,
+    roiOHLC: 16, // $1,600 PnL on $10k start
     cagr: 2.47,
     calmar: 8.59,
   };
@@ -136,3 +141,13 @@ export const INITIAL_MINI_BACKTEST_DEMO_RESULTS = [
     createdAt: new Date(now - 22 * 60 * 1000).toISOString(),
   },
 ];
+
+/** Seed global registry: demo runs across multiple strategies. */
+export function buildInitialGlobalMiniBacktestResults() {
+  const [finished, inProgress, failed] = INITIAL_MINI_BACKTEST_DEMO_RESULTS;
+  return [
+    { ...finished, strategyId: 1, strategyName: "EMA Bounce" },
+    { ...inProgress, strategyId: 1, strategyName: "EMA Bounce" },
+    { ...failed, strategyId: 2, strategyName: "RSI Mean Reversion" },
+  ];
+}

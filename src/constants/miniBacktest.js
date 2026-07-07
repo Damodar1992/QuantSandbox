@@ -95,9 +95,10 @@ export const MINI_BACKTEST_STOPOUT_MODES = [
 ];
 
 export const MINI_BACKTEST_DASHBOARD_TABS = [
-  { id: "backtest", label: "Mini Backtest" },
+  { id: "backtest", label: "Overview" },
   { id: "compare", label: "Before / After" },
   { id: "cycles", label: "Cycle Reports" },
+  { id: "formula", label: "Formula Reference" },
 ];
 
 /** Sidebar / run lifecycle statuses for Mini Backtest list. */

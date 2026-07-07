@@ -2,10 +2,11 @@
 
 /** @typedef {{ id: string, name: string, ownerId: number, ownerLogin: string, createdAt: string }} Tag */
 
-/** @typedef {{ id: string, tagId: string, objectType: "HYPEROPT_RESULT", objectId: string, objectRef: string, assignedAt: string }} TagRelation */
+/** @typedef {{ id: string, tagId: string, objectType: "HYPEROPT_RESULT" | "MINI_BACKTEST_RESULT", objectId: string, objectRef: string, assignedAt: string }} TagRelation */
 
 export const TAG_OBJECT_TYPES = {
   HYPEROPT_RESULT: "HYPEROPT_RESULT",
+  MINI_BACKTEST_RESULT: "MINI_BACKTEST_RESULT",
 };
 
 export const MOCK_CURRENT_USER = { id: 2, login: "bogdan" };

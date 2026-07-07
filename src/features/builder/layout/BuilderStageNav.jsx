@@ -12,7 +12,6 @@ export const BuilderStageNavHorizontal = memo(function BuilderStageNavHorizontal
   onAddNewStageVersion,
   onOpenVersionComment,
   onOpenVersionTree,
-  versionBreadcrumb,
 }) {
   return (
     <div
@@ -31,7 +30,6 @@ export const BuilderStageNavHorizontal = memo(function BuilderStageNavHorizontal
         onAddNewStageVersion={onAddNewStageVersion}
         onOpenVersionComment={onOpenVersionComment}
         onOpenVersionTree={onOpenVersionTree}
-        versionBreadcrumb={versionBreadcrumb}
       />
     </div>
   );

@@ -29,7 +29,7 @@ export const MOCK_OPTIMIZATION_RUNS = [
   }
 ];
 
-export const SECTIONS = ["Strategies", "Users", "Tags", "Settings"];
+export const SECTIONS = ["Strategies", "Mini Backtest", "Users", "Tags", "Settings"];
 // No disabled sections at the moment
 export const DISABLED_SECTIONS = new Set([]);
 

@@ -1,12 +1,8 @@
 import React, { memo, useEffect, useMemo, useState } from "react";
 import { cx, ui } from "../../../../constants/ui";
 import { MiniBacktestResultCard } from "./MiniBacktestResultCard";
-import { MiniBacktestDashboard } from "./MiniBacktestDashboard";
-import { MiniBacktestInProgressPanel } from "./MiniBacktestInProgressPanel";
-import { MiniBacktestFailPanel } from "./MiniBacktestFailPanel";
+import { MiniBacktestRunDetail } from "./MiniBacktestRunDetail";
 import { MiniBacktestFilters } from "./MiniBacktestFilters";
-import { resolveMiniBacktestRunStatus } from "../../utils/miniBacktestDisplay";
-import { MINI_BACKTEST_RUN_STATUSES } from "../../../../constants/miniBacktest";
 import {
   EMPTY_MINI_BACKTEST_FILTERS,
   filterMiniBacktestResults,
@@ -21,7 +17,9 @@ export const MiniBacktestPage = memo(function MiniBacktestPage({
   results = [],
   selectedId,
   onSelectId,
-  onRemoveResult,
+  onDelete,
+  onEditTags,
+  tagsRegistry = [],
 }) {
   const [filters, setFilters] = useState(EMPTY_MINI_BACKTEST_FILTERS);
 
@@ -38,7 +36,6 @@ export const MiniBacktestPage = memo(function MiniBacktestPage({
   );
 
   const selectedEntry = filteredResults.find((r) => r.id === selectedId) ?? null;
-  const selectedStatus = selectedEntry ? resolveMiniBacktestRunStatus(selectedEntry) : null;
 
   useEffect(() => {
     if (filteredResults.length === 0) {
@@ -52,10 +49,6 @@ export const MiniBacktestPage = memo(function MiniBacktestPage({
 
   const handleSelect = (id) => {
     onSelectId?.(id);
-  };
-
-  const handleRemove = (id) => {
-    onRemoveResult?.(id);
   };
 
   if (sortedResults.length === 0) {
@@ -118,17 +111,12 @@ export const MiniBacktestPage = memo(function MiniBacktestPage({
         </aside>
 
         <div className="flex-1 min-w-0 p-4 md:p-5 overflow-y-auto">
-          {!selectedEntry ? (
-            <div className="flex items-center justify-center min-h-[320px] text-[12px] text-[#8c8c8c]">
-              Select a mini backtest run
-            </div>
-          ) : selectedStatus === MINI_BACKTEST_RUN_STATUSES.IN_PROGRESS ? (
-            <MiniBacktestInProgressPanel entry={selectedEntry} />
-          ) : selectedStatus === MINI_BACKTEST_RUN_STATUSES.FAIL ? (
-            <MiniBacktestFailPanel entry={selectedEntry} />
-          ) : (
-            <MiniBacktestDashboard entry={selectedEntry} onRemoveResult={handleRemove} />
-          )}
+          <MiniBacktestRunDetail
+            entry={selectedEntry}
+            onDelete={onDelete}
+            onEditTags={onEditTags}
+            tagsRegistry={tagsRegistry}
+          />
         </div>
       </div>
     </div>

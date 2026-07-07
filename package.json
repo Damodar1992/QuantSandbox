@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "ui:add": "node scripts/shadcn-add.mjs",
-    "ui:add:overwrite": "node scripts/shadcn-add.mjs --overwrite"
+    "ui:add:overwrite": "node scripts/shadcn-add.mjs --overwrite",
+    "graphify:view": "node scripts/serve-graphify.mjs"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.2.9",

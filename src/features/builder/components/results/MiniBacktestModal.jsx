@@ -8,7 +8,6 @@ import {
   MINI_BACKTEST_UNITS,
   MINI_BACKTEST_STAKE_MODES,
   MINI_BACKTEST_ORDER_TYPES,
-  MINI_BACKTEST_MARKET_TYPES,
   MINI_BACKTEST_STOPOUT_MODES,
 } from "../../../../constants/miniBacktest";
 import { generateCycleDataForEpoch } from "../../utils/miniBacktestData";
@@ -17,132 +16,88 @@ import { getStageLabel } from "../../utils/stageSelect";
 import { buildMiniBacktestLaunchContext } from "../../utils/miniBacktestDisplay";
 import { AppButton } from "../../../../components/common/AppButton";
 
-const INPUT_CLS = cx(ui.input, "h-7 px-2 text-[11px] w-full min-w-0");
-const LABEL_CLS = "text-[9px] text-[#8c8c8c] leading-none truncate block h-[14px]";
+const INPUT_CLS = cx(ui.input, "h-8 px-2.5 text-[12px] w-full min-w-0");
+const LABEL_CLS = "text-[10px] text-[#8c8c8c] leading-snug mb-1 block";
 
-function FieldLabel({ label, unit, className }) {
+function FieldLabel({ label, unit, hint, className }) {
   return (
-    <span className={cx(LABEL_CLS, className)}>
+    <label className={cx(LABEL_CLS, className)}>
       {label}
       {unit ? <span className="text-[#595959]"> ({unit})</span> : null}
-    </span>
+      {hint ? <span className="block text-[9px] text-[#595959] mt-0.5 font-normal">{hint}</span> : null}
+    </label>
   );
 }
 
-function RadioGroup({ options, value, onChange, name, layout = "col", className }) {
+function SegmentedControl({ options, value, onChange, name }) {
   return (
     <div
-      className={cx(
-        layout === "col"
-          ? "flex flex-col justify-center gap-0.5 min-h-[36px]"
-          : "flex items-center gap-2.5 h-7",
-        className,
-      )}
+      role="group"
+      aria-label={name}
+      className="flex rounded-lg border border-[rgba(60,40,80,0.45)] bg-[#0d0718] p-0.5 gap-0.5"
     >
-      {options.map((opt) => (
-        <label
-          key={opt.value}
-          className={cx(
-            "inline-flex items-center gap-1.5 cursor-pointer text-[10px] font-medium leading-none whitespace-nowrap",
-            value === opt.value ? "text-violet-300" : "text-[#8c8c8c] hover:text-[#d9d9d9]",
-          )}
-        >
-          <input
-            type="radio"
-            name={name}
-            value={opt.value}
-            checked={value === opt.value}
-            onChange={() => onChange(opt.value)}
-            className="h-3 w-3 shrink-0 accent-violet-400 cursor-pointer"
-          />
-          {opt.label}
-        </label>
-      ))}
+      {options.map((opt) => {
+        const active = value === opt.value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => onChange(opt.value)}
+            className={cx(
+              "flex-1 rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition-colors",
+              active
+                ? "bg-violet-500/20 border border-violet-500/40 text-violet-200 shadow-[0_0_0_1px_rgba(139,92,246,0.15)]"
+                : "border border-transparent text-[#8c8c8c] hover:text-[#d9d9d9] hover:bg-[#1a1028]",
+            )}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
 
-function ModeRow({ modeLabel, name, options, value, onChange, fields = [], radioLayout = "col" }) {
-  const colsClass = fields.length === 3 ? "grid-cols-3" : fields.length === 2 ? "grid-cols-2" : "grid-cols-1";
-
+function SectionCard({ title, children, className }) {
   return (
-    <div className="grid grid-cols-[118px_minmax(0,1fr)] gap-x-3 gap-y-0.5 w-full">
-      <FieldLabel label={modeLabel} />
-      {fields.length > 0 ? (
-        <div className={cx("grid gap-x-1.5 min-w-0", colsClass)}>
-          {fields.map((field) => (
-            <FieldLabel key={`${field.key}-label`} label={field.label} unit={field.unit} />
-          ))}
-        </div>
-      ) : (
-        <div aria-hidden />
-      )}
-
-      <RadioGroup
-        name={name}
-        options={options}
-        value={value}
-        onChange={onChange}
-        layout={radioLayout}
-        className={radioLayout === "col" ? "self-center" : undefined}
-      />
-      {fields.length > 0 ? (
-        <div className={cx("grid gap-x-1.5 min-w-0 self-center", colsClass)}>
-          {fields.map((field) => (
-            <NumberInput
-              key={field.key}
-              value={field.value}
-              onChange={field.onChange}
-              min={field.min}
-              step={field.step}
-            />
-          ))}
-        </div>
-      ) : (
-        <div aria-hidden />
-      )}
-    </div>
-  );
-}
-
-function FieldsRow({ fields }) {
-  const colsClass = fields.length === 2 ? "grid-cols-2" : "grid-cols-1";
-
-  return (
-    <div className={cx("grid gap-x-1.5 gap-y-0.5 w-full", colsClass)}>
-      {fields.map((field) => (
-        <FieldLabel key={`${field.key}-label`} label={field.label} unit={field.unit} />
-      ))}
-      {fields.map((field) => (
-        <NumberInput
-          key={field.key}
-          value={field.value}
-          onChange={field.onChange}
-          min={field.min}
-          step={field.step}
-        />
-      ))}
-    </div>
-  );
-}
-
-function SectionGroup({ title, children, className }) {
-  return (
-    <div className={cx("rounded border border-[#303030]/60 overflow-hidden", className)}>
-      <div className="px-2 py-1 text-[9px] font-semibold uppercase tracking-wide text-[#8c8c8c] bg-[#19102b]/40 border-b border-[#303030]/40">
-        {title}
+    <section className={cx("rounded-lg border border-[rgba(60,40,80,0.35)] bg-[#120a20] overflow-hidden", className)}>
+      <div className="px-3 py-2 border-b border-[rgba(60,40,80,0.25)] bg-[#19102b]/50">
+        <h3 className="text-[10px] font-bold uppercase tracking-wider text-[#b8aecc]">{title}</h3>
       </div>
-      <div className="p-2 min-h-[58px] flex items-center w-full">{children}</div>
+      <div className="p-3 space-y-3">{children}</div>
+    </section>
+  );
+}
+
+function Field({ label, unit, hint, inputAlign, children }) {
+  const labelEl = (
+    <FieldLabel label={label} unit={unit} hint={hint} className={inputAlign ? "mb-0" : undefined} />
+  );
+
+  if (inputAlign) {
+    return (
+      <div className="min-w-0 flex flex-col">
+        <div className="min-h-[2.25rem] flex items-end mb-1">{labelEl}</div>
+        {children}
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-w-0">
+      {labelEl}
+      {children}
     </div>
   );
 }
 
-function NumberInput({ value, onChange, min, step }) {
+function NumberInput({ value, onChange, min, step, placeholder }) {
   const safeValue = Number.isFinite(value) ? value : "";
   return (
     <input
       type="number"
       value={safeValue}
+      placeholder={placeholder}
       onChange={(e) => {
         const raw = e.target.value;
         if (raw === "") {
@@ -159,6 +114,14 @@ function NumberInput({ value, onChange, min, step }) {
   );
 }
 
+function resolveMarketType(launchContext, epoch) {
+  const fromLaunch = launchContext?.tradingMode;
+  if (fromLaunch === "futures" || fromLaunch === "spot") return fromLaunch;
+  const fromEpoch = epoch?.tradingMode ?? epoch?.marketType;
+  if (fromEpoch === "futures" || fromEpoch === "spot") return fromEpoch;
+  return MINI_BACKTEST_DEFAULTS.marketType;
+}
+
 export const MiniBacktestModal = memo(function MiniBacktestModal({
   epoch,
   existingResult,
@@ -169,16 +132,26 @@ export const MiniBacktestModal = memo(function MiniBacktestModal({
   launchStageVersion = null,
   launchContext = null,
 }) {
-  const [params, setParams] = useState(() =>
-    existingResult ? { ...MINI_BACKTEST_DEFAULTS, ...existingResult.params } : { ...MINI_BACKTEST_DEFAULTS },
+  const resolvedMarketType = useMemo(
+    () => resolveMarketType(launchContext, epoch),
+    [launchContext, epoch],
   );
+
+  const [params, setParams] = useState(() => ({
+    ...MINI_BACKTEST_DEFAULTS,
+    ...(existingResult?.params ?? {}),
+    marketType: resolveMarketType(launchContext, epoch),
+  }));
   const [running, setRunning] = useState(false);
 
   useEffect(() => {
-    if (open) {
-      setParams(existingResult ? { ...MINI_BACKTEST_DEFAULTS, ...existingResult.params } : { ...MINI_BACKTEST_DEFAULTS });
-    }
-  }, [open, existingResult]);
+    if (!open) return;
+    setParams({
+      ...MINI_BACKTEST_DEFAULTS,
+      ...(existingResult?.params ?? {}),
+      marketType: resolvedMarketType,
+    });
+  }, [open, existingResult, resolvedMarketType]);
 
   const updateParam = useCallback((key, value) => {
     setParams((prev) => ({ ...prev, [key]: value }));
@@ -186,7 +159,13 @@ export const MiniBacktestModal = memo(function MiniBacktestModal({
 
   const pairLabel = epoch?.pairs || epoch?.pair || "—";
   const tfLabel = epoch?.timeframe || epoch?.timeRange || "—";
-  const epochNumber = epoch?.epochNumber ?? epoch?.meta?.epochNumber ?? null;
+  const epochNumber = useMemo(() => {
+    if (epoch?.epochNumber != null) return epoch.epochNumber;
+    if (epoch?.meta?.epochNumber != null) return epoch.meta.epochNumber;
+    const match = String(epoch?.label || "").match(/#(\d+)/);
+    return match ? Number(match[1]) : null;
+  }, [epoch]);
+
   const resolvedCycleCount = useMemo(() => {
     const raw =
       epoch?.foldSize ??
@@ -203,18 +182,19 @@ export const MiniBacktestModal = memo(function MiniBacktestModal({
 
     setRunning(true);
     try {
+      const runParams = { ...params, marketType: resolvedMarketType, cycleCount: resolvedCycleCount };
       const { meta, cycles } = generateCycleDataForEpoch(epoch, resolvedCycleCount, {
         stageId: launchStageId,
         hyperoptId: epoch?.meta?.rowId || epoch?.hyperoptId || epoch?.id,
         epochNumber: epoch?.epochNumber ?? 1,
       });
-      const backtestResult = runMiniBacktest(cycles, params, meta);
+      const backtestResult = runMiniBacktest(cycles, runParams, meta);
 
-      const runParams = { ...params, cycleCount: resolvedCycleCount };
       const paramsHash = hashParams(runParams);
       const matchedExisting = existingResult?.paramsHash === paramsHash ? existingResult : null;
 
       const resolvedLaunch = launchContext || buildMiniBacktestLaunchContext({
+        tradingMode: resolvedMarketType,
         pairs: pairLabel !== "—" ? pairLabel : meta.pair,
         timeframe: tfLabel !== "—" ? tfLabel : meta.timeframe,
         knowRange: epoch.knowRange ?? epoch.timeRange,
@@ -265,97 +245,22 @@ export const MiniBacktestModal = memo(function MiniBacktestModal({
     } finally {
       setRunning(false);
     }
-  }, [epoch, params, existingResult, onSaveResult, onClose, launchStageId, launchStageVersion, launchContext, pairLabel, tfLabel, resolvedCycleCount]);
+  }, [
+    epoch,
+    params,
+    existingResult,
+    onSaveResult,
+    onClose,
+    launchStageId,
+    launchStageVersion,
+    launchContext,
+    pairLabel,
+    tfLabel,
+    resolvedCycleCount,
+    resolvedMarketType,
+  ]);
 
   if (!open) return null;
-
-  const stakeFields =
-    params.stakeMode === "fixed"
-      ? [
-          {
-            key: "fixedStakeAmount",
-            label: MINI_BACKTEST_LABELS.fixedStakeAmount,
-            unit: MINI_BACKTEST_UNITS.fixedStakeAmount,
-            value: params.fixedStakeAmount,
-            onChange: (v) => updateParam("fixedStakeAmount", v),
-            min: 0,
-          },
-        ]
-      : [
-          {
-            key: "relativeStakeAmount",
-            label: MINI_BACKTEST_LABELS.relativeStakeAmount,
-            unit: MINI_BACKTEST_UNITS.relativeStakeAmount,
-            value: params.relativeStakeAmount,
-            onChange: (v) => updateParam("relativeStakeAmount", v),
-            min: 0,
-          },
-        ];
-
-  const executionFields =
-    params.orderType === "taker"
-      ? [
-          {
-            key: "feeTaker",
-            label: MINI_BACKTEST_LABELS.feeTaker,
-            unit: "% / side",
-            value: params.feeTaker,
-            onChange: (v) => updateParam("feeTaker", v),
-            min: 0,
-            step: 0.01,
-          },
-          {
-            key: "slippage",
-            label: MINI_BACKTEST_LABELS.slippage,
-            unit: "% / side",
-            value: params.slippage,
-            onChange: (v) => updateParam("slippage", v),
-            min: 0,
-            step: 0.01,
-          },
-        ]
-      : [
-          {
-            key: "feeMaker",
-            label: MINI_BACKTEST_LABELS.feeMaker,
-            unit: "% / side",
-            value: params.feeMaker,
-            onChange: (v) => updateParam("feeMaker", v),
-            min: 0,
-            step: 0.01,
-          },
-        ];
-
-  const marketFields =
-    params.marketType === "futures"
-      ? [
-          {
-            key: "leverage",
-            label: MINI_BACKTEST_LABELS.leverage,
-            unit: "×",
-            value: params.leverage,
-            onChange: (v) => updateParam("leverage", v),
-            min: 1,
-          },
-          {
-            key: "maintMargin",
-            label: "Maint.",
-            unit: "%",
-            value: params.maintMargin,
-            onChange: (v) => updateParam("maintMargin", v),
-            min: 0,
-            step: 0.1,
-          },
-          {
-            key: "fundRate",
-            label: "Funding",
-            unit: "%/8h",
-            value: params.fundRate,
-            onChange: (v) => updateParam("fundRate", v),
-            step: 0.01,
-          },
-        ]
-      : [];
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -363,130 +268,194 @@ export const MiniBacktestModal = memo(function MiniBacktestModal({
 
       <div
         className={cx(
-          "relative z-10 w-full max-w-2xl rounded-lg border shadow-xl max-h-[90vh] flex flex-col",
+          "relative z-10 w-full max-w-lg rounded-lg border shadow-xl max-h-[90vh] flex flex-col",
           crmSurface.border,
           crmSurface.input,
         )}
       >
-        <div className="flex items-center justify-between px-3 py-2 border-b border-[#303030] shrink-0 bg-[#13131f]">
-          <div className="text-[12px] font-semibold text-[#f5f5f5]">Mini Backtest</div>
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#303030] shrink-0 bg-[#13131f]">
+          <div>
+            <div className="text-[13px] font-semibold text-[#f5f5f5]">
+              MiniBacktest for epoch #{epochNumber ?? "—"}
+            </div>
+            <div className="text-[10px] text-[#8c8c8c] mt-0.5">Configure trading conditions for this epoch</div>
+          </div>
           <button
             type="button"
             onClick={onClose}
-            className="text-[#8c8c8c] hover:text-[#d9d9d9] text-[16px] leading-none"
+            className="text-[#8c8c8c] hover:text-[#d9d9d9] text-[18px] leading-none p-1"
             aria-label="Close"
           >
             ✕
           </button>
         </div>
 
-        <div className="p-3 space-y-2 overflow-y-auto flex-1 min-h-0">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-teal-500/25 bg-teal-500/10 px-2.5 py-1.5 text-[10px] min-h-[28px]">
-            <span className="text-[8px] font-bold uppercase tracking-wider text-teal-300 shrink-0">Hyper Opt</span>
-            <span className="text-[#8c8c8c]">
-              Pair <span className="font-mono font-semibold text-[#f5f5f5]">{pairLabel}</span>
-            </span>
-            <span className="text-[#595959]">·</span>
-            <span className="text-[#8c8c8c]">
-              TF <span className="font-mono font-semibold text-[#f5f5f5]">{tfLabel}</span>
-            </span>
-            <span className="text-[#595959]">·</span>
-            <span className="text-[#8c8c8c]">
-              Epoch{" "}
-              <span className="font-mono font-semibold text-[#f5f5f5]">
-                {epochNumber != null ? `#${epochNumber}` : "—"}
-              </span>
-            </span>
-            <span className="text-[#595959]">·</span>
-            <span className="text-[#8c8c8c]">
-              Cycles <span className="font-mono font-semibold text-[#f5f5f5]">{resolvedCycleCount}</span>
-            </span>
-          </div>
+        <div className="p-3 space-y-3 overflow-y-auto flex-1 min-h-0">
+          <SectionCard title="Account & Reserve">
+            <div className="grid grid-cols-2 gap-3">
+              <Field label={MINI_BACKTEST_LABELS.initialBalance} unit={MINI_BACKTEST_UNITS.initialBalance}>
+                <NumberInput
+                  value={params.initialBalance}
+                  onChange={(v) => updateParam("initialBalance", v)}
+                  min={1}
+                  placeholder="e.g. 100000"
+                />
+              </Field>
+              <Field label={MINI_BACKTEST_LABELS.reservedPct} unit={MINI_BACKTEST_UNITS.reservedPct}>
+                <NumberInput
+                  value={params.reservedPct}
+                  onChange={(v) => updateParam("reservedPct", v)}
+                  min={0}
+                  placeholder="e.g. 10"
+                />
+              </Field>
+            </div>
+          </SectionCard>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 items-stretch">
-            <SectionGroup title="Account & Reserve">
-              <FieldsRow
-                fields={[
-                  {
-                    key: "initialBalance",
-                    label: MINI_BACKTEST_LABELS.initialBalance,
-                    unit: MINI_BACKTEST_UNITS.initialBalance,
-                    value: params.initialBalance,
-                    onChange: (v) => updateParam("initialBalance", v),
-                    min: 0,
-                  },
-                  {
-                    key: "reservedPct",
-                    label: MINI_BACKTEST_LABELS.reservedPct,
-                    unit: MINI_BACKTEST_UNITS.reservedPct,
-                    value: params.reservedPct,
-                    onChange: (v) => updateParam("reservedPct", v),
-                    min: 0,
-                  },
-                ]}
-              />
-            </SectionGroup>
-
-            <SectionGroup title="Position Sizing">
-              <ModeRow
-                modeLabel={MINI_BACKTEST_LABELS.stakeMode}
+          <SectionCard title="Position Sizing">
+            <Field label={MINI_BACKTEST_LABELS.stakeMode}>
+              <SegmentedControl
                 name="stakeMode"
                 options={MINI_BACKTEST_STAKE_MODES}
                 value={params.stakeMode}
                 onChange={(v) => updateParam("stakeMode", v)}
-                fields={stakeFields}
               />
-            </SectionGroup>
-          </div>
+            </Field>
+            {params.stakeMode === "fixed" ? (
+              <Field label={MINI_BACKTEST_LABELS.fixedStakeAmount} unit={MINI_BACKTEST_UNITS.fixedStakeAmount}>
+                <NumberInput
+                  value={params.fixedStakeAmount}
+                  onChange={(v) => updateParam("fixedStakeAmount", v)}
+                  min={1}
+                  placeholder="e.g. 5000"
+                />
+              </Field>
+            ) : (
+              <Field label={MINI_BACKTEST_LABELS.relativeStakeAmount} unit={MINI_BACKTEST_UNITS.relativeStakeAmount}>
+                <NumberInput
+                  value={params.relativeStakeAmount}
+                  onChange={(v) => updateParam("relativeStakeAmount", v)}
+                  min={0.1}
+                  step={0.5}
+                  placeholder="e.g. 10"
+                />
+              </Field>
+            )}
+          </SectionCard>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 items-stretch">
-            <SectionGroup title="Execution & Fees">
-              <ModeRow
-                modeLabel={MINI_BACKTEST_LABELS.orderType}
+          <SectionCard title="Fee Type">
+            <Field label={MINI_BACKTEST_LABELS.orderType}>
+              <SegmentedControl
                 name="orderType"
                 options={MINI_BACKTEST_ORDER_TYPES}
                 value={params.orderType}
                 onChange={(v) => updateParam("orderType", v)}
-                fields={executionFields}
               />
-            </SectionGroup>
+            </Field>
+            {params.orderType === "taker" ? (
+              <div className="grid grid-cols-2 gap-3">
+                <Field label={MINI_BACKTEST_LABELS.feeTaker} unit="% / side">
+                  <NumberInput
+                    value={params.feeTaker}
+                    onChange={(v) => updateParam("feeTaker", v)}
+                    min={0}
+                    step={0.01}
+                    placeholder="0.10"
+                  />
+                </Field>
+                <Field label={MINI_BACKTEST_LABELS.slippage} unit="% / side">
+                  <NumberInput
+                    value={params.slippage}
+                    onChange={(v) => updateParam("slippage", v)}
+                    min={0}
+                    step={0.01}
+                    placeholder="0.05"
+                  />
+                </Field>
+              </div>
+            ) : (
+              <Field label={MINI_BACKTEST_LABELS.feeMaker} unit="% / side" hint="Maker: no slippage">
+                <NumberInput
+                  value={params.feeMaker}
+                  onChange={(v) => updateParam("feeMaker", v)}
+                  min={0}
+                  step={0.01}
+                  placeholder="0.02"
+                />
+              </Field>
+            )}
+          </SectionCard>
 
-            <SectionGroup title="Market">
-              <ModeRow
-                modeLabel={MINI_BACKTEST_LABELS.marketType}
-                name="marketType"
-                options={MINI_BACKTEST_MARKET_TYPES}
-                value={params.marketType}
-                onChange={(v) => updateParam("marketType", v)}
-                fields={marketFields}
-              />
-            </SectionGroup>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 items-stretch">
-            <SectionGroup title="Risk Control">
-              <ModeRow
-                modeLabel={MINI_BACKTEST_LABELS.stopoutMode}
+          <SectionCard title="Risk Control">
+            <Field label={MINI_BACKTEST_LABELS.stopoutMode}>
+              <SegmentedControl
                 name="stopoutMode"
                 options={MINI_BACKTEST_STOPOUT_MODES}
                 value={params.stopoutMode}
                 onChange={(v) => updateParam("stopoutMode", v)}
-                fields={[
-                  {
-                    key: "stopout",
-                    label: "Stopout floor",
-                    unit: params.stopoutMode === "amount" ? "USDT, 0=off" : "% start, 0=off",
-                    value: params.stopout,
-                    onChange: (v) => updateParam("stopout", v),
-                    min: 0,
-                  },
-                ]}
               />
-            </SectionGroup>
-          </div>
+            </Field>
+            <Field
+              label="Stopout floor"
+              unit={params.stopoutMode === "amount" ? "USDT · empty = off" : "% of start · empty = off"}
+            >
+              <NumberInput
+                value={params.stopout}
+                onChange={(v) => updateParam("stopout", v)}
+                min={0}
+                placeholder="empty = off"
+              />
+            </Field>
+          </SectionCard>
+
+          {resolvedMarketType === "futures" ? (
+            <SectionCard title="Futures conditions">
+              <div className="grid grid-cols-3 gap-3">
+                <Field
+                  inputAlign
+                  label={MINI_BACKTEST_LABELS.leverage}
+                  unit={MINI_BACKTEST_UNITS.leverage}
+                >
+                  <NumberInput
+                    value={params.leverage}
+                    onChange={(v) => updateParam("leverage", v)}
+                    min={1}
+                    step={1}
+                    placeholder="e.g. 5"
+                  />
+                </Field>
+                <Field
+                  inputAlign
+                  label={MINI_BACKTEST_LABELS.maintMargin}
+                  unit={MINI_BACKTEST_UNITS.maintMargin}
+                >
+                  <NumberInput
+                    value={params.maintMargin}
+                    onChange={(v) => updateParam("maintMargin", v)}
+                    min={0}
+                    step={0.01}
+                    placeholder="e.g. 0.5"
+                  />
+                </Field>
+                <Field
+                  inputAlign
+                  label="Funding"
+                  unit="% / 8h, signed"
+                  hint="Negative = receive funding"
+                >
+                  <NumberInput
+                    value={params.fundRate}
+                    onChange={(v) => updateParam("fundRate", v)}
+                    step={0.001}
+                    placeholder="e.g. 0.01"
+                  />
+                </Field>
+              </div>
+            </SectionCard>
+          ) : null}
         </div>
 
-        <div className="flex justify-end px-3 py-2 border-t border-[#303030]/50 shrink-0 bg-[#13131f] relative z-20">
+        <div className="flex justify-end px-4 py-3 border-t border-[#303030]/50 shrink-0 bg-[#13131f]">
           <AppButton type="button" variant="default" size="sm" onClick={handleRun} disabled={running}>
             {running ? "Running..." : "Run Mini Backtest"}
           </AppButton>

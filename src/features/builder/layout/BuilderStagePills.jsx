@@ -1,5 +1,5 @@
 import React, { memo } from "react";
-import { cx, ui } from "@/constants/ui";
+import { cx } from "@/constants/ui";
 import { StageVersionSelect, StageVersionCommentButton } from "@/features/versioning";
 import { ProdButton } from "@/components/prod/ProdButton";
 
@@ -13,7 +13,6 @@ export const BuilderStagePills = memo(function BuilderStagePills({
   onAddNewStageVersion,
   onOpenVersionComment,
   onOpenVersionTree,
-  versionBreadcrumb,
   className,
 }) {
   return (
@@ -126,10 +125,6 @@ export const BuilderStagePills = memo(function BuilderStagePills({
           Version tree
         </ProdButton>
       </div>
-
-      {versionBreadcrumb?.length > 0 ? (
-        <div className={cx("text-[11px]", ui.textMuted)}>{versionBreadcrumb.join(" → ")}</div>
-      ) : null}
     </div>
   );
 });

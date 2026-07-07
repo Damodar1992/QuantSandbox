@@ -79,6 +79,17 @@ const menuIconPaths = {
       <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
     </>
   ),
+  "Mini Backtest": (
+    <>
+      <path d="M4 19V5" />
+      <path d="M4 19h16" />
+      <path d="M7 16l3-5 3 3 4-6" />
+      <circle cx="7" cy="16" r="1.2" />
+      <circle cx="10" cy="11" r="1.2" />
+      <circle cx="13" cy="14" r="1.2" />
+      <circle cx="17" cy="8" r="1.2" />
+    </>
+  ),
 };
 
 export const MenuIcon = memo(({ name, active }) => {

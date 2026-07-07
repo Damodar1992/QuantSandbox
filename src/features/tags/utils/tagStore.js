@@ -76,6 +76,16 @@ export function buildObjectRef(hyperoptRow) {
   return `Hyperopt #${hyperoptRow.hyperoptNumber ?? "—"}`;
 }
 
+export function buildMiniBacktestObjectRef(entry) {
+  if (!entry) return "";
+  const epoch =
+    entry.epochNumber != null
+      ? `Epoch #${entry.epochNumber}`
+      : entry.epochLabel || "run";
+  const stage = entry.stage || (entry.stageId != null ? `Stage ${entry.stageId}` : "");
+  return [stage, epoch].filter(Boolean).join(" · ") || "Mini Backtest";
+}
+
 /**
  * Sync tagIds and relations for a hyperopt row after Tags modal save.
  * @returns {{ registry, relations, hyperoptResultsRows, tagIds }}
@@ -134,6 +144,67 @@ export function syncHyperoptTagIds({
     registry,
     relations: nextRelations,
     hyperoptResultsRows: nextRows,
+    tagIds: desiredIds,
+  };
+}
+
+/**
+ * Sync tagIds and relations for a mini backtest entry after Tags modal save.
+ * @returns {{ registry, relations, miniBacktestResults, tagIds }}
+ */
+export function syncMiniBacktestTagIds({
+  entry,
+  tagIds,
+  registry,
+  relations,
+  miniBacktestResults,
+}) {
+  if (!entry) {
+    return { registry, relations, miniBacktestResults, tagIds: [] };
+  }
+
+  const desiredIds = [...new Set(tagIds || [])];
+  const entryRelations = (relations || []).filter(
+    (rel) =>
+      rel.objectType === TAG_OBJECT_TYPES.MINI_BACKTEST_RESULT && rel.objectId === entry.id,
+  );
+  const existingIds = entryRelations.map((rel) => rel.tagId);
+  const toAdd = desiredIds.filter((id) => !existingIds.includes(id));
+  const toRemove = existingIds.filter((id) => !desiredIds.includes(id));
+
+  let nextRelations = [...(relations || [])];
+  if (toRemove.length) {
+    nextRelations = nextRelations.filter(
+      (rel) =>
+        !(
+          rel.objectType === TAG_OBJECT_TYPES.MINI_BACKTEST_RESULT &&
+          rel.objectId === entry.id &&
+          toRemove.includes(rel.tagId)
+        ),
+    );
+  }
+
+  const now = new Date().toISOString();
+  const objectRef = buildMiniBacktestObjectRef(entry);
+  for (const tagId of toAdd) {
+    nextRelations.push({
+      id: generateRelationId(),
+      tagId,
+      objectType: TAG_OBJECT_TYPES.MINI_BACKTEST_RESULT,
+      objectId: entry.id,
+      objectRef,
+      assignedAt: now,
+    });
+  }
+
+  const nextResults = (miniBacktestResults || []).map((item) =>
+    item.id === entry.id ? { ...item, tagIds: desiredIds } : item,
+  );
+
+  return {
+    registry,
+    relations: nextRelations,
+    miniBacktestResults: nextResults,
     tagIds: desiredIds,
   };
 }

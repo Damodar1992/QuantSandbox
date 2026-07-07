@@ -10,6 +10,7 @@ import {
 } from "../../constants/risk";
 import { getParamLabel } from "../../utils/indicators";
 import { genId, FILTER_PRESET_BUILTIN, cloneFilterRootWithNewIds } from "./heatmapFilterPresets";
+import { getBbHeatmapAxisKeys } from "../../features/builder/utils/defaultBbSetup";
 
 const FiltersSection = memo(function FiltersSection({
   filterRoot,
@@ -228,7 +229,7 @@ export const HeatMapConfigurator = memo(function HeatMapConfigurator({
     rootLogic: "or",
     groups: [{ id: genId(), logic: "and", conditions: [] }],
   }));
-  const [filterPreset, setFilterPreset] = useState("");
+  const [filterPreset, setFilterPreset] = useState(() => (isRisk ? "" : "Super filter"));
   const [customPresets, setCustomPresets] = useState([]);
   const [openIndicatorDropdown, setOpenIndicatorDropdown] = useState(false);
   const [openXDropdown, setOpenXDropdown] = useState(false);
@@ -236,6 +237,12 @@ export const HeatMapConfigurator = memo(function HeatMapConfigurator({
   const indicatorDropdownRef = useOutsideClose(openIndicatorDropdown, () => setOpenIndicatorDropdown(false));
   const xDropdownRef = useOutsideClose(openXDropdown, () => setOpenXDropdown(false));
   const yDropdownRef = useOutsideClose(openYDropdown, () => setOpenYDropdown(false));
+
+  useEffect(() => {
+    if (isRisk) return;
+    const builtin = FILTER_PRESET_BUILTIN["Super filter"];
+    if (builtin) setFilterRoot(builtin());
+  }, [isRisk]);
 
   const selectedIndicators = useMemo(
     () => indicators.filter((ind) => selectedIndicatorIds.includes(ind.id)),
@@ -278,10 +285,17 @@ export const HeatMapConfigurator = memo(function HeatMapConfigurator({
   }, [availableParams, xAxisKeys, yAxisKeys, isRisk]);
 
   useEffect(() => {
-    if (!isRisk && indicators.length > 0 && selectedIndicatorIds.length === 0) {
-      setSelectedIndicatorIds([indicators[0].id]);
+    if (isRisk || indicators.length === 0) return;
+    const bb = indicators.find((ind) => ind.type === "BBANDS") ?? indicators[0];
+    if (selectedIndicatorIds.length === 0) {
+      setSelectedIndicatorIds([bb.id]);
     }
-  }, [indicators, isRisk, selectedIndicatorIds.length]);
+    if (bb.type === "BBANDS" && xAxisKeys.length === 0 && yAxisKeys.length === 0) {
+      const { xAxis, yAxis } = getBbHeatmapAxisKeys(bb.id);
+      setXAxisKeys(xAxis);
+      setYAxisKeys(yAxis);
+    }
+  }, [indicators, isRisk, selectedIndicatorIds.length, xAxisKeys.length, yAxisKeys.length]);
 
   const remainingKeys = useMemo(
     () => remainingParams.map((p) => p.compositeKey).sort().join(","),
