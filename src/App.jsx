@@ -49,9 +49,9 @@ import {
   FORMULA_TYPES,
   FORMULA_SUBTYPES,
 } from "./constants/formulas";
-import { DEFAULT_RISK_STOPLOSS_RANGES, RISK_STOPLOSS_LABELS } from "./constants/risk";
+import { DEFAULT_RISK_STOPLOSS_RANGES, DEFAULT_RISK_HYPEROPT_PARAMS, RISK_STOPLOSS_LABELS } from "./constants/risk";
 import { pickByStage, getBuilderStageCopy } from "./features/builder/utils/stageSelect";
-import { countRiskCombinations } from "./features/builder/utils/riskCombinations";
+import { countRiskCombinations, countRiskHyperoptParamCombinations } from "./features/builder/utils/riskCombinations";
 import { clamp, lerp, quantile, computeRanges, normalizeParam, buildHeatMap, formatScore, heatmapScoreToColor, HEATMAP_LEGEND_STOPS, HEATMAP_CELL_PX, HEATMAP_GAP_PX, EMPTY_CELL_BG } from "./utils/heatmap";
 import { setWeightCapped } from "./utils/weights";
 import { buildIndicatorSnapshot, buildSignalBestResult as buildSignalBestResultFromUtils } from "./utils/builder";
@@ -97,6 +97,7 @@ import {
   TableBasedEditor,
   FormulaEditor,
   RiskStagePanel,
+  RiskHyperoptParamsPanel,
   HyperoptResultCard,
   HyperoptResultListItem,
   HyperoptResultDrawer,
@@ -222,6 +223,7 @@ const BuilderStepper = memo(function BuilderStepper({
     trailing_activation: { ...DEFAULT_RISK_STOPLOSS_RANGES.trailing_activation },
     trailing_distance: { ...DEFAULT_RISK_STOPLOSS_RANGES.trailing_distance },
   }));
+  const [riskHyperoptParams, setRiskHyperoptParams] = useState(() => ({ ...DEFAULT_RISK_HYPEROPT_PARAMS }));
   const isEntryStage = activeStage === 2;
   const isExitStage = activeStage === 3;
   const isRiskStage = activeStage === 4;
@@ -249,14 +251,18 @@ const BuilderStepper = memo(function BuilderStepper({
   const [selectedTab, setSelectedTab] = useState("list"); // list or code
 
   const totalCombinations = useMemo(() => {
-    if (isRiskStage) return countRiskCombinations(riskStoplossRanges);
+    if (isRiskStage) {
+      return (
+        countRiskCombinations(riskStoplossRanges) * countRiskHyperoptParamCombinations(riskHyperoptParams)
+      );
+    }
     if (indicators.length === 0) return 0;
     return indicators.reduce((product, ind) => {
       if (!ind.enabled || !Array.isArray(ind.params)) return product;
       const perIndicator = ind.params.reduce((p, param) => p * getParamValuesFromDef(param).length, 1);
       return product * Math.max(1, perIndicator);
     }, 1);
-  }, [isRiskStage, riskStoplossRanges, indicators]);
+  }, [isRiskStage, riskStoplossRanges, riskHyperoptParams, indicators]);
 
   const hyperoptSectionNum = isRiskStage ? 3 : 4;
   const resultsSectionNum = isRiskStage ? 4 : 5;
@@ -1439,10 +1445,11 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
       });
       if (isRiskStage && best?.meta) {
         best.meta.riskStoplossRanges = { ...riskStoplossRanges };
+        best.meta.riskHyperoptParams = { ...riskHyperoptParams };
       }
       return best;
     },
-    [indicators, signalIndicators, isRiskStage, riskStoplossRanges, pairs, timeRange, hyperoptType],
+    [indicators, signalIndicators, isRiskStage, riskStoplossRanges, riskHyperoptParams, pairs, timeRange, hyperoptType],
   );
 
   const handleSaveBestResultFromDetail = useCallback(
@@ -1950,6 +1957,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                 toggleSection={toggleSection}
                 riskStoplossRanges={riskStoplossRanges}
                 onRiskStoplossRangesChange={setRiskStoplossRanges}
+                riskHyperoptParams={riskHyperoptParams}
                 signalIndicators={signalIndicators}
                 entryFormula={entryFormula}
                 exitFormula={exitFormula}
@@ -2335,6 +2343,12 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                   )}
                 </div>
 
+                {isRiskStage && (
+                  <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
+                    <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">Loss streak & cooldown</div>
+                    <RiskHyperoptParamsPanel params={riskHyperoptParams} onChange={setRiskHyperoptParams} />
+                  </div>
+                )}
 
                 {/* Intermediate formula and Post-processing are hidden for Brute Force (and on Risk stage) */}
                 {hyperoptType !== "Brute Force" && !isRiskStage && (

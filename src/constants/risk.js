@@ -37,6 +37,39 @@ export const DEFAULT_RISK_HEATMAP_AXES = {
   y: "drawdown",
 };
 
+/** Value + step hyperopt params for Stage 4 Risk (section 3) */
+export const RISK_HYPEROPT_PARAM_DEFS = [
+  {
+    valueKey: "loss_streak_threshold",
+    stepKey: "loss_streak_threshold_step",
+    label: "Loss streak threshold",
+    minFloor: 1,
+  },
+  {
+    valueKey: "post_loss_cooldown_candles",
+    stepKey: "post_loss_cooldown_candles_step",
+    label: "Post-loss cooldown (candles)",
+    minFloor: 0,
+  },
+];
+
+export const DEFAULT_RISK_HYPEROPT_PARAMS = {
+  loss_streak_threshold: 5,
+  loss_streak_threshold_step: 1,
+  post_loss_cooldown_candles: 3,
+  post_loss_cooldown_candles_step: 1,
+};
+
+/** Hyperopt grid min/max/step from value + step fields (min = minFloor, max = value). */
+export function riskHyperoptParamGrid(def, params) {
+  if (!def || !params) return null;
+  const max = Number(params[def.valueKey]);
+  const step = Number(params[def.stepKey]);
+  const min = def.minFloor;
+  if (!Number.isFinite(max) || !Number.isFinite(step) || step <= 0 || max < min) return null;
+  return { min, max, step };
+}
+
 /** Midpoint of each stoploss range for fixed HeatMap slice */
 export function riskStoplossMidpoints(ranges) {
   const out = {};

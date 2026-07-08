@@ -1,4 +1,9 @@
-import { RISK_STOPLOSS_KEYS, RISK_STOPLOSS_PREVIEW_DEFAULTS } from "../constants/risk";
+import {
+  RISK_STOPLOSS_KEYS,
+  RISK_STOPLOSS_PREVIEW_DEFAULTS,
+  RISK_HYPEROPT_PARAM_DEFS,
+  riskHyperoptParamGrid,
+} from "../constants/risk";
 import { generatePythonCode } from "./pythonCode";
 
 function indentBlock(code, spaces = 8) {
@@ -9,7 +14,7 @@ function indentBlock(code, spaces = 8) {
     .join("\n");
 }
 
-function formatRiskParametersDict(ranges) {
+function formatRiskParametersDict(ranges, hyperoptParams) {
   const lines = ["    risk_parameters = {"];
   for (const key of RISK_STOPLOSS_KEYS) {
     const r = ranges?.[key];
@@ -20,6 +25,17 @@ function formatRiskParametersDict(ranges) {
     lines.push(`            "min": ${r.min},`);
     lines.push(`            "max": ${r.max},`);
     lines.push(`            "step": ${r.step},`);
+    lines.push(`        },`);
+  }
+  for (const def of RISK_HYPEROPT_PARAM_DEFS) {
+    const grid = riskHyperoptParamGrid(def, hyperoptParams);
+    if (!grid) continue;
+    const defaultVal = hyperoptParams?.[def.valueKey];
+    lines.push(`        "${def.valueKey}": {`);
+    lines.push(`            "default": ${defaultVal},`);
+    lines.push(`            "min": ${grid.min},`);
+    lines.push(`            "max": ${grid.max},`);
+    lines.push(`            "step": ${grid.step},`);
     lines.push(`        },`);
   }
   lines.push("    }");
@@ -76,6 +92,7 @@ export function buildStrategyTemplatePreview({
   entryFormula = "",
   exitFormula = "",
   riskRanges = {},
+  riskHyperoptParams = {},
   timeframe = "5m",
 }) {
   const indicatorCode = generatePythonCode(signalIndicators);
@@ -110,7 +127,7 @@ export function buildStrategyTemplatePreview({
     "    # Risks / Stoplosses",
     "    # =========================",
     "",
-    formatRiskParametersDict(riskRanges),
+    formatRiskParametersDict(riskRanges, riskHyperoptParams),
     "",
     "    # =========================",
     "    # Indicators (Stage 1 — Signal)",

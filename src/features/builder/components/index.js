@@ -11,6 +11,7 @@ export { FormulaEditor } from "./FormulaEditor";
 export { IndicatorAliasesPanel } from "./IndicatorAliasesPanel";
 export { CodeEditor } from "./CodeEditor";
 export { RiskStoplossPanel } from "./RiskStoplossPanel";
+export { RiskHyperoptParamsPanel } from "./RiskHyperoptParamsPanel";
 export { StrategyTemplatePreview } from "./StrategyTemplatePreview";
 export { RiskStagePanel } from "./RiskStagePanel";
 export { HyperoptResultCard } from "./results/HyperoptResultCard";

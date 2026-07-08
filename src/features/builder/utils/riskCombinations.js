@@ -1,3 +1,5 @@
+import { RISK_HYPEROPT_PARAM_DEFS, riskHyperoptParamGrid } from "../../../constants/risk";
+
 /**
  * Count grid values for a single min/max/step range (inclusive).
  */
@@ -7,6 +9,23 @@ export function countRangeValues(min, max, step) {
   }
   if (min > max) return 0;
   return Math.floor((max - min) / step + 1e-9) + 1;
+}
+
+/**
+ * Product of combination counts for value + step risk hyperopt params.
+ * @param {Record<string, number>} params
+ */
+export function countRiskHyperoptParamCombinations(params) {
+  if (!params || typeof params !== "object") return 1;
+  let product = 1;
+  for (const def of RISK_HYPEROPT_PARAM_DEFS) {
+    const grid = riskHyperoptParamGrid(def, params);
+    if (!grid) return 0;
+    const n = countRangeValues(grid.min, grid.max, grid.step);
+    if (n === 0) return 0;
+    product *= n;
+  }
+  return product;
 }
 
 /**

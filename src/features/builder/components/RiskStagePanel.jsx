@@ -33,6 +33,7 @@ export const RiskStagePanel = memo(function RiskStagePanel({
   toggleSection,
   riskStoplossRanges,
   onRiskStoplossRangesChange,
+  riskHyperoptParams,
   signalIndicators,
   entryFormula,
   exitFormula,
@@ -62,6 +63,7 @@ export const RiskStagePanel = memo(function RiskStagePanel({
           entryFormula={entryFormula}
           exitFormula={exitFormula}
           riskRanges={riskStoplossRanges}
+          riskHyperoptParams={riskHyperoptParams}
           timeRange={timeRange}
         />
       </SectionShell>
