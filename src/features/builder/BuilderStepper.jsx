@@ -1,4 +1,4 @@
-﻿import React, { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+﻿import React, { memo, useCallback, useEffect, useId, useMemo, useRef, useState, Suspense, lazy } from 'react';
 import { createPortal } from 'react-dom';
 import { Blocks, FlaskConical } from 'lucide-react';
 import { useHyperoptResultsState } from './hooks/useHyperoptResultsState';
@@ -69,7 +69,13 @@ import { Logo, Badge, MoreIcon, EyeIcon, MenuIcon, ModalShell } from '../../comp
 import { BuilderSectionShell } from './layout/BuilderSectionShell';
 import { BuilderStepsSidebar } from '../../components/prod';
 import { TableViewIcon, CardViewIcon } from '../../components/shared';
-import { GenerateReportModal } from '../../components/report';
+import { LoadingFallback } from '../../components/common/LoadingFallback';
+
+const GenerateReportModal = lazy(() =>
+  import('../../components/report/GenerateReportModal').then((m) => ({
+    default: m.GenerateReportModal,
+  })),
+);
 import {
   HeatMapView,
   HeatMapConfigurator,
@@ -4047,15 +4053,16 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
       )}
       
       {showReportModal && (
-        <GenerateReportModal 
-          indicators={indicators}
-          onClose={() => setShowReportModal(false)} 
-          onGenerate={(config) => {
-            console.log('📊 Report generated:', config);
-            // TODO: Handle report generation
-            alert(`Report generated for ${config.indicator.name}`);
-          }} 
-        />
+        <Suspense fallback={<LoadingFallback />}>
+          <GenerateReportModal
+            indicators={indicators}
+            onClose={() => setShowReportModal(false)}
+            onGenerate={(config) => {
+              console.log('📊 Report generated:', config);
+              alert(`Report generated for ${config.indicator.name}`);
+            }}
+          />
+        </Suspense>
       )}
       {/* Formula Editor modal */}
       {showFormulaEditor && (

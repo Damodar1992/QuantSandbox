@@ -1,6 +1,7 @@
-﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState, Suspense, lazy } from "react";
 import { createPortal } from "react-dom";
 import { Blocks, FlaskConical } from "lucide-react";
+import { LoadingFallback } from "./components/common/LoadingFallback";
 import { cx, ui } from "./constants/ui";
 import { HeaderProd, TableViewIcon, CardViewIcon } from "./components/shared";
 import { getFeatureFlags, setFeatureFlag } from "./constants/featureFlags";
@@ -15,11 +16,21 @@ import { Logo, Badge, MoreIcon, EyeIcon, MenuIcon, ModalShell } from "./componen
 import { LoginScreen, ForgotPasswordModal } from "./components/auth";
 import { BuilderStepsSidebar } from "./components/prod";
 import { CreateStrategyModal, EditDescriptionModal, StrategyRow } from "./components/strategies";
-import { GenerateReportModal } from "./components/report";
 import { UserActionsMenu, CreateUserModal, EditUserModal, ChangePasswordModal, ResetPasswordModal } from "./components/users";
 import { IndicatorActionsMenu, AddIndicatorPageModal } from "./components/indicators";
-import { MiniBacktestModal, MiniBacktestGlobalPage, MiniBacktestPage } from "./features/builder/components";
+import { MiniBacktestGlobalPage, MiniBacktestPage } from "./features/builder/components";
 import { FormulaActionsMenu } from "./components/formulas";
+
+const MiniBacktestModal = lazy(() =>
+  import("./features/builder/components/results/MiniBacktestModal").then((m) => ({
+    default: m.MiniBacktestModal,
+  })),
+);
+const GenerateReportModalLazy = lazy(() =>
+  import("./components/report/GenerateReportModal").then((m) => ({
+    default: m.GenerateReportModal,
+  })),
+);
 import {
   FORMULA_MODAL_VARIABLES,
   FORMULA_MODAL_FUNCTIONS,
@@ -1582,8 +1593,9 @@ export default function App() {
         </div>
       )}
 
-      {/* Mini Backtest Modal */}
+      {/* Mini Backtest Modal (lazy-loaded) */}
       {miniBacktestModalOpen && miniBacktestModalEpoch && (
+        <Suspense fallback={<LoadingFallback />}>
         <MiniBacktestModal
           epoch={miniBacktestModalEpoch}
           existingResult={
@@ -1608,6 +1620,7 @@ export default function App() {
           }}
           onSaveResult={handleSaveMiniBacktestResult}
         />
+        </Suspense>
       )}
 
       {miniBacktestTagsModalEntryId &&

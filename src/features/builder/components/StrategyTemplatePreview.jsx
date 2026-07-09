@@ -1,6 +1,10 @@
-import React, { memo, useMemo } from "react";
+import React, { memo, useMemo, Suspense, lazy } from "react";
 import { buildStrategyTemplatePreview } from "../../../utils/strategyTemplateCode";
-import { MonacoPythonEditor } from "./MonacoPythonEditor";
+import { LoadingFallback } from "../../../components/common/LoadingFallback";
+
+const MonacoPythonEditor = lazy(() =>
+  import("./MonacoPythonEditor").then((m) => ({ default: m.MonacoPythonEditor })),
+);
 
 export const StrategyTemplatePreview = memo(function StrategyTemplatePreview({
   signalIndicators,
@@ -23,5 +27,9 @@ export const StrategyTemplatePreview = memo(function StrategyTemplatePreview({
     [signalIndicators, entryFormula, exitFormula, riskRanges, riskHyperoptParams, timeRange],
   );
 
-  return <MonacoPythonEditor value={code} readOnly />;
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <MonacoPythonEditor value={code} readOnly />
+    </Suspense>
+  );
 });

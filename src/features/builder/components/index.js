@@ -20,7 +20,7 @@ export { HyperoptResultDrawer } from "./results/HyperoptResultDrawer";
 export { PostProcessingCard } from "./results/PostProcessingCard";
 export { HyperoptRunDetail } from "./results/HyperoptRunDetail";
 export { RunStatusBadge } from "./results/RunStatusBadge";
-export { MiniBacktestModal } from "./results/MiniBacktestModal";
+// MiniBacktestModal is lazy-loaded directly in App.jsx — not exported from barrel
 export { MiniBacktestPage } from "./results/MiniBacktestPage";
 export { MiniBacktestGlobalPage } from "./results/MiniBacktestGlobalPage";
 export { MiniBacktestRunDetail } from "./results/MiniBacktestRunDetail";
