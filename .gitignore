@@ -23,6 +23,9 @@ dist-ssr
 *.sln
 *.sw?
 
-# Graphify (local cost tracking only; graph artifacts are committable)
-graphify-out/cost.json
-graphify-out/cache/
+# Cursor debug logs (generated locally, not useful in source control)
+.cursor/*.log
+
+# Graphify — generated locally by `graphify update .` / `npm run graphify:view`
+# Do not commit; regenerate with `npx graphify update .` in the project root.
+graphify-out/
