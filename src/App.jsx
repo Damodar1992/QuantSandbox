@@ -1,4 +1,5 @@
 import React, { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useHyperoptResultsState } from "./features/builder/hooks/useHyperoptResultsState";
 import { createPortal } from "react-dom";
 import Editor from "@monaco-editor/react";
 import { Blocks, FlaskConical } from "lucide-react";
@@ -984,52 +985,24 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
     tEndTrunc: "",
     foldSize: "12",
   });
-  const [normalizationDetailsExpanded, setNormalizationDetailsExpanded] = useState(() => new Set());
-  const toggleNormalizationDetails = useCallback((id) => {
-    setNormalizationDetailsExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
-  
+  const {
+    normalizationDetailsExpanded,
+    toggleNormalizationDetails,
+    normModalCollapsedSections,
+    toggleNormModalSection,
+    hyperoptResultsExpanded,
+    toggleHyperoptRow,
+    hyperoptLevel3Expanded,
+    toggleHyperoptLevel3,
+  } = useHyperoptResultsState();
+
   // Report Modal state
   const [showReportModal, setShowReportModal] = useState(false);
   // Hyperopt Results: Run normalization modal (same content as Normalization formulas block)
   const [showNormalizationModal, setShowNormalizationModal] = useState(false);
-  const [normModalCollapsedSections, setNormModalCollapsedSections] = useState(() => new Set());
-  const toggleNormModalSection = useCallback((key) => {
-    setNormModalCollapsedSections((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }, []);
   const [showHyperoptDetailsModal, setShowHyperoptDetailsModal] = useState(false);
   const [hyperoptDetailsModalType, setHyperoptDetailsModalType] = useState("post-processing");
   const [heatmapItemFiltersModalItem, setHeatmapItemFiltersModalItem] = useState(null);
-  // Hyperopt Results: which level-1 rows are expanded (collapse/expand)
-  const [hyperoptResultsExpanded, setHyperoptResultsExpanded] = useState(() => new Set(["hr1", "hr2"]));
-  const toggleHyperoptRow = useCallback((id) => {
-    setHyperoptResultsExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
-  // Level 3 (HeatMaps & Reports) expanded per level-2 row id
-  const [hyperoptLevel3Expanded, setHyperoptLevel3Expanded] = useState(() => new Set(["hr1-1", "hr1-2"]));
-  const toggleHyperoptLevel3 = useCallback((id) => {
-    setHyperoptLevel3Expanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
   // Hyperopt Results three-level table data (level 1: runs; level 2: normalization results; level 3: HeatMaps & Reports)
   const [hyperoptCommentModalRowId, setHyperoptCommentModalRowId] = useState(null);
   const [hyperoptCommentDraft, setHyperoptCommentDraft] = useState({ comment: "" });
