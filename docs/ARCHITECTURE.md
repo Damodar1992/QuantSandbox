@@ -23,7 +23,12 @@ flowchart TB
   components --> constants
 ```
 
-- **`App.jsx`** — корневой layout, переключение экранов (логин / основное приложение), большая часть состояния Strategy Builder и Hyperopt, вложенные таблицы результатов. В `BuilderStepper` секции стратегии (Signal / Entry / Exit) нумеруются **1–6** и сворачиваются через `collapsedSections`: (1) Indicators, (2) Signal/Entry/Exit formula, (3) Indicator Ranges, (4) Hyperoptimization Parameters, (5) Optimization Results, (6) Favorite Epochs (бывшие Best scores).
+- **`App.jsx`** (~1650 строк) — shell: auth/login, навигация (Strategies / Mini Backtest / Settings / Users), routing между секциями, глобальные модалки (Mini Backtest, Report, Version Tree), тэги/hyperopt-rows, Mini Backtest results. Монтирует `BuilderStepper`.
+- **`features/builder/BuilderStepper.jsx`** (~5300 строк) — основной компонент конструктора. Секции стратегии (Signal / Entry / Exit / Risk) нумеруются **1–6** и сворачиваются через `useCollapsedSections()`: (1) Indicators, (2) Signal/Entry/Exit formula, (3) Indicator Ranges, (4) Hyperoptimization Parameters, (5) Optimization Results, (6) Favorite Epochs.
+- **`features/builder/hooks/`** — доменные хуки, вынесенные из `BuilderStepper`:
+  - `useHyperoptResultsState` — expand/collapse таблицы результатов (`hyperoptResultsExpanded`, `normalizationDetailsExpanded`, `hyperoptLevel3Expanded`, `normModalCollapsedSections`).
+  - `useCollapsedSections` — сворачивание секций конструктора.
+  - `useBuilderStageConfig` — per-stage hyperopt/market config (hyperoptType, exchange, tradingMode, syntheticDataset, maxPossibleStd, unknowTimeRange, foldSize).
 - **`features/builder`** — выносимые части конструктора: `FormulaEditor`, `IndicatorLibrary`, `IndicatorRangesPanel`, модалки add/edit indicator, `TableBasedEditor`, и т.д.
 - **`features/versioning`** — UI-мок иерархии версий стейджей (Signal→Final): dropdown на табах `BuilderStepper`, модалка дерева; данные в `constants/mockStageVersionTree.js`, логика фильтрации в `features/versioning/utils/versionSelection.js`.
 - **`components/*`** — доменные блоки (auth, heatmap, strategies, users, indicators, report, shared).
@@ -41,7 +46,7 @@ flowchart TB
 | Версии стейджей (lineage-дерево) | `src/constants/versioning.js`, `src/constants/mockStageVersionTree.js` |
 | Общий хук | `src/hooks/` |
 
-Не вводить новый глобальный state-manager без явной задачи: по умолчанию `useState` / `useMemo` / `useCallback` в `App.jsx` или в дочерних компонентах.
+Не вводить новый глобальный state-manager без явной задачи: по умолчанию `useState` / `useMemo` / `useCallback` в `BuilderStepper.jsx` или доменных хуках в `features/builder/hooks/`. Общий доменный хук → `src/hooks/`.
 
 ## Стили и UI-примитивы
 
@@ -63,15 +68,12 @@ flowchart TB
 
 ## Hyperopt / Post-processing (ориентиры по состоянию)
 
-Состояние задаётся в **`App.jsx`** (имена могут слегка меняться — проверяйте файл).
+Состояние распределено между `BuilderStepper.jsx` и вынесенными хуками.
 
-- **`hyperoptRun`** — `"Pipeline"` | `"Admin run"`: влияет на видимость блока Post-processing в параметрах и кнопки Post-processing в таблице результатов.
-- **`hyperoptType`** — `"BIAS"` | `"Brute Force"`: блок **Intermediate formula** скрыт только при Brute Force; блок **Post-processing** в параметрах не зависит от типа (остаётся видимым при Brute Force, если выбран Pipeline для Hyperopt run).
-- **`hyperoptResultsExpanded`** — какие строки верхнего уровня таблицы Hyperopt развёрнуты (`Set` id строк).
-- **`normalizationDetailsExpanded`** — раскрытие строки уровня «Data period» / post-processing result (ключи вида `normKey` в разметке).
-- **`hyperoptLevel3Expanded`** — раскрытие строк «trunk» / вложенного уровня с HeatMaps & Reports (`Set` ключей `level3Key`).
-- **`normModalCollapsedSections`** — сворачивание секций в модалке нормализации (stability / score).
-- Отдельные наборы состояний для **Signal vs Entry** (префиксы `signal*` / `entry*`, переключение через `isEntryStage`).
+- **`hyperoptRun`** — `"Pipeline"` | `"Admin run"`: в `BuilderStepper`; влияет на видимость Post-processing блока.
+- **`hyperoptType`** — per-stage через `useBuilderStageConfig`; `"BIAS"` | `"Brute Force"`: блок **Intermediate formula** скрыт только при Brute Force.
+- **`hyperoptResultsExpanded`**, **`normalizationDetailsExpanded`**, **`hyperoptLevel3Expanded`**, **`normModalCollapsedSections`** — управляются `useHyperoptResultsState` (`features/builder/hooks/useHyperoptResultsState.js`).
+- Per-stage market config (exchange, tradingMode, syntheticDataset, maxPossibleStd, unknowTimeRange, foldSize) — `useBuilderStageConfig` (`features/builder/hooks/useBuilderStageState.js`).
 
 При добавлении колонок или уровней вложенности таблиц — синхронизировать **`colSpan`** в `<td>` развёрнутых строк.
 
