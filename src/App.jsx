@@ -6282,7 +6282,6 @@ export default function App() {
     setLoggedIn(false);
     setSelected(null);
     setActiveSection("Strategies");
-    setExpandedStrategies(new Set());
   }, []);
 
   if (!loggedIn) {

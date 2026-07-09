@@ -49,7 +49,7 @@ export function layoutVersionForest(forest) {
     let leafCounter = 0;
 
     /** @param {LayoutTreeNode} node @param {number} depth @param {PositionedNode|null} parent */
-    function layout(node, depth, parent) {
+    const layout = (node, depth, parent) => {
       const children = node.children ?? [];
       const childResults =
         children.length > 0
