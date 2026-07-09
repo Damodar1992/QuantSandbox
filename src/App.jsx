@@ -1,5 +1,6 @@
 import React, { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useHyperoptResultsState } from "./features/builder/hooks/useHyperoptResultsState";
+import { useCollapsedSections, useBuilderStageConfig } from "./features/builder/hooks/useBuilderStageState";
 import { createPortal } from "react-dom";
 import Editor from "@monaco-editor/react";
 import { Blocks, FlaskConical } from "lucide-react";
@@ -272,121 +273,19 @@ const BuilderStepper = memo(function BuilderStepper({
   // Hyperoptimization progress
   const [isRunningOptimization, setIsRunningOptimization] = useState(false);
   const [optimizationProgress, setOptimizationProgress] = useState(0);
-  // Technical params (Market / Technical blocks)
-  const [signalMaxPossibleStd, setSignalMaxPossibleStd] = useState("");
-  const [entryMaxPossibleStd, setEntryMaxPossibleStd] = useState("");
-  const [exitMaxPossibleStd, setExitMaxPossibleStd] = useState("");
-  const [signalUnknowTimeRangeStart, setSignalUnknowTimeRangeStart] = useState("");
-  const [signalUnknowTimeRangeEnd, setSignalUnknowTimeRangeEnd] = useState("");
-  const [entryUnknowTimeRangeStart, setEntryUnknowTimeRangeStart] = useState("");
-  const [entryUnknowTimeRangeEnd, setEntryUnknowTimeRangeEnd] = useState("");
-  const [exitUnknowTimeRangeStart, setExitUnknowTimeRangeStart] = useState("");
-  const [exitUnknowTimeRangeEnd, setExitUnknowTimeRangeEnd] = useState("");
-  const [signalHyperoptType, setSignalHyperoptType] = useState("Brute Force");
-  const [entryHyperoptType, setEntryHyperoptType] = useState("Brute Force");
-  const [exitHyperoptType, setExitHyperoptType] = useState("Brute Force");
-  const [signalExchange, setSignalExchange] = useState("binance");
-  const [entryExchange, setEntryExchange] = useState("binance");
-  const [exitExchange, setExitExchange] = useState("binance");
-  const [signalTradingMode, setSignalTradingMode] = useState("futures");
-  const [entryTradingMode, setEntryTradingMode] = useState("futures");
-  const [exitTradingMode, setExitTradingMode] = useState("futures");
-  const [riskMaxPossibleStd, setRiskMaxPossibleStd] = useState("");
-  const [riskUnknowTimeRangeStart, setRiskUnknowTimeRangeStart] = useState("");
-  const [riskUnknowTimeRangeEnd, setRiskUnknowTimeRangeEnd] = useState("");
-  const [riskHyperoptType, setRiskHyperoptType] = useState("Brute Force");
-  const [riskExchange, setRiskExchange] = useState("binance");
-  const [riskTradingMode, setRiskTradingMode] = useState("futures");
-  const [signalSyntheticDataset, setSignalSyntheticDataset] = useState("dataset1");
-  const [entrySyntheticDataset, setEntrySyntheticDataset] = useState("dataset1");
-  const [exitSyntheticDataset, setExitSyntheticDataset] = useState("dataset1");
-  const [riskSyntheticDataset, setRiskSyntheticDataset] = useState("dataset1");
-  const [signalFoldSize, setSignalFoldSize] = useState("");
-  const [includeIncompleteFold, setIncludeIncompleteFold] = useState(false);
-  const maxPossibleStd = pickByStage(activeStage, {
-    signal: signalMaxPossibleStd,
-    entry: entryMaxPossibleStd,
-    exit: exitMaxPossibleStd,
-    risk: riskMaxPossibleStd,
-  });
-  const setMaxPossibleStd = pickByStage(activeStage, {
-    signal: setSignalMaxPossibleStd,
-    entry: setEntryMaxPossibleStd,
-    exit: setExitMaxPossibleStd,
-    risk: setRiskMaxPossibleStd,
-  });
-  const unknowTimeRangeStart = pickByStage(activeStage, {
-    signal: signalUnknowTimeRangeStart,
-    entry: entryUnknowTimeRangeStart,
-    exit: exitUnknowTimeRangeStart,
-    risk: riskUnknowTimeRangeStart,
-  });
-  const setUnknowTimeRangeStart = pickByStage(activeStage, {
-    signal: setSignalUnknowTimeRangeStart,
-    entry: setEntryUnknowTimeRangeStart,
-    exit: setExitUnknowTimeRangeStart,
-    risk: setRiskUnknowTimeRangeStart,
-  });
-  const unknowTimeRangeEnd = pickByStage(activeStage, {
-    signal: signalUnknowTimeRangeEnd,
-    entry: entryUnknowTimeRangeEnd,
-    exit: exitUnknowTimeRangeEnd,
-    risk: riskUnknowTimeRangeEnd,
-  });
-  const setUnknowTimeRangeEnd = pickByStage(activeStage, {
-    signal: setSignalUnknowTimeRangeEnd,
-    entry: setEntryUnknowTimeRangeEnd,
-    exit: setExitUnknowTimeRangeEnd,
-    risk: setRiskUnknowTimeRangeEnd,
-  });
-  const hyperoptType = pickByStage(activeStage, {
-    signal: signalHyperoptType,
-    entry: entryHyperoptType,
-    exit: exitHyperoptType,
-    risk: riskHyperoptType,
-  });
-  const setHyperoptType = pickByStage(activeStage, {
-    signal: setSignalHyperoptType,
-    entry: setEntryHyperoptType,
-    exit: setExitHyperoptType,
-    risk: setRiskHyperoptType,
-  });
-  const exchange = pickByStage(activeStage, {
-    signal: signalExchange,
-    entry: entryExchange,
-    exit: exitExchange,
-    risk: riskExchange,
-  });
-  const setExchange = pickByStage(activeStage, {
-    signal: setSignalExchange,
-    entry: setEntryExchange,
-    exit: setExitExchange,
-    risk: setRiskExchange,
-  });
-  const tradingMode = pickByStage(activeStage, {
-    signal: signalTradingMode,
-    entry: entryTradingMode,
-    exit: exitTradingMode,
-    risk: riskTradingMode,
-  });
-  const setTradingMode = pickByStage(activeStage, {
-    signal: setSignalTradingMode,
-    entry: setEntryTradingMode,
-    exit: setExitTradingMode,
-    risk: setRiskTradingMode,
-  });
-  const syntheticDataset = pickByStage(activeStage, {
-    signal: signalSyntheticDataset,
-    entry: entrySyntheticDataset,
-    exit: exitSyntheticDataset,
-    risk: riskSyntheticDataset,
-  });
-  const setSyntheticDataset = pickByStage(activeStage, {
-    signal: setSignalSyntheticDataset,
-    entry: setEntrySyntheticDataset,
-    exit: setExitSyntheticDataset,
-    risk: setRiskSyntheticDataset,
-  });
+  // Per-stage hyperopt / market config
+  const {
+    hyperoptType, setHyperoptType,
+    exchange, setExchange,
+    tradingMode, setTradingMode,
+    syntheticDataset, setSyntheticDataset,
+    maxPossibleStd, setMaxPossibleStd,
+    unknowTimeRangeStart, setUnknowTimeRangeStart,
+    unknowTimeRangeEnd, setUnknowTimeRangeEnd,
+    signalFoldSize, setSignalFoldSize,
+    includeIncompleteFold, setIncludeIncompleteFold,
+    signalHyperoptType, entryHyperoptType, exitHyperoptType, riskHyperoptType,
+  } = useBuilderStageConfig(activeStage);
   const isSyntheticExchange = exchange === "synthetic";
   const syntheticDatasetPair = syntheticDataset === "dataset2" ? "ETC/USDT" : "BTC/USDT";
   useEffect(() => {
@@ -1141,15 +1040,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
   }, [isSignalStage, remainingCandles]);
   
   // Collapsed sections in Strategy Builder (1–5)
-  const [collapsedSections, setCollapsedSections] = useState(() => new Set());
-  const toggleSection = useCallback((num) => {
-    setCollapsedSections((prev) => {
-      const next = new Set(prev);
-      if (next.has(num)) next.delete(num);
-      else next.add(num);
-      return next;
-    });
-  }, []);
+  const { collapsedSections, toggleSection } = useCollapsedSections();
   // Collapsed subsections inside Normalization formulas (intermediate / final)
   const [collapsedNormSections, setCollapsedNormSections] = useState(() => new Set());
   const toggleNormSection = useCallback((key) => {
