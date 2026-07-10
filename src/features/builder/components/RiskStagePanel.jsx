@@ -1,32 +1,9 @@
-import React, { memo } from "react";
-import { cx, ui } from "../../../constants/ui";
+import React, { memo, useMemo } from "react";
+import { BuilderSectionShell } from "../layout/BuilderSectionShell";
 import { RiskStoplossPanel } from "./RiskStoplossPanel";
 import { StrategyTemplatePreview } from "./StrategyTemplatePreview";
-
-function SectionShell({ title, subtitle, sectionNum, collapsed, onToggle, children }) {
-  return (
-    <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
-      <button
-        type="button"
-        onClick={() => onToggle(sectionNum)}
-        className={cx(
-          "w-full px-3 py-2 flex items-center justify-between gap-2 text-left",
-          ui.panelMuted,
-          "border-0 border-b",
-          ui.divider,
-          "hover:bg-[#1a1a1a] transition-colors",
-        )}
-      >
-        <div>
-          <div className="text-[12px] font-medium text-[#d9d9d9]">{title}</div>
-          {subtitle && <div className={cx("text-[11px]", ui.textMuted)}>{subtitle}</div>}
-        </div>
-        <span className="text-[#8c8c8c] text-[10px]">{collapsed ? "▶" : "▼"}</span>
-      </button>
-      {!collapsed && <div className="p-3">{children}</div>}
-    </div>
-  );
-}
+import { TotalCombinationsBadge } from "./IndicatorRangesPanel";
+import { countRiskCombinations } from "../utils/riskCombinations";
 
 export const RiskStagePanel = memo(function RiskStagePanel({
   collapsedSections,
@@ -39,24 +16,30 @@ export const RiskStagePanel = memo(function RiskStagePanel({
   exitFormula,
   timeRange,
 }) {
+  const stoplossCombinations = useMemo(
+    () => countRiskCombinations(riskStoplossRanges),
+    [riskStoplossRanges],
+  );
+
   return (
     <>
-      <SectionShell
-        title="1. Stoplosses"
-        subtitle="Min, max, and step for stoploss hyperopt grid"
+      <BuilderSectionShell
         sectionNum={1}
+        title="Stoplosses"
+        subtitle="Min, max, and step for stoploss hyperopt grid"
         collapsed={collapsedSections.has(1)}
-        onToggle={toggleSection}
+        onToggle={() => toggleSection(1)}
+        headerRight={<TotalCombinationsBadge totalCombinations={stoplossCombinations} />}
       >
         <RiskStoplossPanel ranges={riskStoplossRanges} onChange={onRiskStoplossRangesChange} />
-      </SectionShell>
+      </BuilderSectionShell>
 
-      <SectionShell
-        title="2. Formula"
-        subtitle="Read-only preview: Stages 1–3 + risk parameters"
+      <BuilderSectionShell
         sectionNum={2}
+        title="Formula"
+        subtitle="Read-only preview: Stages 1–3 + risk parameters"
         collapsed={collapsedSections.has(2)}
-        onToggle={toggleSection}
+        onToggle={() => toggleSection(2)}
       >
         <StrategyTemplatePreview
           signalIndicators={signalIndicators}
@@ -66,7 +49,7 @@ export const RiskStagePanel = memo(function RiskStagePanel({
           riskHyperoptParams={riskHyperoptParams}
           timeRange={timeRange}
         />
-      </SectionShell>
+      </BuilderSectionShell>
     </>
   );
 });
