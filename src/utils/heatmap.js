@@ -1,4 +1,5 @@
 const HEATMAP_MAX_SIZE = 15;
+export const HEATMAP_GRID_SIZE = 25;
 
 export function clamp(v, a = 0, b = 1) {
   return Math.max(a, Math.min(b, v));
@@ -70,11 +71,9 @@ export function buildHeatMap(items, config, zoomRanges = null) {
   const N = filtered.length;
   if (N === 0) return null;
 
-  const desiredMin = 9;
-  const desiredMax = Math.min(HEATMAP_MAX_SIZE, 13);
-  const base = Math.round(clamp(Math.sqrt(Math.max(N, 1)) / 6, 0, 1) * (desiredMax - desiredMin) + desiredMin);
-  const X = clamp(base, desiredMin, desiredMax);
-  const Y = clamp(base, desiredMin, desiredMax);
+  const gridSize = config.gridSize ?? HEATMAP_GRID_SIZE;
+  const X = gridSize;
+  const Y = gridSize;
 
   const allKeys = [...new Set([...xParams, ...yParams])];
   const ranges = computeRanges(filtered, allKeys);

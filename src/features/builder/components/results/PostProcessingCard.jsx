@@ -3,7 +3,8 @@ import { cx, ui } from "../../../../constants/ui";
 import { crmAccent, crmSurface } from "../../../../constants/crmAccent";
 import { HyperoptDetailsTooltip } from "../../../../components/heatmap";
 import { AppButton } from "../../../../components/common/AppButton";
-import { HeatMapIcon, FileTextIcon, DownloadIcon } from "../../../../components/shared";
+import { HeatMapIcon, FileTextIcon } from "../../../../components/shared";
+import { HeatmapReportItemActions } from "./HeatmapReportItemActions";
 import { RunStatusBadge } from "./RunStatusBadge";
 import { PostProcessingEpochMenu } from "./PostProcessingEpochMenu";
 
@@ -18,7 +19,6 @@ function HeatMapsReportsPanel({
   onDownloadReport,
   onShowItemFilters,
   className,
-  infoLabel = "Info",
 }) {
   const [collapsed, setCollapsed] = useState(false);
 
@@ -57,37 +57,13 @@ function HeatMapsReportsPanel({
                 </span>
                 <RunStatusBadge status={item.status || "Finished"} />
               </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <HyperoptDetailsTooltip
-                  title="Filters (read-only)"
-                  ariaLabel="Show filters snapshot"
-                  label={infoLabel}
-                  onShowDetails={() => onShowItemFilters?.(item)}
-                />
-                {item.type === "Heatmap" ? (
-                  <AppButton
-                    type="button"
-                    variant="outline"
-                    size="icon-xs"
-                    onClick={() => onShowHeatmap?.(heatMapId)}
-                    title="Show heatmap"
-                    aria-label="Show heatmap"
-                  >
-                    <HeatMapIcon className="h-3.5 w-3.5 shrink-0" />
-                  </AppButton>
-                ) : (
-                  <AppButton
-                    type="button"
-                    variant="outline"
-                    size="icon-xs"
-                    onClick={() => onDownloadReport?.()}
-                    title="Download report"
-                    aria-label="Download report"
-                  >
-                    <DownloadIcon className="h-3.5 w-3.5 shrink-0" />
-                  </AppButton>
-                )}
-              </div>
+              <HeatmapReportItemActions
+                item={item}
+                heatMapId={heatMapId}
+                onShowHeatmap={onShowHeatmap}
+                onDownloadReport={onDownloadReport}
+                onShowItemFilters={onShowItemFilters}
+              />
             </li>
           ))}
         </ul>
@@ -173,7 +149,6 @@ export const PostProcessingCard = memo(function PostProcessingCard({
             onShowHeatmap={onShowHeatmap}
             onDownloadReport={onDownloadReport}
             onShowItemFilters={onShowItemFilters}
-            infoLabel="Filters info"
           />
 
           <div className="flex flex-wrap items-center gap-2">
@@ -231,7 +206,6 @@ export const PostProcessingCard = memo(function PostProcessingCard({
                     onDownloadReport={onDownloadReport}
                     onShowItemFilters={onShowItemFilters}
                     className="mx-2.5 mb-2"
-                    infoLabel="Filters info"
                   />
                 </>
               )}

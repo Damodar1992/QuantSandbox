@@ -1,4 +1,5 @@
 import React, { memo } from "react";
+import { Star } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,12 +14,24 @@ export const PostProcessingEpochMenu = memo(function PostProcessingEpochMenu({
   onRunMiniBacktest,
   miniBacktestEnabled = false,
   useLegacyBtn = false,
+  iconOnly = false,
   className,
 }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        {useLegacyBtn ? (
+        {iconOnly ? (
+          <AppButton
+            type="button"
+            variant="outline"
+            size="icon-xs"
+            title="Epochs"
+            aria-label="Epochs"
+            className={className}
+          >
+            <Star className="h-3.5 w-3.5 shrink-0" />
+          </AppButton>
+        ) : useLegacyBtn ? (
           <button type="button" className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap", className)}>
             Epochs ▾
           </button>

@@ -17,6 +17,7 @@ export function countRangeValues(min, max, step) {
  */
 export function countRiskHyperoptParamCombinations(params) {
   if (!params || typeof params !== "object") return 1;
+  if (!params.loss_streak_cooldown_enabled) return 1;
   let product = 1;
   for (const def of RISK_HYPEROPT_PARAM_DEFS) {
     const grid = riskHyperoptParamGrid(def, params);

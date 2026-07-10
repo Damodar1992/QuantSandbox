@@ -54,6 +54,7 @@ export const RISK_HYPEROPT_PARAM_DEFS = [
 ];
 
 export const DEFAULT_RISK_HYPEROPT_PARAMS = {
+  loss_streak_cooldown_enabled: false,
   loss_streak_threshold: 5,
   loss_streak_threshold_step: 1,
   post_loss_cooldown_candles: 3,

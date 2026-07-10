@@ -1,5 +1,5 @@
 export { StageVersionSelect, ADD_NEW_VERSION_VALUE } from "./components/StageVersionSelect";
-export { StageVersionCommentButton } from "./components/StageVersionCommentButton";
+export { StageVersionActionsMenu } from "./components/StageVersionActionsMenu";
 export { StageVersionCommentModal } from "./components/StageVersionCommentModal";
 export { StageVersionFlowTree } from "./components/StageVersionFlowTree";
 export { StageVersionTreeModal } from "./components/StageVersionTreeModal";

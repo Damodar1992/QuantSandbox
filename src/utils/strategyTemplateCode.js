@@ -27,16 +27,19 @@ function formatRiskParametersDict(ranges, hyperoptParams) {
     lines.push(`            "step": ${r.step},`);
     lines.push(`        },`);
   }
-  for (const def of RISK_HYPEROPT_PARAM_DEFS) {
-    const grid = riskHyperoptParamGrid(def, hyperoptParams);
-    if (!grid) continue;
-    const defaultVal = hyperoptParams?.[def.valueKey];
-    lines.push(`        "${def.valueKey}": {`);
-    lines.push(`            "default": ${defaultVal},`);
-    lines.push(`            "min": ${grid.min},`);
-    lines.push(`            "max": ${grid.max},`);
-    lines.push(`            "step": ${grid.step},`);
-    lines.push(`        },`);
+  lines.push(`        "loss_streak_cooldown_enabled": ${!!hyperoptParams?.loss_streak_cooldown_enabled},`);
+  if (hyperoptParams?.loss_streak_cooldown_enabled) {
+    for (const def of RISK_HYPEROPT_PARAM_DEFS) {
+      const grid = riskHyperoptParamGrid(def, hyperoptParams);
+      if (!grid) continue;
+      const defaultVal = hyperoptParams?.[def.valueKey];
+      lines.push(`        "${def.valueKey}": {`);
+      lines.push(`            "default": ${defaultVal},`);
+      lines.push(`            "min": ${grid.min},`);
+      lines.push(`            "max": ${grid.max},`);
+      lines.push(`            "step": ${grid.step},`);
+      lines.push(`        },`);
+    }
   }
   lines.push("    }");
   return lines.join("\n");

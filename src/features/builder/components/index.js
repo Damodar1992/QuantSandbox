@@ -34,4 +34,7 @@ export { MiniBacktestExportButton } from "./results/MiniBacktestExportButton";
 export { MiniBacktestFormulaReference, FORMULA_REF } from "./results/MiniBacktestFormulaReference";
 export { BestEpochsModal } from "./results/BestEpochsModal";
 export { PostProcessingEpochMenu } from "./results/PostProcessingEpochMenu";
+export { PostProcessingAnalyticsMenu } from "./results/PostProcessingAnalyticsMenu";
+export { PostProcessingTableActions } from "./results/PostProcessingTableActions";
+export { HeatmapReportItemActions } from "./results/HeatmapReportItemActions";
 export { MiniBacktestSummaryTable } from "./results/MiniBacktestSummaryTable";

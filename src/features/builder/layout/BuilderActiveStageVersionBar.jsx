@@ -1,7 +1,7 @@
 import React, { memo } from "react";
 import { cx, ui } from "@/constants/ui";
 import { ProdButton } from "@/components/prod/ProdButton";
-import { StageVersionSelect, StageVersionCommentButton } from "@/features/versioning";
+import { StageVersionSelect, StageVersionActionsMenu } from "@/features/versioning";
 
 export const BuilderActiveStageVersionBar = memo(function BuilderActiveStageVersionBar({
   activeStageMeta,
@@ -9,6 +9,8 @@ export const BuilderActiveStageVersionBar = memo(function BuilderActiveStageVers
   onStageVersionChange,
   onAddNewStageVersion,
   onOpenVersionComment,
+  onDeleteVersionComment,
+  onArchiveStageVersion,
   onOpenVersionTree,
   versionBreadcrumb,
 }) {
@@ -27,10 +29,14 @@ export const BuilderActiveStageVersionBar = memo(function BuilderActiveStageVers
           onAddNewVersion={() => onAddNewStageVersion(meta.stageType)}
           className="w-[5.5rem]"
         />
-        <StageVersionCommentButton
-          disabled={meta.versionDisabled || !selectedVersionByStage[meta.stageType]}
+        <StageVersionActionsMenu
+          disabled={meta.versionDisabled}
+          hasSelectedVersion={Boolean(selectedVersionByStage[meta.stageType])}
           hasComment={meta.hasComment}
-          onClick={() => onOpenVersionComment(meta.stageType)}
+          onNewVersion={() => onAddNewStageVersion(meta.stageType)}
+          onEditComment={() => onOpenVersionComment(meta.stageType)}
+          onDeleteComment={() => onDeleteVersionComment(meta.stageType)}
+          onArchiveVersion={() => onArchiveStageVersion(meta.stageType)}
         />
         <ProdButton variant="outline" size="sm" onClick={onOpenVersionTree}>
           Version tree

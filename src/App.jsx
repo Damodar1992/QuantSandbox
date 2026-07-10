@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo, useRef, useState, Suspense, lazy } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState, Suspense, lazy } from "react";
 import { createPortal } from "react-dom";
 import { Blocks, FlaskConical } from "lucide-react";
 import { LoadingFallback } from "./components/common/LoadingFallback";
@@ -51,7 +51,6 @@ import {
 } from "./constants/versioning";
 import {
   StageVersionSelect,
-  StageVersionCommentButton,
   StageVersionCommentModal,
   StageVersionTreeModal,
   createDefaultVersionSelection,
@@ -412,6 +411,15 @@ export default function App() {
       return { ...prev, [versionId]: trimmed };
     });
     setVersionCommentTarget(null);
+  }, []);
+
+  const handleDeleteVersionComment = useCallback((versionId) => {
+    setVersionComments((prev) => {
+      if (!prev[versionId]) return prev;
+      const next = { ...prev };
+      delete next[versionId];
+      return next;
+    });
   }, []);
 
   // Filters
@@ -1124,6 +1132,7 @@ export default function App() {
                 onHyperoptRunChange={setBuilderHyperoptRun}
               versionComments={versionComments}
               onOpenVersionComment={handleOpenVersionComment}
+              onDeleteVersionComment={handleDeleteVersionComment}
               miniBacktestEnabled={miniBacktestEnabled}
               onMiniBacktestEnabledChange={(v) => {
                 const value = typeof v === "function" ? v(miniBacktestEnabled) : v;

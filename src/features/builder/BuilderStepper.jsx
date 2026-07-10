@@ -1,6 +1,6 @@
 ﻿import React, { memo, useCallback, useEffect, useId, useMemo, useRef, useState, Suspense, lazy } from 'react';
 import { createPortal } from 'react-dom';
-import { Blocks, FlaskConical } from 'lucide-react';
+import { Blocks, FlaskConical, Workflow, Tag, Pencil } from 'lucide-react';
 import { useHyperoptResultsState } from './hooks/useHyperoptResultsState';
 import { useCollapsedSections, useBuilderStageConfig } from './hooks/useBuilderStageState';
 import { cx, ui } from '../../constants/ui';
@@ -66,9 +66,10 @@ import { generatePythonCode } from '../../utils/pythonCode';
 import { generateMockResults } from '../../utils/mockResults';
 import { useOutsideClose } from '../../hooks/useOutsideClose';
 import { Logo, Badge, MoreIcon, EyeIcon, MenuIcon, ModalShell } from '../../components/common';
+import { AppButton } from '../../components/common/AppButton';
 import { BuilderSectionShell } from './layout/BuilderSectionShell';
 import { BuilderStepsSidebar } from '../../components/prod';
-import { TableViewIcon, CardViewIcon } from '../../components/shared';
+import { TableViewIcon, CardViewIcon, TrashIcon } from '../../components/shared';
 import { LoadingFallback } from '../../components/common/LoadingFallback';
 
 const GenerateReportModal = lazy(() =>
@@ -106,7 +107,8 @@ import {
   RunStatusBadge,
   MiniBacktestPage,
   BestEpochsModal,
-  PostProcessingEpochMenu,
+  PostProcessingTableActions,
+  HeatmapReportItemActions,
 } from './components';
 import { getDefaultDisplayName, formatIndicatorSnapshot } from './utils/indicatorHelpers';
 import { formatHyperoptDateTime, normalizeHyperoptRunStatus } from './utils/hyperoptFormatters';
@@ -116,7 +118,6 @@ import { dedupeMiniBacktestResultIds } from './utils/miniBacktestEngine';
 import { buildMiniBacktestLaunchContext } from './utils/miniBacktestDisplay';
 import {
   StageVersionSelect,
-  StageVersionCommentButton,
   StageVersionCommentModal,
   StageVersionTreeModal,
   createDefaultVersionSelection,
@@ -152,6 +153,7 @@ export const BuilderStepper = memo(function BuilderStepper({
   onHyperoptRunChange,
   versionComments = {},
   onOpenVersionComment,
+  onDeleteVersionComment,
   miniBacktestEnabled = false,
   onMiniBacktestEnabledChange,
   miniBacktestResults = [],
@@ -1131,23 +1133,6 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
     });
   }, [activeStage, isRiskStage, signalIndicators, entryIndicators, exitIndicators, hyperoptResultsRows]);
 
-  const handleApplyHeatMapFilters = useCallback(
-    ({ filters, filterPreset }) => {
-      setGeneratedHeatMap((prev) => {
-        if (!prev) return prev;
-        const config = { ...prev.config, filters, filterPreset };
-        try {
-          const fullResults = generateMockResults(config, prev.runId);
-          return { ...prev, config, fullResults, zoomStack: [] };
-        } catch (err) {
-          console.error("HeatMap filter apply failed:", err);
-          return prev;
-        }
-      });
-    },
-    [],
-  );
-
   const handleHeatMapCellClick = useCallback(
     (cell, runId) => {
       if (!cell || !cell.count) return;
@@ -1245,6 +1230,16 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
     },
     [generatedHeatMap?.zoomStack, generatedHeatMap?.config?.heatmapVariant, isEntryStage, setBestCandidates, activeStage],
   );
+
+  const handleApplyHeatMapFilters = useCallback(({ filterRoot, filterPreset }) => {
+    setGeneratedHeatMap((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        config: { ...prev.config, filters: filterRoot, filterPreset },
+      };
+    });
+  }, []);
 
   const handleHeatMapZoomOut = useCallback((runId) => {
     setGeneratedHeatMap((prev) => {
@@ -1421,6 +1416,10 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
     },
     [setBestCandidates],
   );
+
+  const handleClearBestCandidates = useCallback(() => {
+    setBestCandidates([]);
+  }, [setBestCandidates]);
 
   const openBestEpochsModal = useCallback((row, sub, heatMapId) => {
     setBestEpochsContext({ row, sub, heatMapId });
@@ -1756,6 +1755,25 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
     [stageVersions, selectedVersionByStage, onOpenVersionComment],
   );
 
+  const deleteVersionCommentForStage = useCallback(
+    (stageType) => {
+      const versionId = selectedVersionByStage[stageType];
+      if (versionId && typeof onDeleteVersionComment === "function") {
+        onDeleteVersionComment(versionId);
+      }
+    },
+    [selectedVersionByStage, onDeleteVersionComment],
+  );
+
+  const archiveStageVersionForStage = useCallback(
+    (stageType) => {
+      const version = getVersionById(stageVersions, selectedVersionByStage[stageType]);
+      if (!version) return;
+      alert(`Archive strategy version ${version.label} (${version.lineageCode}) (mock — not persisted)`);
+    },
+    [stageVersions, selectedVersionByStage],
+  );
+
   return (
     <div className="space-y-6">
       <StageVersionTreeModal
@@ -1778,6 +1796,8 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
             onStageVersionChange={handleStageVersionChange}
             onAddNewStageVersion={handleAddNewStageVersion}
             onOpenVersionComment={openVersionCommentForStage}
+            onDeleteVersionComment={deleteVersionCommentForStage}
+            onArchiveStageVersion={archiveStageVersionForStage}
             onOpenVersionTree={() => setShowVersionTree(true)}
             versionBreadcrumb={versionBreadcrumb}
           />
@@ -2179,7 +2199,6 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
 
                 {isRiskStage && (
                   <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
-                    <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">Loss streak & cooldown</div>
                     <RiskHyperoptParamsPanel params={riskHyperoptParams} onChange={setRiskHyperoptParams} />
                   </div>
                 )}
@@ -3332,7 +3351,6 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                           <th className="px-3 py-2 text-left font-medium border-b border-[rgba(60,40,80,0.35)]">Status</th>
                           <th className="px-3 py-2 text-left font-medium border-b border-[rgba(60,40,80,0.35)]">Tags</th>
                           <th className="px-3 py-2 text-left font-medium border-b border-[rgba(60,40,80,0.35)]">Comment</th>
-                          <th className="px-3 py-2 text-left font-medium border-b border-[rgba(60,40,80,0.35)]">Indicators</th>
                           <th className="px-3 py-2 text-left font-medium border-b border-[rgba(60,40,80,0.35)]">Actions</th>
                         </tr>
                       </thead>
@@ -3340,7 +3358,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                         {filteredHyperoptResultsRows.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={(isEntryStage || isExitStage || isRiskStage) ? 12 : 11}
+                              colSpan={(isEntryStage || isExitStage || isRiskStage) ? 11 : 10}
                               className="px-3 py-8 text-center text-[11px] text-[#8c8c8c]"
                             >
                               No optimization runs match the current tags filter.
@@ -3408,53 +3426,64 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                 )}
                               </td>
                               <td className="px-3 py-2 max-w-[220px] align-top">
-                                {row.comment?.trim() ? (
-                                  <div className="truncate text-[#a6a6a6]" title={row.comment}>
-                                    {row.comment}
-                                  </div>
-                                ) : (
-                                  "—"
-                                )}
-                              </td>
-                              <td className="px-3 py-2">
-                                <HyperoptDetailsTooltip
-                                  onShowDetails={() => {
-                                    setHyperoptDetailsModalType("hyperopt");
-                                    setShowHyperoptDetailsModal(true);
-                                  }}
-                                />
-                              </td>
-                              <td className="px-3 py-2">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  {hyperoptRun !== "Pipeline" && (
-                                    <button
-                                      type="button"
-                                      onClick={() => setShowNormalizationModal(true)}
-                                      className={cx(ui.btnPrimary, "h-7 px-2 text-[10px] whitespace-nowrap")}
-                                    >
-                                      Post-processing
-                                    </button>
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  {row.comment?.trim() ? (
+                                    <div className="truncate text-[#a6a6a6] flex-1 min-w-0" title={row.comment}>
+                                      {row.comment}
+                                    </div>
+                                  ) : (
+                                    <span className="text-[#595959] flex-1">—</span>
                                   )}
-                                  <button
+                                  <AppButton
                                     type="button"
-                                    onClick={() => openHyperoptTagsModal(row)}
-                                    className={cx(ui.btnPrimary, "h-7 px-2 text-[10px] whitespace-nowrap")}
-                                  >
-                                    Tags
-                                  </button>
-                                  <button
-                                    type="button"
+                                    variant="outline"
+                                    size="icon-xs"
                                     onClick={() => openHyperoptCommentModal(row)}
-                                    className={cx(ui.btnPrimary, "h-7 px-2 text-[10px] whitespace-nowrap")}
+                                    title={row.comment?.trim() ? "Edit comment" : "Add comment"}
+                                    aria-label={row.comment?.trim() ? "Edit comment" : "Add comment"}
+                                    className="shrink-0"
                                   >
-                                    Comment
-                                  </button>
+                                    <Pencil className="h-3 w-3 shrink-0" />
+                                  </AppButton>
+                                </div>
+                              </td>
+                              <td className="px-3 py-2">
+                                <div className="flex items-center gap-1.5">
+                                  {hyperoptRun !== "Pipeline" && (
+                                    <AppButton
+                                      type="button"
+                                      variant="outline"
+                                      size="icon-xs"
+                                      onClick={() => setShowNormalizationModal(true)}
+                                      title="Post-processing"
+                                      aria-label="Post-processing"
+                                    >
+                                      <Workflow className="h-3.5 w-3.5 shrink-0" />
+                                    </AppButton>
+                                  )}
+                                  <HyperoptDetailsTooltip
+                                    iconOnly
+                                    onShowDetails={() => {
+                                      setHyperoptDetailsModalType("hyperopt");
+                                      setShowHyperoptDetailsModal(true);
+                                    }}
+                                  />
+                                  <AppButton
+                                    type="button"
+                                    variant="outline"
+                                    size="icon-xs"
+                                    onClick={() => openHyperoptTagsModal(row)}
+                                    title="Tags"
+                                    aria-label="Tags"
+                                  >
+                                    <Tag className="h-3.5 w-3.5 shrink-0" />
+                                  </AppButton>
                                 </div>
                               </td>
                             </tr>
                             {hyperoptResultsExpanded.has(row.id) && row.children && row.children.length > 0 && (
                               <tr>
-                                <td colSpan={(isEntryStage || isExitStage || isRiskStage) ? 12 : 11} className="p-0 align-top bg-[#100a1a]">
+                                <td colSpan={(isEntryStage || isExitStage || isRiskStage) ? 11 : 10} className="p-0 align-top bg-[#100a1a]">
                                   {/* Block 2: Normalization result (nested per expanded row) */}
                                   <div className="mx-4 mt-3 mb-3 rounded-xl border border-[rgba(60,40,80,0.35)] overflow-hidden bg-[#110b1d] shadow-[0_10px_24px_rgba(6,3,20,0.24)]">
                                     <div className="px-3 py-2 font-medium border-b border-[rgba(60,40,80,0.3)] bg-sky-500/10 text-sky-200 text-[11px] flex items-center justify-between gap-2">
@@ -3470,7 +3499,6 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                             <th className="px-2 py-1.5 text-left font-medium border-b border-[rgba(60,40,80,0.35)] w-8"></th>
                                             <th className="px-2 py-1.5 text-center font-medium border-b border-[rgba(60,40,80,0.35)]">#</th>
                                             <th className="px-3 py-1.5 text-left font-medium border-b border-[rgba(60,40,80,0.35)] w-24">Date</th>
-                                            <th className="px-3 py-1.5 text-left font-medium border-b border-[rgba(60,40,80,0.35)]">Post-processing formula info</th>
                                             <th className="px-3 py-1.5 text-left font-medium border-b border-[rgba(60,40,80,0.35)]">Status</th>
                                             <th className="px-3 py-1.5 text-right font-medium border-b border-[rgba(60,40,80,0.35)]">Actions</th>
                                           </tr>
@@ -3499,54 +3527,30 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                   <td className="px-2 py-2 text-center text-[#8c8c8c]">{sub.analyzerNumber ?? "—"}</td>
                                                   <td className="px-3 py-2 text-[#a6a6a6] whitespace-nowrap">{formatHyperoptDateTime(sub.date)}</td>
                                                   <td className="px-3 py-2">
-                                                    <HyperoptDetailsTooltip
+                                                    <RunStatusBadge status={sub.status || "Finished"} />
+                                                  </td>
+                                                  <td className="px-3 py-2 text-right">
+                                                    <PostProcessingTableActions
+                                                      miniBacktestEnabled={miniBacktestEnabled}
                                                       onShowDetails={() => {
                                                         setHyperoptDetailsModalType("post-processing");
                                                         setShowHyperoptDetailsModal(true);
                                                       }}
+                                                      onConfigureHeatMap={() => setHeatMapConfigModalId(heatMapId)}
+                                                      onGenerateFullReport={() => setShowReportModal(true)}
+                                                      onGenerateTopKReport={() => setShowReportModal(true)}
+                                                      onBestEpochs={() => openBestEpochsModal(row, sub, heatMapId)}
+                                                      onRunMiniBacktest={() => openMiniBacktestEpochModal(row, sub, heatMapId)}
+                                                      onAddTruncate={() => {
+                                                        setSelectedNormalizationRow(sub);
+                                                        setShowTruncateModal(true);
+                                                      }}
                                                     />
-                                                  </td>
-                                                  <td className="px-3 py-2">
-                                                    <RunStatusBadge status={sub.status || "Finished"} />
-                                                  </td>
-                                                  <td className="px-3 py-2 text-right">
-                                                    <div className="flex items-center justify-end gap-2 flex-wrap">
-                                                      <button
-                                                        type="button"
-                                                        onClick={() => setHeatMapConfigModalId(heatMapId)}
-                                                        className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
-                                                      >
-                                                        Configure HeatMap
-                                                      </button>
-                                                      <button
-                                                        type="button"
-                                                        onClick={() => setShowReportModal(true)}
-                                                        className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
-                                                      >
-                                                        Generate Report
-                                                      </button>
-                                                      <PostProcessingEpochMenu
-                                                        useLegacyBtn
-                                                        miniBacktestEnabled={miniBacktestEnabled}
-                                                        onBestEpochs={() => openBestEpochsModal(row, sub, heatMapId)}
-                                                        onRunMiniBacktest={() => openMiniBacktestEpochModal(row, sub, heatMapId)}
-                                                      />
-                                                      <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                          setSelectedNormalizationRow(sub);
-                                                          setShowTruncateModal(true);
-                                                        }}
-                                                        className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
-                                                      >
-                                                        Add truncate
-                                                      </button>
-                                                    </div>
                                                   </td>
                                                 </tr>
                                                 {isDetailsExpanded && (
                                                   <tr>
-                                                    <td colSpan={6} className="p-0 align-top bg-[#100a1a]">
+                                                    <td colSpan={5} className="p-0 align-top bg-[#100a1a]">
                                                       {/* Branch A: HeatMaps & Reports (full data scope) */}
                                                       <div className="ml-4 mt-2 mb-2 rounded-xl border border-[rgba(60,40,80,0.35)] overflow-hidden bg-[#110b1d] shadow-[0_10px_24px_rgba(6,3,20,0.2)]">
                                                         <div className="px-3 py-1.5 font-medium border-b border-[rgba(60,40,80,0.3)] bg-amber-500/10 text-amber-200 text-[11px]">
@@ -3579,30 +3583,13 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                                     <RunStatusBadge status={item.status || "Finished"} />
                                                                   </td>
                                                                   <td className="px-3 py-2">
-                                                                    <div className="flex items-center gap-2">
-                                                                      <HyperoptDetailsTooltip
-                                                                        title="Filters (read-only)"
-                                                                        ariaLabel="Show filters snapshot"
-                                                                        onShowDetails={() => setHeatmapItemFiltersModalItem(item)}
-                                                                      />
-                                                                      {item.type === "Heatmap" ? (
-                                                                        <button
-                                                                          type="button"
-                                                                          onClick={() => setHeatMapViewModalId(heatMapId)}
-                                                                          className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
-                                                                        >
-                                                                          Show heatmap
-                                                                        </button>
-                                                                      ) : (
-                                                                        <button
-                                                                          type="button"
-                                                                          onClick={() => setShowReportModal(true)}
-                                                                          className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
-                                                                        >
-                                                                          Download report
-                                                                        </button>
-                                                                      )}
-                                                                    </div>
+                                                                    <HeatmapReportItemActions
+                                                                      item={item}
+                                                                      heatMapId={heatMapId}
+                                                                      onShowHeatmap={() => setHeatMapViewModalId(heatMapId)}
+                                                                      onDownloadReport={() => setShowReportModal(true)}
+                                                                      onShowItemFilters={() => setHeatmapItemFiltersModalItem(item)}
+                                                                    />
                                                                   </td>
                                                                 </tr>
                                                               ))}
@@ -3661,28 +3648,19 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                                         <RunStatusBadge status={sub.status || "Finished"} />
                                                                       </td>
                                                                       <td className="px-3 py-2">
-                                                                        <div className="flex items-center gap-2">
-                                                                          <button
-                                                                            type="button"
-                                                                            onClick={() => setHeatMapConfigModalId(heatMapId)}
-                                                                            className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
-                                                                          >
-                                                                            Configure HeatMap
-                                                                          </button>
-                                                                          <button
-                                                                            type="button"
-                                                                            onClick={() => setShowReportModal(true)}
-                                                                            className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
-                                                                          >
-                                                                            Generate Report
-                                                                          </button>
-                                                                          <PostProcessingEpochMenu
-                                                                            useLegacyBtn
-                                                                            miniBacktestEnabled={miniBacktestEnabled}
-                                                                            onBestEpochs={() => openBestEpochsModal(row, sub, heatMapId)}
-                                                                            onRunMiniBacktest={() => openMiniBacktestEpochModal(row, sub, heatMapId)}
-                                                                          />
-                                                                        </div>
+                                                                        <PostProcessingTableActions
+                                                                          showAddTruncate={false}
+                                                                          miniBacktestEnabled={miniBacktestEnabled}
+                                                                          onShowDetails={() => {
+                                                                            setHyperoptDetailsModalType("post-processing");
+                                                                            setShowHyperoptDetailsModal(true);
+                                                                          }}
+                                                                          onConfigureHeatMap={() => setHeatMapConfigModalId(heatMapId)}
+                                                                          onGenerateFullReport={() => setShowReportModal(true)}
+                                                                          onGenerateTopKReport={() => setShowReportModal(true)}
+                                                                          onBestEpochs={() => openBestEpochsModal(row, sub, heatMapId)}
+                                                                          onRunMiniBacktest={() => openMiniBacktestEpochModal(row, sub, heatMapId)}
+                                                                        />
                                                                       </td>
                                                                       </tr>
                                                                       {isLevel3ExpandedForRow && level3Items.length > 0 && (
@@ -3712,30 +3690,13 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                                                         <RunStatusBadge status={item.status || "Finished"} />
                                                                                       </td>
                                                                                       <td className="px-3 py-2">
-                                                                                        <div className="flex items-center gap-2">
-                                                                                          <HyperoptDetailsTooltip
-                                                                                            title="Filters (read-only)"
-                                                                                            ariaLabel="Show filters snapshot"
-                                                                                            onShowDetails={() => setHeatmapItemFiltersModalItem(item)}
-                                                                                          />
-                                                                                          {item.type === "Heatmap" ? (
-                                                                                            <button
-                                                                                              type="button"
-                                                                                              onClick={() => setHeatMapViewModalId(heatMapId)}
-                                                                                              className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
-                                                                                            >
-                                                                                              Show heatmap
-                                                                                            </button>
-                                                                                          ) : (
-                                                                                            <button
-                                                                                              type="button"
-                                                                                              onClick={() => setShowReportModal(true)}
-                                                                                              className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
-                                                                                            >
-                                                                                              Download report
-                                                                                            </button>
-                                                                                          )}
-                                                                                        </div>
+                                                                                        <HeatmapReportItemActions
+                                                                                          item={item}
+                                                                                          heatMapId={heatMapId}
+                                                                                          onShowHeatmap={() => setHeatMapViewModalId(heatMapId)}
+                                                                                          onDownloadReport={() => setShowReportModal(true)}
+                                                                                          onShowItemFilters={() => setHeatmapItemFiltersModalItem(item)}
+                                                                                        />
                                                                                       </td>
                                                                                     </tr>
                                                                                   ))}
@@ -3896,7 +3857,6 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                               <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">AIR</th>
                           <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">HitRate</th>
                               <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Indicators</th>
-                              <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Source</th>
                               <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Actions</th>
                             </tr>
                           </thead>
@@ -3949,24 +3909,26 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                         })}
                                       </div>
                                     </td>
-                                    <td className="px-3 py-2 capitalize text-[#a6a6a6]">
-                                      {best.source === "heatmap" ? "HeatMap" : best.source || "Manual"}
-                                    </td>
                                     <td className="px-3 py-2">
-                                      <div className="flex items-center gap-2">
-                                        <button
+                                      <div className="flex items-center gap-1.5">
+                                        <AppButton
                                           type="button"
+                                          variant="outline"
+                                          size="icon-xs"
                                           onClick={() => {
                                             setSelectedBestResult(best);
                                             setShowBestResultDetailsModal(true);
                                           }}
-                                          className={cx(ui.btn, "h-7 px-2 text-[10px] whitespace-nowrap")}
+                                          title="View"
+                                          aria-label="View"
                                         >
-                                          View
-                                        </button>
+                                          <EyeIcon className="h-3.5 w-3.5 shrink-0" />
+                                        </AppButton>
                                         {miniBacktestEnabled && (
-                                          <button
+                                          <AppButton
                                             type="button"
+                                            variant="outline"
+                                            size="icon-xs"
                                             onClick={() => {
                                               const stageType = STAGE_ID_TO_TYPE[activeStage];
                                               const version = getVersionById(
@@ -3994,33 +3956,33 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                 }),
                                               );
                                             }}
-                                            className={cx(
-                                              ui.btn,
-                                              "h-7 px-2 text-[10px] whitespace-nowrap",
+                                            title="Run Mini Backtest for this epoch"
+                                            aria-label="Mini backtest"
+                                            className={
                                               mbtResult
                                                 ? "bg-amber-500/20 text-amber-200 border-amber-500/40"
-                                                : ""
-                                            )}
-                                            title="Run Mini Backtest for this epoch"
+                                                : undefined
+                                            }
                                           >
-                                            Mini BT
-                                          </button>
+                                            <FlaskConical className="h-3.5 w-3.5 shrink-0" />
+                                          </AppButton>
                                         )}
-                                        <button
+                                        <AppButton
                                           type="button"
+                                          variant="outline"
+                                          size="icon-xs"
                                           onClick={() => {
                                             if (!confirm("Remove this Best result?")) return;
                                             setBestResults((prev) =>
                                               prev.filter((item) => item.id !== best.id),
                                             );
                                           }}
-                                          className={cx(
-                                            ui.btn,
-                                            "h-7 px-2 text-[10px] whitespace-nowrap text-red-400 border-red-500/60 hover:bg-red-500/10",
-                                          )}
+                                          title="Remove"
+                                          aria-label="Remove"
+                                          className="text-red-400 border-red-500/60 hover:bg-red-500/10"
                                         >
-                                          Remove
-                                        </button>
+                                          <TrashIcon className="h-3.5 w-3.5 shrink-0" />
+                                        </AppButton>
                                       </div>
                                     </td>
                                   </tr>
@@ -5317,26 +5279,40 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
       )}
       {/* HeatMap view modal — opens when Show heatmap is clicked */}
       {heatMapViewModalId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={() => setHeatMapViewModalId(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70" onClick={() => setHeatMapViewModalId(null)}>
           <div
             className={cx(
               ui.radius,
-              "bg-[#141414] border border-[#303030] w-fit max-w-[min(1100px,calc(100vw-2rem))] max-h-[90vh] overflow-hidden flex flex-col shadow-xl shrink-0",
+              "bg-[#120a20] border border-[rgba(60,40,80,0.35)] w-full max-w-[min(1320px,calc(100vw-2rem))] max-h-[92vh] overflow-hidden flex flex-col shadow-[0_24px_60px_rgba(6,3,20,0.55)] shrink-0",
             )}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-3 py-2 border-b border-[#303030]">
-              <span className="text-[14px] font-medium text-[#d9d9d9]">Heatmap</span>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[rgba(60,40,80,0.35)]">
+              <span className="text-[15px] font-medium text-[#faf7fd]">Heatmap</span>
               <div className="flex items-center gap-2">
                 {generatedHeatMap && generatedHeatMap.runId === heatMapViewModalId && (
-                  <button type="button" onClick={() => { setGeneratedHeatMap(null); setHeatMapViewModalId(null); }} className={cx(ui.btn, "h-7 px-2 text-[10px]")}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGeneratedHeatMap(null);
+                      setHeatMapViewModalId(null);
+                    }}
+                    className={cx(ui.btn, "h-7 px-2 text-[10px]")}
+                  >
                     Clear HeatMap
                   </button>
                 )}
-                <button type="button" onClick={() => setHeatMapViewModalId(null)} className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1">✕</button>
+                <button
+                  type="button"
+                  onClick={() => setHeatMapViewModalId(null)}
+                  className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1 text-lg leading-none"
+                  aria-label="Close"
+                >
+                  ✕
+                </button>
               </div>
             </div>
-            <div className="overflow-y-auto overflow-x-hidden p-3 flex-1 min-h-0">
+            <div className="overflow-y-auto overflow-x-hidden p-4 flex-1 min-h-0">
               {generatedHeatMap && generatedHeatMap.runId === heatMapViewModalId ? (
                 <HeatMapView
                   heatMapData={currentHeatMapData}
@@ -5347,25 +5323,37 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                   canZoomOut={generatedHeatMap.zoomStack.length > 0}
                   canReset={generatedHeatMap.zoomStack.length > 0}
                   zoomLevel={generatedHeatMap.zoomStack.length}
-                  zoomLevelLabel={generatedHeatMap.zoomStack.length > 0 ? generatedHeatMap.zoomStack[generatedHeatMap.zoomStack.length - 1].label : "Full heatmap"}
                   onSaveBest={
                     bestCandidates.length > 0
                       ? handleSaveBestCandidates
                       : handleSaveBestResultFromHeatMap
                   }
-                  saveBestLabel={stageCopy.heatmapSelectLabel}
+                  saveBestLabel="Save selection"
                   bestCandidates={bestCandidates}
                   onRemoveCandidate={handleRemoveBestCandidate}
+                  onClearAllCandidates={handleClearBestCandidates}
                   onApplyFilters={handleApplyHeatMapFilters}
                 />
               ) : (
                 <div className="py-8 text-center text-[#8c8c8c] text-[13px]">
                   <p className="mb-3">No heatmap generated for this run.</p>
-                  <button type="button" onClick={() => { setHeatMapViewModalId(null); setHeatMapConfigModalId(heatMapViewModalId); }} className={cx(ui.btnPrimary, "h-8 px-3 text-[12px]")}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHeatMapViewModalId(null);
+                      setHeatMapConfigModalId(heatMapViewModalId);
+                    }}
+                    className={cx(ui.btnPrimary, "h-8 px-3 text-[12px]")}
+                  >
                     Configure &amp; Generate HeatMap
                   </button>
                 </div>
               )}
+            </div>
+            <div className="flex justify-end border-t border-[rgba(60,40,80,0.35)] px-4 py-3">
+              <AppButton type="button" variant="outline" size="sm" onClick={() => setHeatMapViewModalId(null)}>
+                Close
+              </AppButton>
             </div>
           </div>
         </div>

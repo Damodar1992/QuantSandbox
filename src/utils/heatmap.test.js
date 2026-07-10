@@ -78,6 +78,22 @@ describe('buildHeatMap', () => {
     expect(result).toHaveProperty('H');
   });
 
+  it('produces 25x25 grid by default', () => {
+    const items = makeItems(250);
+    const result = buildHeatMap(items, { xAxis: ['x'], yAxis: ['y'] });
+    expect(result).not.toBeNull();
+    expect(result.W).toBe(25);
+    expect(result.H).toBe(25);
+  });
+
+  it('respects custom gridSize from config', () => {
+    const items = makeItems(100);
+    const result = buildHeatMap(items, { xAxis: ['x'], yAxis: ['y'], gridSize: 10 });
+    expect(result).not.toBeNull();
+    expect(result.W).toBe(10);
+    expect(result.H).toBe(10);
+  });
+
   it('filters by fixedParams', () => {
     const items = [
       { params: { x: 1, y: 1, z: 0 }, score: 0.5 },

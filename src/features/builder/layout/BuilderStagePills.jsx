@@ -1,6 +1,6 @@
 import React, { memo } from "react";
 import { cx } from "@/constants/ui";
-import { StageVersionSelect, StageVersionCommentButton } from "@/features/versioning";
+import { StageVersionSelect, StageVersionActionsMenu } from "@/features/versioning";
 import { ProdButton } from "@/components/prod/ProdButton";
 
 export const BuilderStagePills = memo(function BuilderStagePills({
@@ -12,6 +12,8 @@ export const BuilderStagePills = memo(function BuilderStagePills({
   onStageVersionChange,
   onAddNewStageVersion,
   onOpenVersionComment,
+  onDeleteVersionComment,
+  onArchiveStageVersion,
   onOpenVersionTree,
   className,
 }) {
@@ -87,10 +89,14 @@ export const BuilderStagePills = memo(function BuilderStagePills({
                       onAddNewVersion={() => onAddNewStageVersion?.(stageType)}
                       className="h-6 w-[3.5rem] shrink-0 px-1 text-[9px]"
                     />
-                    <StageVersionCommentButton
-                      disabled={stage.versionDisabled || !selectedVersionByStage?.[stageType]}
+                    <StageVersionActionsMenu
+                      disabled={stage.versionDisabled}
+                      hasSelectedVersion={Boolean(selectedVersionByStage?.[stageType])}
                       hasComment={stage.hasComment}
-                      onClick={() => onOpenVersionComment?.(stageType)}
+                      onNewVersion={() => onAddNewStageVersion?.(stageType)}
+                      onEditComment={() => onOpenVersionComment?.(stageType)}
+                      onDeleteComment={() => onDeleteVersionComment?.(stageType)}
+                      onArchiveVersion={() => onArchiveStageVersion?.(stageType)}
                       className="h-6 w-6 shrink-0 [&_svg]:h-2.5 [&_svg]:w-2.5"
                     />
                   </div>
