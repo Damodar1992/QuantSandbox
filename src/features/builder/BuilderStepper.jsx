@@ -39,7 +39,7 @@ import {
   FORMULA_TYPES,
   FORMULA_SUBTYPES,
 } from '../../constants/formulas';
-import { DEFAULT_RISK_STOPLOSS_RANGES, DEFAULT_RISK_HYPEROPT_PARAMS, RISK_STOPLOSS_LABELS } from '../../constants/risk';
+import { DEFAULT_RISK_STOPLOSS_RANGES, DEFAULT_RISK_HYPEROPT_PARAMS, RISK_STOPLOSS_LABELS, buildDefaultRiskHeatmapConfig } from '../../constants/risk';
 import { TIME_RANGES } from '../../constants/app';
 import {
   STAGE_ID_TO_TYPE,
@@ -1106,24 +1106,34 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
   }, []);
 
   useEffect(() => {
-    if (isRiskStage) return;
-
-    const stageIndicators = pickByStage(activeStage, {
-      signal: signalIndicators,
-      entry: entryIndicators,
-      exit: exitIndicators,
-      risk: [],
-    });
-    const config = buildDefaultBbHeatmapConfig(stageIndicators);
-    if (!config || hyperoptResultsRows.length === 0) return;
+    if (hyperoptResultsRows.length === 0) return;
 
     const row = hyperoptResultsRows[0];
     const sub = row?.children?.[0];
     if (!row || !sub) return;
 
     const runId = `hyperopt-${row.id}-${sub.id}`;
+
+    let config;
+    if (isRiskStage) {
+      config = buildDefaultRiskHeatmapConfig(riskStoplossRanges);
+    } else {
+      const stageIndicators = pickByStage(activeStage, {
+        signal: signalIndicators,
+        entry: entryIndicators,
+        exit: exitIndicators,
+        risk: [],
+      });
+      config = buildDefaultBbHeatmapConfig(stageIndicators);
+    }
+    if (!config) return;
+
     setGeneratedHeatMap((prev) => {
-      if (prev?.runId === runId && prev?.config?.xAxis?.join?.() === config.xAxis.join()) return prev;
+      const sameRun = prev?.runId === runId;
+      const sameVariant =
+        (prev?.config?.heatmapVariant === "risk") === (config.heatmapVariant === "risk");
+      const sameAxes = prev?.config?.xAxis?.join?.() === config.xAxis.join();
+      if (sameRun && sameVariant && sameAxes) return prev;
       try {
         const fullResults = generateMockResults(config, runId);
         return { runId, config, fullResults, zoomStack: [] };
@@ -1131,7 +1141,15 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
         return prev;
       }
     });
-  }, [activeStage, isRiskStage, signalIndicators, entryIndicators, exitIndicators, hyperoptResultsRows]);
+  }, [
+    activeStage,
+    isRiskStage,
+    riskStoplossRanges,
+    signalIndicators,
+    entryIndicators,
+    exitIndicators,
+    hyperoptResultsRows,
+  ]);
 
   const handleHeatMapCellClick = useCallback(
     (cell, runId) => {
@@ -5317,6 +5335,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                 <HeatMapView
                   heatMapData={currentHeatMapData}
                   config={generatedHeatMap.config}
+                  isRiskHeatmap={isRiskStage}
                   onCellClick={(cell) => handleHeatMapCellClick(cell, heatMapViewModalId)}
                   onZoomOut={() => handleHeatMapZoomOut(heatMapViewModalId)}
                   onResetZoom={() => handleHeatMapResetZoom(heatMapViewModalId)}

@@ -81,3 +81,15 @@ export function riskStoplossMidpoints(ranges) {
   }
   return out;
 }
+
+/** Default HeatMap config for Stage 4 Risk */
+export function buildDefaultRiskHeatmapConfig(riskStoplossRanges) {
+  return {
+    heatmapVariant: "risk",
+    indicators: [],
+    xAxis: [DEFAULT_RISK_HEATMAP_AXES.x],
+    yAxis: [DEFAULT_RISK_HEATMAP_AXES.y],
+    fixedParams: riskStoplossMidpoints(riskStoplossRanges),
+    filters: { logic: "and", groups: [] },
+  };
+}

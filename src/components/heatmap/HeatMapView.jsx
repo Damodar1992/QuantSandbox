@@ -1,5 +1,6 @@
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { cx } from "../../constants/ui";
+import { RISK_STOPLOSS_KEYS, RISK_STOPLOSS_LABELS } from "../../constants/risk";
 import { HEATMAP_CELL_PX, HEATMAP_LEGEND_STOPS } from "../../utils/heatmap";
 import { TrashIcon } from "../shared";
 import { AppButton } from "../common/AppButton";
@@ -88,6 +89,25 @@ const METRIC_FIELDS = [
   { keys: ["air"], label: "AIR", decimals: 2, asPercent: true },
   { keys: ["hitRate", "hit_rate"], label: "Hit Rate", decimals: 2, asPercent: true },
 ];
+
+const RISK_EXTRA_METRIC_FIELDS = [
+  { keys: ["profit_factor"], label: "Profit factor", decimals: 2, asPercent: false },
+  { keys: ["drawdown"], label: "Drawdown", decimals: 1, asPercent: true },
+];
+
+function buildParamRangeLines(results, keys, getLabel, formatValue) {
+  return keys.map((key) => {
+    const vals = results
+      .map((r) => r.params?.[key])
+      .filter((v) => v != null && typeof v === "number" && Number.isFinite(v));
+    const label = getLabel(key);
+    if (!vals.length) return { label, value: "—" };
+    const min = Math.min(...vals);
+    const max = Math.max(...vals);
+    const value = min === max ? formatValue(min, key) : `${formatValue(min, key)}–${formatValue(max, key)}`;
+    return { label, value };
+  });
+}
 
 function pickMetric(row, keys) {
   for (const k of keys) {
@@ -245,7 +265,9 @@ export const HeatMapView = memo(function HeatMapView({
   onRemoveCandidate = null,
   onClearAllCandidates = null,
   onApplyFilters = null,
+  isRiskHeatmap: isRiskHeatmapProp = false,
 }) {
+  const isRiskHeatmap = isRiskHeatmapProp || config?.heatmapVariant === "risk";
   const [hoveredCell, setHoveredCell] = useState(null);
 
   // Popovers
@@ -342,10 +364,22 @@ export const HeatMapView = memo(function HeatMapView({
   const hoveredXAxisLines = hoveredCell ? axisRangeLines(xKeys, hoveredCell.paramRanges?.x) : [];
   const hoveredYAxisLines = hoveredCell ? axisRangeLines(yKeys, hoveredCell.paramRanges?.y) : [];
 
+  const hoveredStoplossLines = useMemo(() => {
+    if (!hoveredCell || !isRiskHeatmap) return [];
+    const results = Array.isArray(hoveredCell.results) ? hoveredCell.results : [];
+    return buildParamRangeLines(
+      results,
+      RISK_STOPLOSS_KEYS,
+      (key) => RISK_STOPLOSS_LABELS[key] || key,
+      (value, key) => formatParamValue(value, key),
+    );
+  }, [hoveredCell, isRiskHeatmap]);
+
   const hoveredMetricLines = useMemo(() => {
     if (!hoveredCell) return [];
     const results = Array.isArray(hoveredCell.results) ? hoveredCell.results : [];
-    return METRIC_FIELDS.map(({ keys, label, decimals, asPercent }) => {
+    const fields = isRiskHeatmap ? [...METRIC_FIELDS, ...RISK_EXTRA_METRIC_FIELDS] : METRIC_FIELDS;
+    return fields.map(({ keys, label, decimals, asPercent }) => {
       const vals = results.map((r) => pickMetric(r, keys)).filter((v) => v != null);
       if (!vals.length) return { label, value: "—" };
       const min = Math.min(...vals);
@@ -356,7 +390,7 @@ export const HeatMapView = memo(function HeatMapView({
           : `${formatMetricVal(min, decimals, asPercent)} — ${formatMetricVal(max, decimals, asPercent)}`;
       return { label, value };
     });
-  }, [hoveredCell]);
+  }, [hoveredCell, isRiskHeatmap]);
 
   const hoveredEpochRange = useMemo(() => {
     if (!hoveredCell) return "—";
@@ -647,31 +681,45 @@ export const HeatMapView = memo(function HeatMapView({
               <div className="font-mono">{hoveredEpochRange}</div>
             </div>
 
-            <div className="pt-1 border-t border-[rgba(60,40,80,0.35)]">
-              <div className="text-[9px] font-semibold uppercase tracking-wide text-[#8c8c8c] mb-1">Indicator ranges</div>
-              <div className="rounded border border-[rgba(60,40,80,0.35)] bg-[#120a20] p-2 font-mono leading-relaxed space-y-1">
-                <div className="text-[#8c8c8c]">X Axis:</div>
-                {hoveredXAxisLines.length === 0 ? (
-                  <div className="text-[#595959] pl-1">—</div>
-                ) : (
-                  hoveredXAxisLines.map((line) => (
-                    <div key={`x-${line.label}`} className="pl-1 text-[#d9d9d9]">
-                      {line.label} ({line.value})
+            {isRiskHeatmap ? (
+              <div className="pt-1 border-t border-[rgba(60,40,80,0.35)]">
+                <div className="text-[9px] font-semibold uppercase tracking-wide text-[#8c8c8c] mb-1">Stoploss ranges</div>
+                <div className="rounded border border-[rgba(60,40,80,0.35)] bg-[#120a20] p-2 font-mono leading-relaxed space-y-0.5">
+                  {hoveredStoplossLines.map((line) => (
+                    <div key={line.label} className="flex justify-between gap-3">
+                      <span className="text-[#a6a6a6]">{line.label}</span>
+                      <span className="text-[#d9d9d9] tabular-nums">{line.value}</span>
                     </div>
-                  ))
-                )}
-                <div className="text-[#8c8c8c] pt-1">Y Axis:</div>
-                {hoveredYAxisLines.length === 0 ? (
-                  <div className="text-[#595959] pl-1">—</div>
-                ) : (
-                  hoveredYAxisLines.map((line) => (
-                    <div key={`y-${line.label}`} className="pl-1 text-[#d9d9d9]">
-                      {line.label} ({line.value})
-                    </div>
-                  ))
-                )}
+                  ))}
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="pt-1 border-t border-[rgba(60,40,80,0.35)]">
+                <div className="text-[9px] font-semibold uppercase tracking-wide text-[#8c8c8c] mb-1">Indicator ranges</div>
+                <div className="rounded border border-[rgba(60,40,80,0.35)] bg-[#120a20] p-2 font-mono leading-relaxed space-y-1">
+                  <div className="text-[#8c8c8c]">X Axis:</div>
+                  {hoveredXAxisLines.length === 0 ? (
+                    <div className="text-[#595959] pl-1">—</div>
+                  ) : (
+                    hoveredXAxisLines.map((line) => (
+                      <div key={`x-${line.label}`} className="pl-1 text-[#d9d9d9]">
+                        {line.label} ({line.value})
+                      </div>
+                    ))
+                  )}
+                  <div className="text-[#8c8c8c] pt-1">Y Axis:</div>
+                  {hoveredYAxisLines.length === 0 ? (
+                    <div className="text-[#595959] pl-1">—</div>
+                  ) : (
+                    hoveredYAxisLines.map((line) => (
+                      <div key={`y-${line.label}`} className="pl-1 text-[#d9d9d9]">
+                        {line.label} ({line.value})
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="pt-1 border-t border-[rgba(60,40,80,0.35)]">
               <div className="text-[9px] font-semibold uppercase tracking-wide text-[#8c8c8c] mb-1">Metrics</div>
