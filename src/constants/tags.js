@@ -2,11 +2,13 @@
 
 /** @typedef {{ id: string, name: string, ownerId: number, ownerLogin: string, createdAt: string }} Tag */
 
-/** @typedef {{ id: string, tagId: string, objectType: "HYPEROPT_RESULT" | "MINI_BACKTEST_RESULT", objectId: string, objectRef: string, assignedAt: string }} TagRelation */
+/** @typedef {{ id: string, tagId: string, objectType: "HYPEROPT_RESULT" | "MINI_BACKTEST_RESULT" | "STRATEGY" | "INDICATOR", objectId: string, objectRef: string, assignedAt: string }} TagRelation */
 
 export const TAG_OBJECT_TYPES = {
   HYPEROPT_RESULT: "HYPEROPT_RESULT",
   MINI_BACKTEST_RESULT: "MINI_BACKTEST_RESULT",
+  STRATEGY: "STRATEGY",
+  INDICATOR: "INDICATOR",
 };
 
 export const MOCK_CURRENT_USER = { id: 2, login: "bogdan" };
@@ -88,6 +90,38 @@ export const INITIAL_TAG_RELATIONS = [
     objectId: "hr2",
     objectRef: "Hyperopt #2",
     assignedAt: "2024-01-14T11:58:00",
+  },
+  {
+    id: "rel-momentum-s1",
+    tagId: "tag-momentum",
+    objectType: TAG_OBJECT_TYPES.STRATEGY,
+    objectId: "1",
+    objectRef: "Strategy: EMA Bounce",
+    assignedAt: "2025-01-02T10:00:00",
+  },
+  {
+    id: "rel-baseline-s2",
+    tagId: "tag-baseline",
+    objectType: TAG_OBJECT_TYPES.STRATEGY,
+    objectId: "2",
+    objectRef: "Strategy: RSI Mean Reversion",
+    assignedAt: "2025-03-05T10:00:00",
+  },
+  {
+    id: "rel-momentum-rsi",
+    tagId: "tag-momentum",
+    objectType: TAG_OBJECT_TYPES.INDICATOR,
+    objectId: "RSI",
+    objectRef: "Indicator: RSI - Relative Strength Index",
+    assignedAt: "2025-01-10T10:00:00",
+  },
+  {
+    id: "rel-btc-ema",
+    tagId: "tag-btc",
+    objectType: TAG_OBJECT_TYPES.INDICATOR,
+    objectId: "EMA",
+    objectRef: "Indicator: EMA - Exponential Moving Average",
+    assignedAt: "2025-01-12T10:00:00",
   },
 ];
 

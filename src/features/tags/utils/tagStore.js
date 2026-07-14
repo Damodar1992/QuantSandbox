@@ -13,6 +13,23 @@ function generateRelationId() {
   return `rel-${nextRelationId}`;
 }
 
+function stripTagIdFromItems(items, tagId) {
+  return (items || []).map((row) => ({
+    ...row,
+    tagIds: (row.tagIds || []).filter((id) => id !== tagId),
+  }));
+}
+
+function stripTagIdFromMatchedItems(items, objectId, tagId, matchFn) {
+  return (items || []).map((row) => {
+    if (!matchFn(row, objectId)) return row;
+    return {
+      ...row,
+      tagIds: (row.tagIds || []).filter((id) => id !== tagId),
+    };
+  });
+}
+
 export function canViewTag(role, userId, tag) {
   if (!tag) return false;
   if (role === "Admin") return true;
@@ -84,6 +101,16 @@ export function buildMiniBacktestObjectRef(entry) {
       : entry.epochLabel || "run";
   const stage = entry.stage || (entry.stageId != null ? `Stage ${entry.stageId}` : "");
   return [stage, epoch].filter(Boolean).join(" · ") || "Mini Backtest";
+}
+
+export function buildStrategyObjectRef(strategy) {
+  if (!strategy) return "";
+  return `Strategy: ${strategy.name || "—"}`;
+}
+
+export function buildIndicatorObjectRef(indicator) {
+  if (!indicator) return "";
+  return `Indicator: ${indicator.name || indicator.catalogKey || "—"}`;
 }
 
 /**
@@ -210,82 +237,300 @@ export function syncMiniBacktestTagIds({
 }
 
 /**
+ * Sync tagIds and relations for a strategy after Tags modal save.
+ * @returns {{ registry, relations, strategies, tagIds }}
+ */
+export function syncStrategyTagIds({
+  strategy,
+  tagIds,
+  registry,
+  relations,
+  strategies,
+}) {
+  if (!strategy) {
+    return { registry, relations, strategies, tagIds: [] };
+  }
+
+  const objectId = String(strategy.id);
+  const desiredIds = [...new Set(tagIds || [])];
+  const strategyRelations = (relations || []).filter(
+    (rel) => rel.objectType === TAG_OBJECT_TYPES.STRATEGY && rel.objectId === objectId,
+  );
+  const existingIds = strategyRelations.map((rel) => rel.tagId);
+  const toAdd = desiredIds.filter((id) => !existingIds.includes(id));
+  const toRemove = existingIds.filter((id) => !desiredIds.includes(id));
+
+  let nextRelations = [...(relations || [])];
+  if (toRemove.length) {
+    nextRelations = nextRelations.filter(
+      (rel) =>
+        !(
+          rel.objectType === TAG_OBJECT_TYPES.STRATEGY &&
+          rel.objectId === objectId &&
+          toRemove.includes(rel.tagId)
+        ),
+    );
+  }
+
+  const now = new Date().toISOString();
+  const objectRef = buildStrategyObjectRef(strategy);
+  for (const tagId of toAdd) {
+    nextRelations.push({
+      id: generateRelationId(),
+      tagId,
+      objectType: TAG_OBJECT_TYPES.STRATEGY,
+      objectId,
+      objectRef,
+      assignedAt: now,
+    });
+  }
+
+  const nextStrategies = (strategies || []).map((item) =>
+    String(item.id) === objectId ? { ...item, tagIds: desiredIds } : item,
+  );
+
+  return {
+    registry,
+    relations: nextRelations,
+    strategies: nextStrategies,
+    tagIds: desiredIds,
+  };
+}
+
+/**
+ * Sync tagIds and relations for an indicator by catalogKey after Tags modal save.
+ * Shared between Settings → Indicators and Indicator Library.
+ * @returns {{ registry, relations, pageIndicators, tagIds }}
+ */
+export function syncIndicatorTagIds({
+  indicator,
+  catalogKey,
+  tagIds,
+  registry,
+  relations,
+  pageIndicators,
+}) {
+  const key = catalogKey || indicator?.catalogKey;
+  if (!key) {
+    return { registry, relations, pageIndicators, tagIds: [] };
+  }
+
+  const desiredIds = [...new Set(tagIds || [])];
+  const indicatorRelations = (relations || []).filter(
+    (rel) => rel.objectType === TAG_OBJECT_TYPES.INDICATOR && rel.objectId === key,
+  );
+  const existingIds = indicatorRelations.map((rel) => rel.tagId);
+  const toAdd = desiredIds.filter((id) => !existingIds.includes(id));
+  const toRemove = existingIds.filter((id) => !desiredIds.includes(id));
+
+  let nextRelations = [...(relations || [])];
+  if (toRemove.length) {
+    nextRelations = nextRelations.filter(
+      (rel) =>
+        !(
+          rel.objectType === TAG_OBJECT_TYPES.INDICATOR &&
+          rel.objectId === key &&
+          toRemove.includes(rel.tagId)
+        ),
+    );
+  }
+
+  const now = new Date().toISOString();
+  const objectRef = buildIndicatorObjectRef(
+    indicator || { catalogKey: key, name: key },
+  );
+  for (const tagId of toAdd) {
+    nextRelations.push({
+      id: generateRelationId(),
+      tagId,
+      objectType: TAG_OBJECT_TYPES.INDICATOR,
+      objectId: key,
+      objectRef,
+      assignedAt: now,
+    });
+  }
+
+  let found = false;
+  let nextIndicators = (pageIndicators || []).map((item) => {
+    if (item.catalogKey !== key) return item;
+    found = true;
+    return { ...item, tagIds: desiredIds };
+  });
+
+  if (!found) {
+    nextIndicators = [
+      ...(pageIndicators || []),
+      {
+        id: Date.now(),
+        catalogKey: key,
+        name: indicator?.name || key,
+        description: indicator?.description || "",
+        type: indicator?.type || indicator?.group || "Custom",
+        indicatorType: "System",
+        status: "Active",
+        createdAt: now.slice(0, 10),
+        tagIds: desiredIds,
+      },
+    ];
+  }
+
+  return {
+    registry,
+    relations: nextRelations,
+    pageIndicators: nextIndicators,
+    tagIds: desiredIds,
+  };
+}
+
+/**
  * Remove a single tag–object relation.
- * @returns {{ ok: boolean, error?: string, registry, relations, hyperoptResultsRows }}
  */
 export function breakRelation({
   relationId,
   tagsRegistry,
   tagRelations,
-  hyperoptResultsRows,
+  hyperoptResultsRows = [],
+  strategies = [],
+  pageIndicators = [],
+  miniBacktestResults = [],
   role,
   userId,
 }) {
   const relation = (tagRelations || []).find((rel) => rel.id === relationId);
   if (!relation) {
-    return { ok: false, error: "Relation not found", tagsRegistry, tagRelations, hyperoptResultsRows };
+    return {
+      ok: false,
+      error: "Relation not found",
+      tagsRegistry,
+      tagRelations,
+      hyperoptResultsRows,
+      strategies,
+      pageIndicators,
+      miniBacktestResults,
+    };
   }
 
   const tag = (tagsRegistry || []).find((item) => item.id === relation.tagId);
   if (!canBreakRelation(role, userId, tag)) {
-    return { ok: false, error: "Permission denied", tagsRegistry, tagRelations, hyperoptResultsRows };
+    return {
+      ok: false,
+      error: "Permission denied",
+      tagsRegistry,
+      tagRelations,
+      hyperoptResultsRows,
+      strategies,
+      pageIndicators,
+      miniBacktestResults,
+    };
   }
 
   const nextRelations = (tagRelations || []).filter((rel) => rel.id !== relationId);
-  const nextRows = (hyperoptResultsRows || []).map((row) => {
-    if (row.id !== relation.objectId) return row;
-    return {
-      ...row,
-      tagIds: (row.tagIds || []).filter((id) => id !== relation.tagId),
-    };
-  });
+  let nextHyperopt = hyperoptResultsRows;
+  let nextStrategies = strategies;
+  let nextIndicators = pageIndicators;
+  let nextMini = miniBacktestResults;
+
+  if (relation.objectType === TAG_OBJECT_TYPES.HYPEROPT_RESULT) {
+    nextHyperopt = stripTagIdFromMatchedItems(
+      hyperoptResultsRows,
+      relation.objectId,
+      relation.tagId,
+      (row, objectId) => row.id === objectId,
+    );
+  } else if (relation.objectType === TAG_OBJECT_TYPES.STRATEGY) {
+    nextStrategies = stripTagIdFromMatchedItems(
+      strategies,
+      relation.objectId,
+      relation.tagId,
+      (row, objectId) => String(row.id) === String(objectId),
+    );
+  } else if (relation.objectType === TAG_OBJECT_TYPES.INDICATOR) {
+    nextIndicators = stripTagIdFromMatchedItems(
+      pageIndicators,
+      relation.objectId,
+      relation.tagId,
+      (row, objectId) => row.catalogKey === objectId,
+    );
+  } else if (relation.objectType === TAG_OBJECT_TYPES.MINI_BACKTEST_RESULT) {
+    nextMini = stripTagIdFromMatchedItems(
+      miniBacktestResults,
+      relation.objectId,
+      relation.tagId,
+      (row, objectId) => row.id === objectId,
+    );
+  }
 
   return {
     ok: true,
     tagsRegistry,
     tagRelations: nextRelations,
-    hyperoptResultsRows: nextRows,
+    hyperoptResultsRows: nextHyperopt,
+    strategies: nextStrategies,
+    pageIndicators: nextIndicators,
+    miniBacktestResults: nextMini,
   };
 }
 
 /**
  * Delete a tag and all its relations globally.
- * @returns {{ ok: boolean, error?: string, tagsRegistry, tagRelations, hyperoptResultsRows }}
  */
 export function deleteTagGlobally({
   tagId,
   tagsRegistry,
   tagRelations,
-  hyperoptResultsRows,
+  hyperoptResultsRows = [],
+  strategies = [],
+  pageIndicators = [],
+  miniBacktestResults = [],
   role,
   userId,
 }) {
   const tag = (tagsRegistry || []).find((item) => item.id === tagId);
   if (!tag) {
-    return { ok: false, error: "Tag not found", tagsRegistry, tagRelations, hyperoptResultsRows };
+    return {
+      ok: false,
+      error: "Tag not found",
+      tagsRegistry,
+      tagRelations,
+      hyperoptResultsRows,
+      strategies,
+      pageIndicators,
+      miniBacktestResults,
+    };
   }
   if (!canDeleteTag(role, userId, tag)) {
-    return { ok: false, error: "Permission denied", tagsRegistry, tagRelations, hyperoptResultsRows };
+    return {
+      ok: false,
+      error: "Permission denied",
+      tagsRegistry,
+      tagRelations,
+      hyperoptResultsRows,
+      strategies,
+      pageIndicators,
+      miniBacktestResults,
+    };
   }
 
   const nextRegistry = (tagsRegistry || []).filter((item) => item.id !== tagId);
   const nextRelations = (tagRelations || []).filter((rel) => rel.tagId !== tagId);
-  const nextRows = (hyperoptResultsRows || []).map((row) => ({
-    ...row,
-    tagIds: (row.tagIds || []).filter((id) => id !== tagId),
-  }));
 
   return {
     ok: true,
     tagsRegistry: nextRegistry,
     tagRelations: nextRelations,
-    hyperoptResultsRows: nextRows,
+    hyperoptResultsRows: stripTagIdFromItems(hyperoptResultsRows, tagId),
+    strategies: stripTagIdFromItems(strategies, tagId),
+    pageIndicators: stripTagIdFromItems(pageIndicators, tagId),
+    miniBacktestResults: stripTagIdFromItems(miniBacktestResults, tagId),
   };
 }
 
-export function getAvailableTagIdsForFilter(hyperoptResultsRows, registry, role, userId) {
+/**
+ * Collect visible tag ids used across items that carry tagIds.
+ */
+export function getAvailableTagIdsForFilter(items, registry, role, userId) {
   const ids = new Set();
-  for (const row of hyperoptResultsRows || []) {
+  for (const row of items || []) {
     for (const tagId of row.tagIds || []) {
       const tag = (registry || []).find((item) => item.id === tagId);
       if (tag && canViewTag(role, userId, tag)) {
@@ -300,6 +545,19 @@ export function getAvailableTagIdsForFilter(hyperoptResultsRows, registry, role,
   });
 }
 
+/**
+ * Build catalogKey → tagIds map from pageIndicators (shared with Indicator Library).
+ */
+export function buildIndicatorTagIdsByKey(pageIndicators) {
+  const map = {};
+  for (const ind of pageIndicators || []) {
+    if (ind?.catalogKey) {
+      map[ind.catalogKey] = Array.isArray(ind.tagIds) ? [...ind.tagIds] : [];
+    }
+  }
+  return map;
+}
+
 export function formatTagDate(iso) {
   if (!iso) return "—";
   try {
@@ -312,5 +570,20 @@ export function formatTagDate(iso) {
     });
   } catch {
     return iso;
+  }
+}
+
+export function formatTagObjectTypeLabel(objectType) {
+  switch (objectType) {
+    case TAG_OBJECT_TYPES.HYPEROPT_RESULT:
+      return "HYPEROPT_RESULT";
+    case TAG_OBJECT_TYPES.MINI_BACKTEST_RESULT:
+      return "MINI_BACKTEST_RESULT";
+    case TAG_OBJECT_TYPES.STRATEGY:
+      return "STRATEGY";
+    case TAG_OBJECT_TYPES.INDICATOR:
+      return "INDICATOR";
+    default:
+      return objectType || "—";
   }
 }

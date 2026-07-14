@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, Suspense, lazy } from "react";
-import { createPortal } from "react-dom";
 import { Blocks, FlaskConical } from "lucide-react";
 import { LoadingFallback } from "./components/common/LoadingFallback";
 import { cx, ui } from "./constants/ui";
@@ -20,7 +19,8 @@ import { UserActionsMenu, CreateUserModal, EditUserModal, ChangePasswordModal, R
 import { IndicatorActionsMenu, AddIndicatorPageModal } from "./components/indicators";
 import { MiniBacktestGlobalPage, MiniBacktestPage } from "./features/builder/components";
 import { FormulaActionsMenu } from "./components/formulas";
-
+import { useOutsideClose } from "./hooks/useOutsideClose";
+import { BASE_INDICATORS } from "./constants/indicators";
 const MiniBacktestModal = lazy(() =>
   import("./features/builder/components/results/MiniBacktestModal").then((m) => ({
     default: m.MiniBacktestModal,
@@ -62,17 +62,19 @@ import {
   hasVersionComment,
 } from "./features/versioning";
 import {
+  buildIndicatorTagIdsByKey,
   findOrCreateTagByName,
   getAvailableTagIdsForFilter,
   resolveTagNames,
   syncHyperoptTagIds,
+  syncIndicatorTagIds,
   syncMiniBacktestTagIds,
+  syncStrategyTagIds,
 } from "./features/tags/utils/tagStore";
-import { TagsPage } from "./components/tags";
+import { TagsPage, TagsEditModal } from "./components/tags";
 import { ReleaseNotesPage, ReleaseNoteModal } from "./components/releaseNotes";
 import { INITIAL_RELEASE_NOTES } from "./constants/releaseNotes";
 import { BuilderStepper } from "./features/builder/BuilderStepper";
-
 /**
  * Quant Sandbox CRM Mock — Properly structured React app
  * - Login + Forgot Password (mock)
@@ -118,6 +120,43 @@ export default function App() {
   const [strategies, setStrategies] = useState(INITIAL_STRATEGIES);
   const [selected, setSelected] = useState(null); // {strategyId, versionId}
 
+  // Indicators page (mock) — lifted early for shared tag sync with Indicator Library
+  const [pageIndicators, setPageIndicators] = useState(() => [
+    {
+      id: 1,
+      catalogKey: "RSI",
+      name: "RSI - Relative Strength Index",
+      description: "Momentum oscillator measuring speed and magnitude of price changes",
+      type: "Momentum",
+      indicatorType: "System",
+      status: "Active",
+      createdAt: "2025-01-10",
+      tagIds: ["tag-momentum"],
+    },
+    {
+      id: 2,
+      catalogKey: "EMA",
+      name: "EMA - Exponential Moving Average",
+      description: "Moving average giving more weight to recent prices",
+      type: "Trend",
+      indicatorType: "System",
+      status: "Active",
+      createdAt: "2025-01-12",
+      tagIds: ["tag-btc"],
+    },
+    {
+      id: 3,
+      catalogKey: "BBANDS",
+      name: "BB - Bollinger Bands",
+      description: "Volatility bands placed above and below a moving average",
+      type: "Volatility",
+      indicatorType: "System",
+      status: "Archived",
+      createdAt: "2024-11-05",
+      tagIds: [],
+    },
+  ]);
+  const [showAddIndicatorPage, setShowAddIndicatorPage] = useState(false);
   // Detail view
   const [actionsDropdownOpen, setActionsDropdownOpen] = useState(false);
 
@@ -149,11 +188,22 @@ export default function App() {
   const [hyperoptTagsDraft, setHyperoptTagsDraft] = useState({ tagIds: [], tagInput: "" });
   const [miniBacktestTagsModalEntryId, setMiniBacktestTagsModalEntryId] = useState(null);
   const [miniBacktestTagsDraft, setMiniBacktestTagsDraft] = useState({ tagIds: [], tagInput: "" });
+  const [strategyTagFilter, setStrategyTagFilter] = useState([]);
+  const [strategyTagFilterOpen, setStrategyTagFilterOpen] = useState(false);
+  const strategyTagFilterRef = useOutsideClose(strategyTagFilterOpen, () => setStrategyTagFilterOpen(false));
+  const [strategyTagsModalId, setStrategyTagsModalId] = useState(null);
+  const [strategyTagsDraft, setStrategyTagsDraft] = useState({ tagIds: [], tagInput: "" });
+  const [indicatorTagFilter, setIndicatorTagFilter] = useState([]);
+  const [indicatorTagFilterOpen, setIndicatorTagFilterOpen] = useState(false);
+  const indicatorTagFilterRef = useOutsideClose(indicatorTagFilterOpen, () => setIndicatorTagFilterOpen(false));
+  const [indicatorTagsModalKey, setIndicatorTagsModalKey] = useState(null);
+  const [indicatorTagsDraft, setIndicatorTagsDraft] = useState({ tagIds: [], tagInput: "" });
 
   const handleTagIdsRemoved = useCallback((removedIds) => {
     setHyperoptTagFilter((prev) => prev.filter((id) => !removedIds.includes(id)));
+    setStrategyTagFilter((prev) => prev.filter((id) => !removedIds.includes(id)));
+    setIndicatorTagFilter((prev) => prev.filter((id) => !removedIds.includes(id)));
   }, []);
-
   const handleTagsPageCountChange = useCallback((count) => {
     setTagsPageCount(count);
   }, []);
@@ -293,8 +343,165 @@ export default function App() {
     closeMiniBacktestTagsModal,
   ]);
 
-  const handleSaveMiniBacktestResult = useCallback((result) => {
-    let nextId = result.id;
+  const openStrategyTagsModal = useCallback((strategy) => {
+    setStrategyTagsModalId(strategy.id);
+    setStrategyTagsDraft({
+      tagIds: Array.isArray(strategy.tagIds) ? [...strategy.tagIds] : [],
+      tagInput: "",
+    });
+  }, []);
+
+  const closeStrategyTagsModal = useCallback(() => {
+    setStrategyTagsModalId(null);
+    setStrategyTagsDraft({ tagIds: [], tagInput: "" });
+  }, []);
+
+  const commitStrategyTagsDraftTag = useCallback(() => {
+    const name = strategyTagsDraft.tagInput.trim();
+    if (!name) return;
+
+    const existing = tagsRegistry.find((tag) => tag.name === name);
+    if (existing) {
+      setStrategyTagsDraft((prev) => ({
+        ...prev,
+        tagIds: prev.tagIds.includes(existing.id) ? prev.tagIds : [...prev.tagIds, existing.id],
+        tagInput: "",
+      }));
+      return;
+    }
+
+    const { registry: nextRegistry, tag } = findOrCreateTagByName(
+      tagsRegistry,
+      name,
+      MOCK_CURRENT_USER,
+    );
+    setTagsRegistry(nextRegistry);
+    if (!tag) return;
+    setStrategyTagsDraft((prev) => ({
+      ...prev,
+      tagIds: prev.tagIds.includes(tag.id) ? prev.tagIds : [...prev.tagIds, tag.id],
+      tagInput: "",
+    }));
+  }, [strategyTagsDraft.tagInput, tagsRegistry]);
+
+  const saveStrategyTagsModal = useCallback(() => {
+    if (strategyTagsModalId == null) return;
+    const strategy = strategies.find((item) => item.id === strategyTagsModalId);
+    if (!strategy) return;
+
+    const result = syncStrategyTagIds({
+      strategy,
+      tagIds: strategyTagsDraft.tagIds,
+      registry: tagsRegistry,
+      relations: tagRelations,
+      strategies,
+    });
+
+    setTagsRegistry(result.registry);
+    setTagRelations(result.relations);
+    setStrategies(result.strategies);
+    closeStrategyTagsModal();
+  }, [
+    strategyTagsModalId,
+    strategies,
+    strategyTagsDraft.tagIds,
+    tagsRegistry,
+    tagRelations,
+    closeStrategyTagsModal,
+  ]);
+
+  const openIndicatorTagsModal = useCallback((indicatorOrKey, info) => {
+    const catalogKey =
+      typeof indicatorOrKey === "string"
+        ? indicatorOrKey
+        : indicatorOrKey?.catalogKey;
+    if (!catalogKey) return;
+    const existing =
+      typeof indicatorOrKey === "object" && indicatorOrKey?.tagIds
+        ? indicatorOrKey
+        : pageIndicators.find((ind) => ind.catalogKey === catalogKey);
+    const name =
+      existing?.name ||
+      info?.name ||
+      BASE_INDICATORS[catalogKey]?.name ||
+      catalogKey;
+    setIndicatorTagsModalKey(catalogKey);
+    setIndicatorTagsDraft({
+      tagIds: Array.isArray(existing?.tagIds) ? [...existing.tagIds] : [],
+      tagInput: "",
+      name,
+    });
+  }, [pageIndicators]);
+
+  const closeIndicatorTagsModal = useCallback(() => {
+    setIndicatorTagsModalKey(null);
+    setIndicatorTagsDraft({ tagIds: [], tagInput: "", name: "" });
+  }, []);
+
+  const commitIndicatorTagsDraftTag = useCallback(() => {
+    const name = indicatorTagsDraft.tagInput.trim();
+    if (!name) return;
+
+    const existing = tagsRegistry.find((tag) => tag.name === name);
+    if (existing) {
+      setIndicatorTagsDraft((prev) => ({
+        ...prev,
+        tagIds: prev.tagIds.includes(existing.id) ? prev.tagIds : [...prev.tagIds, existing.id],
+        tagInput: "",
+      }));
+      return;
+    }
+
+    const { registry: nextRegistry, tag } = findOrCreateTagByName(
+      tagsRegistry,
+      name,
+      MOCK_CURRENT_USER,
+    );
+    setTagsRegistry(nextRegistry);
+    if (!tag) return;
+    setIndicatorTagsDraft((prev) => ({
+      ...prev,
+      tagIds: prev.tagIds.includes(tag.id) ? prev.tagIds : [...prev.tagIds, tag.id],
+      tagInput: "",
+    }));
+  }, [indicatorTagsDraft.tagInput, tagsRegistry]);
+
+  const saveIndicatorTagsModal = useCallback(() => {
+    if (!indicatorTagsModalKey) return;
+    const existing = pageIndicators.find((ind) => ind.catalogKey === indicatorTagsModalKey);
+    const base = BASE_INDICATORS[indicatorTagsModalKey];
+    const indicator = existing || {
+      catalogKey: indicatorTagsModalKey,
+      name: indicatorTagsDraft.name || base?.name || indicatorTagsModalKey,
+      description: base?.description || "",
+      type: base?.group || "Custom",
+      group: base?.group,
+    };
+
+    const result = syncIndicatorTagIds({
+      indicator,
+      catalogKey: indicatorTagsModalKey,
+      tagIds: indicatorTagsDraft.tagIds,
+      registry: tagsRegistry,
+      relations: tagRelations,
+      pageIndicators,
+    });
+
+    setTagsRegistry(result.registry);
+    setTagRelations(result.relations);
+    setPageIndicators(result.pageIndicators);
+    closeIndicatorTagsModal();
+  }, [
+    indicatorTagsModalKey,
+    pageIndicators,
+    indicatorTagsDraft.tagIds,
+    indicatorTagsDraft.name,
+    tagsRegistry,
+    tagRelations,
+    closeIndicatorTagsModal,
+  ]);
+
+  const handleSaveMiniBacktestResult = useCallback((result) => {    let nextId = result.id;
     const strategy = strategies.find((s) => s.id === selected?.strategyId);
     const finishedResult = {
       ...result,
@@ -478,14 +685,6 @@ export default function App() {
   const [userToChangePassword, setUserToChangePassword] = useState(null);
   const [userToResetPassword, setUserToResetPassword] = useState(null);
 
-  // Indicators page (mock)
-  const [pageIndicators, setPageIndicators] = useState(() => [
-    { id: 1, name: "RSI - Relative Strength Index", description: "Momentum oscillator measuring speed and magnitude of price changes", type: "Momentum", indicatorType: "System", status: "Active", createdAt: "2025-01-10" },
-    { id: 2, name: "EMA - Exponential Moving Average", description: "Moving average giving more weight to recent prices", type: "Trend", indicatorType: "System", status: "Active", createdAt: "2025-01-12" },
-    { id: 3, name: "BB - Bollinger Bands", description: "Volatility bands placed above and below a moving average", type: "Volatility", indicatorType: "System", status: "Archived", createdAt: "2024-11-05" },
-  ]);
-  const [showAddIndicatorPage, setShowAddIndicatorPage] = useState(false);
-
   // Release notes (mock)
   const [releaseNotes, setReleaseNotes] = useState(() => INITIAL_RELEASE_NOTES);
   const [releaseNoteModalOpen, setReleaseNoteModalOpen] = useState(false);
@@ -601,10 +800,45 @@ export default function App() {
         });
         if (!hasStatus) return false;
       }
+      if (
+        strategyTagFilter.length > 0 &&
+        !(strategy.tagIds || []).some((tagId) => strategyTagFilter.includes(tagId))
+      ) {
+        return false;
+      }
       return true;
     });
-  }, [strategies, filterName, filterOwner, filterStatus]);
+  }, [strategies, filterName, filterOwner, filterStatus, strategyTagFilter]);
 
+  const strategyAvailableTagIds = useMemo(
+    () => getAvailableTagIdsForFilter(strategies, tagsRegistry, currentUserRole, MOCK_CURRENT_USER.id),
+    [strategies, tagsRegistry, currentUserRole],
+  );
+  const activeStrategyTagNames = useMemo(
+    () => resolveTagNames(strategyTagFilter, tagsRegistry),
+    [strategyTagFilter, tagsRegistry],
+  );
+
+  const filteredPageIndicators = useMemo(() => {
+    if (indicatorTagFilter.length === 0) return pageIndicators;
+    return pageIndicators.filter((ind) =>
+      (ind.tagIds || []).some((tagId) => indicatorTagFilter.includes(tagId)),
+    );
+  }, [pageIndicators, indicatorTagFilter]);
+
+  const indicatorAvailableTagIds = useMemo(
+    () => getAvailableTagIdsForFilter(pageIndicators, tagsRegistry, currentUserRole, MOCK_CURRENT_USER.id),
+    [pageIndicators, tagsRegistry, currentUserRole],
+  );
+  const activeIndicatorTagNames = useMemo(
+    () => resolveTagNames(indicatorTagFilter, tagsRegistry),
+    [indicatorTagFilter, tagsRegistry],
+  );
+
+  const indicatorTagIdsByKey = useMemo(
+    () => buildIndicatorTagIdsByKey(pageIndicators),
+    [pageIndicators],
+  );
   // Users helpers (mock)
   const handleOpenCreateUser = useCallback(() => {
     setUserDraft({ login: "", username: "", role: "Quant" });
@@ -651,11 +885,20 @@ export default function App() {
   const handleAddPageIndicator = useCallback((payload) => {
     setPageIndicators((prev) => [
       ...prev,
-      { id: Date.now(), name: payload.name, description: payload.description, type: payload.group, status: "Active", createdAt: new Date().toISOString().slice(0, 10) },
+      {
+        id: Date.now(),
+        catalogKey: payload.catalogKey || payload.name,
+        name: payload.name,
+        description: payload.description,
+        type: payload.group,
+        indicatorType: "System",
+        status: "Active",
+        createdAt: new Date().toISOString().slice(0, 10),
+        tagIds: [],
+      },
     ]);
     setShowAddIndicatorPage(false);
-  }, []);
-  const handleIndicatorArchiveOrActivate = useCallback((ind) => {
+  }, []);  const handleIndicatorArchiveOrActivate = useCallback((ind) => {
     setPageIndicators((prev) => prev.map((i) => (i.id === ind.id ? { ...i, status: i.status === "Archived" ? "Active" : "Archived" } : i)));
   }, []);
   const handleIndicatorUpdate = useCallback(() => { /* mock: no action */ }, []);
@@ -966,6 +1209,60 @@ export default function App() {
                     ))}
                   </select>
                 )}
+
+                <div className="relative" ref={strategyTagFilterRef}>
+                  <button
+                    type="button"
+                    onClick={() => setStrategyTagFilterOpen((prev) => !prev)}
+                    className={cx(
+                      ui.input,
+                      "h-8 min-w-[160px] px-2.5 text-[12px] inline-flex items-center justify-between gap-2",
+                    )}
+                    aria-expanded={strategyTagFilterOpen}
+                  >
+                    <span className="truncate text-left">
+                      {activeStrategyTagNames.length === 0
+                        ? "Tags: All"
+                        : `Tags: ${activeStrategyTagNames.join(", ")}`}
+                    </span>
+                    <span className="text-[#8c8c8c]">{strategyTagFilterOpen ? "▲" : "▼"}</span>
+                  </button>
+                  {strategyTagFilterOpen && (
+                    <div className="absolute right-0 z-30 mt-1 w-[220px] rounded-md border border-[#303030] bg-[#0f0f0f] shadow-lg p-1.5 space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => setStrategyTagFilter([])}
+                        className="w-full h-7 px-2 rounded text-left text-[11px] text-[#d9d9d9] hover:bg-[#1a1a1a]"
+                      >
+                        All
+                      </button>
+                      {strategyAvailableTagIds.map((tagId) => {
+                        const tagName = tagsRegistry.find((tag) => tag.id === tagId)?.name || tagId;
+                        const checked = strategyTagFilter.includes(tagId);
+                        return (
+                          <label
+                            key={tagId}
+                            className="flex items-center gap-2 h-7 px-2 rounded text-[11px] text-[#d9d9d9] hover:bg-[#1a1a1a] cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() =>
+                                setStrategyTagFilter((prev) =>
+                                  prev.includes(tagId)
+                                    ? prev.filter((item) => item !== tagId)
+                                    : [...prev, tagId],
+                                )
+                              }
+                              className="h-3 w-3 accent-emerald-500"
+                            />
+                            <span className="truncate">{tagName}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -975,6 +1272,7 @@ export default function App() {
                   <th className="px-4 py-3 border-b border-[#303030] font-medium">Strategy name</th>
                   <th className="px-2 py-3 border-b border-[#303030] font-medium">Description</th>
                   <th className="px-2 py-3 border-b border-[#303030] font-medium">Owner</th>
+                  <th className="px-2 py-3 border-b border-[#303030] font-medium">Tags</th>
                   <th className="px-2 py-3 border-b border-[#303030] font-medium">Created at</th>
                   <th className="px-2 py-3 border-b border-[#303030] font-medium">Action</th>
                 </tr>
@@ -986,11 +1284,12 @@ export default function App() {
                     strategy={strategy}
                     onSelectVersion={handleSelectVersion}
                     onOpenVersionTree={handleOpenListVersionTree}
+                    tagsRegistry={tagsRegistry}
+                    onAddTag={openStrategyTagsModal}
                   />
                 ))}
               </tbody>
             </table>
-
             <StageVersionTreeModal
               open={versionTreeListStrategy != null}
               onClose={() => setVersionTreeListStrategy(null)}
@@ -1174,9 +1473,10 @@ export default function App() {
               closeHyperoptTagsModal={closeHyperoptTagsModal}
               commitHyperoptTagsDraftTag={commitHyperoptTagsDraftTag}
               saveHyperoptTagsModal={saveHyperoptTagsModal}
+              indicatorTagIdsByKey={indicatorTagIdsByKey}
+              onAddIndicatorTag={openIndicatorTagsModal}
               />
             </div>
-
             {/* Mini Backtest tab */}
             {miniBacktestEnabled ? (
             <div className={activeStrategyTab !== "miniBacktest" ? "hidden" : undefined}>
@@ -1267,11 +1567,16 @@ export default function App() {
             setTagRelations={setTagRelations}
             hyperoptResultsRows={hyperoptResultsRows}
             setHyperoptResultsRows={setHyperoptResultsRows}
+            strategies={strategies}
+            setStrategies={setStrategies}
+            pageIndicators={pageIndicators}
+            setPageIndicators={setPageIndicators}
+            miniBacktestResults={allMiniBacktestResults}
+            setMiniBacktestResults={setAllMiniBacktestResults}
             onTagIdsRemoved={handleTagIdsRemoved}
             onCountChange={handleTagsPageCountChange}
           />
         )}
-
         {/* Release notes page */}
         {activeSection === "ReleaseNotes" && (
           <ReleaseNotesPage
@@ -1285,14 +1590,69 @@ export default function App() {
         {/* Indicators page (mock) */}
         {(activeSection === "Settings" && settingsSubSection === "indicators") && (
           <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
-            <div className={cx("flex items-center justify-between px-4 py-3", ui.panelMuted, "border-0 border-b", ui.divider)}>
+            <div className={cx("flex items-center justify-between gap-3 px-4 py-3", ui.panelMuted, "border-0 border-b", ui.divider)}>
               <div>
                 <div className="text-[12px] font-medium text-[#d9d9d9]">Indicators</div>
                 <div className={cx("text-[11px]", ui.textMuted)}>Indicator library (mock).</div>
               </div>
-              <span className="rounded-md border border-[#303030] bg-[#0f0f0f] px-2 py-0.5 text-[10px] text-[#8c8c8c]">
-                {pageIndicators.length} indicators
-              </span>
+              <div className="flex items-center gap-3">
+                <div className="relative" ref={indicatorTagFilterRef}>
+                  <button
+                    type="button"
+                    onClick={() => setIndicatorTagFilterOpen((prev) => !prev)}
+                    className={cx(
+                      ui.input,
+                      "h-8 min-w-[160px] px-2.5 text-[12px] inline-flex items-center justify-between gap-2",
+                    )}
+                    aria-expanded={indicatorTagFilterOpen}
+                  >
+                    <span className="truncate text-left">
+                      {activeIndicatorTagNames.length === 0
+                        ? "Tags: All"
+                        : `Tags: ${activeIndicatorTagNames.join(", ")}`}
+                    </span>
+                    <span className="text-[#8c8c8c]">{indicatorTagFilterOpen ? "▲" : "▼"}</span>
+                  </button>
+                  {indicatorTagFilterOpen && (
+                    <div className="absolute right-0 z-30 mt-1 w-[220px] rounded-md border border-[#303030] bg-[#0f0f0f] shadow-lg p-1.5 space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => setIndicatorTagFilter([])}
+                        className="w-full h-7 px-2 rounded text-left text-[11px] text-[#d9d9d9] hover:bg-[#1a1a1a]"
+                      >
+                        All
+                      </button>
+                      {indicatorAvailableTagIds.map((tagId) => {
+                        const tagName = tagsRegistry.find((tag) => tag.id === tagId)?.name || tagId;
+                        const checked = indicatorTagFilter.includes(tagId);
+                        return (
+                          <label
+                            key={tagId}
+                            className="flex items-center gap-2 h-7 px-2 rounded text-[11px] text-[#d9d9d9] hover:bg-[#1a1a1a] cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() =>
+                                setIndicatorTagFilter((prev) =>
+                                  prev.includes(tagId)
+                                    ? prev.filter((item) => item !== tagId)
+                                    : [...prev, tagId],
+                                )
+                              }
+                              className="h-3 w-3 accent-emerald-500"
+                            />
+                            <span className="truncate">{tagName}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+                <span className="rounded-md border border-[#303030] bg-[#0f0f0f] px-2 py-0.5 text-[10px] text-[#8c8c8c]">
+                  {filteredPageIndicators.length} indicators
+                </span>
+              </div>
             </div>
 
             <div className="overflow-auto">
@@ -1304,32 +1664,61 @@ export default function App() {
                     <th className="px-2 py-3 border-b border-[#303030] font-medium">Category</th>
                     <th className="px-2 py-3 border-b border-[#303030] font-medium">Type</th>
                     <th className="px-2 py-3 border-b border-[#303030] font-medium">Status</th>
+                    <th className="px-2 py-3 border-b border-[#303030] font-medium">Tags</th>
                     <th className="px-2 py-3 border-b border-[#303030] font-medium">Created At</th>
                     <th className="px-2 py-3 border-b border-[#303030] font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {pageIndicators.map((ind) => (
-                    <tr key={ind.id} className="bg-[#141414] hover:bg-[#1f1f1f] transition-colors">
-                      <td className="px-4 py-2 border-b border-[#303030] text-[#d9d9d9]">{ind.name}</td>
-                      <td className="px-2 py-2 border-b border-[#303030] text-[#a6a6a6] max-w-[200px] truncate" title={ind.description}>{ind.description}</td>
-                      <td className="px-2 py-2 border-b border-[#303030]">
-                        <Badge status={ind.type} type="indicatorGroup" />
-                      </td>
-                      <td className="px-2 py-2 border-b border-[#303030] text-[#d9d9d9]">{ind.indicatorType ?? "System"}</td>
-                      <td className="px-2 py-2 border-b border-[#303030]">
-                        <Badge status={ind.status} type="status" />
-                      </td>
-                      <td className="px-2 py-2 border-b border-[#303030] text-[#a6a6a6]">{ind.createdAt}</td>
-                      <td className="px-2 py-2 border-b border-[#303030]">
-                        <IndicatorActionsMenu
-                          indicator={ind}
-                          onArchiveOrActivate={handleIndicatorArchiveOrActivate}
-                          onUpdate={handleIndicatorUpdate}
-                        />
-                      </td>
-                    </tr>
-                  ))}
+                  {filteredPageIndicators.map((ind) => {
+                    const tagNames = resolveTagNames(ind.tagIds, tagsRegistry);
+                    return (
+                      <tr key={ind.id} className="bg-[#141414] hover:bg-[#1f1f1f] transition-colors">
+                        <td className="px-4 py-2 border-b border-[#303030] text-[#d9d9d9]">{ind.name}</td>
+                        <td className="px-2 py-2 border-b border-[#303030] text-[#a6a6a6] max-w-[200px] truncate" title={ind.description}>{ind.description}</td>
+                        <td className="px-2 py-2 border-b border-[#303030]">
+                          <Badge status={ind.type} type="indicatorGroup" />
+                        </td>
+                        <td className="px-2 py-2 border-b border-[#303030] text-[#d9d9d9]">{ind.indicatorType ?? "System"}</td>
+                        <td className="px-2 py-2 border-b border-[#303030]">
+                          <Badge status={ind.status} type="status" />
+                        </td>
+                        <td
+                          className="px-2 py-2 border-b border-[#303030] max-w-[180px] align-top"
+                          title={tagNames.length ? tagNames.join(", ") : undefined}
+                        >
+                          {tagNames.length ? (
+                            <div className="flex flex-wrap gap-1">
+                              {tagNames.slice(0, 3).map((t) => (
+                                <span
+                                  key={t}
+                                  className="rounded border border-[#303030] bg-[#0f0f0f] px-1.5 py-0.5 text-[10px] text-[#d9d9d9]"
+                                >
+                                  {t}
+                                </span>
+                              ))}
+                              {tagNames.length > 3 && (
+                                <span className="self-center text-[10px] text-[#8c8c8c]">
+                                  +{tagNames.length - 3}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-[#8c8c8c]">—</span>
+                          )}
+                        </td>
+                        <td className="px-2 py-2 border-b border-[#303030] text-[#a6a6a6]">{ind.createdAt}</td>
+                        <td className="px-2 py-2 border-b border-[#303030]">
+                          <IndicatorActionsMenu
+                            indicator={ind}
+                            onArchiveOrActivate={handleIndicatorArchiveOrActivate}
+                            onUpdate={handleIndicatorUpdate}
+                            onAddTag={openIndicatorTagsModal}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1632,181 +2021,35 @@ export default function App() {
         </Suspense>
       )}
 
-      {miniBacktestTagsModalEntryId &&
-        typeof document !== "undefined" &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/70"
-            onClick={closeMiniBacktestTagsModal}
-          >
-            <div
-              className={cx(
-                ui.radius,
-                "bg-[#141414] border border-[#303030] max-w-[480px] w-full max-h-[90vh] overflow-hidden flex flex-col shadow-xl",
-              )}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between px-4 py-3 border-b border-[#303030]">
-                <span className="text-[14px] font-medium text-[#d9d9d9] flex items-center gap-2">
-                  <svg
-                    viewBox="0 0 16 16"
-                    className="h-4 w-4 shrink-0 text-emerald-400"
-                    fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                    aria-hidden
-                  >
-                    <path
-                      fillRule="evenodd"
-                      clipRule="evenodd"
-                      d="M16 8L8 0H0V8L8 16L16 8ZM4.5 6C5.32843 6 6 5.32843 6 4.5C6 3.67157 5.32843 3 4.5 3C3.67157 3 3 3.67157 3 4.5C3 5.32843 3.67157 6 4.5 6Z"
-                      fill="currentColor"
-                    />
-                  </svg>
-                  Tags
-                </span>
-                <button
-                  type="button"
-                  onClick={closeMiniBacktestTagsModal}
-                  className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1"
-                  aria-label="Close"
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="overflow-auto p-4 space-y-4">
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] font-medium text-[#d9d9d9]">Tags</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={miniBacktestTagsDraft.tagInput}
-                      onChange={(e) =>
-                        setMiniBacktestTagsDraft((prev) => ({ ...prev, tagInput: e.target.value }))
-                      }
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          commitMiniBacktestTagsDraftTag();
-                        }
-                      }}
-                      className={cx(ui.input, "h-8 flex-1 text-[12px]")}
-                      placeholder="Add tag, press Enter"
-                    />
-                    <button
-                      type="button"
-                      onClick={commitMiniBacktestTagsDraftTag}
-                      title="Add tag"
-                      aria-label="Add tag"
-                      className={cx(
-                        ui.btn,
-                        "h-8 w-8 p-0 inline-flex items-center justify-center shrink-0",
-                      )}
-                    >
-                      <svg
-                        viewBox="0 0 24 24"
-                        className="h-4 w-4"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        aria-hidden
-                      >
-                        <path d="M12 5v14M5 12h14" />
-                      </svg>
-                    </button>
-                  </div>
-                  {miniBacktestTagsDraft.tagIds.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {miniBacktestTagsDraft.tagIds.map((tagId) => {
-                        const tagName =
-                          tagsRegistry.find((tag) => tag.id === tagId)?.name || tagId;
-                        return (
-                          <span
-                            key={tagId}
-                            className="inline-flex items-center gap-1 rounded border border-[#303030] bg-[#0f0f0f] pl-2 pr-0.5 py-0.5 text-[11px] text-[#d9d9d9]"
-                          >
-                            {tagName}
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setMiniBacktestTagsDraft((prev) => ({
-                                  ...prev,
-                                  tagIds: prev.tagIds.filter((id) => id !== tagId),
-                                }))
-                              }
-                              className="p-0.5 rounded text-[#8c8c8c] hover:text-[#d9d9d9]"
-                              aria-label={`Remove tag ${tagName}`}
-                            >
-                              <svg
-                                viewBox="0 0 24 24"
-                                className="h-3.5 w-3.5"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                aria-hidden
-                              >
-                                <path d="M18 6 6 18M6 6l12 12" />
-                              </svg>
-                            </button>
-                          </span>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center justify-end gap-2 border-t border-[#303030] px-4 py-3 bg-[#101010]">
-                <button
-                  type="button"
-                  onClick={closeMiniBacktestTagsModal}
-                  className={cx(
-                    ui.btnGhost,
-                    "h-8 w-8 p-0 inline-flex items-center justify-center",
-                  )}
-                  title="Cancel"
-                  aria-label="Cancel"
-                >
-                  <svg
-                    viewBox="0 0 24 24"
-                    className="h-4 w-4"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    aria-hidden
-                  >
-                    <path d="M18 6 6 18M6 6l12 12" />
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  onClick={saveMiniBacktestTagsModal}
-                  className={cx(
-                    ui.btnPrimary,
-                    "h-8 w-8 p-0 inline-flex items-center justify-center",
-                  )}
-                  title="Save"
-                  aria-label="Save"
-                >
-                  <svg
-                    viewBox="0 0 24 24"
-                    className="h-4 w-4"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden
-                  >
-                    <path d="M20 6 9 17l-5-5" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body,
-        )}
+      <TagsEditModal
+        open={Boolean(miniBacktestTagsModalEntryId)}
+        draft={miniBacktestTagsDraft}
+        tagsRegistry={tagsRegistry}
+        onDraftChange={setMiniBacktestTagsDraft}
+        onCommitTag={commitMiniBacktestTagsDraftTag}
+        onClose={closeMiniBacktestTagsModal}
+        onSave={saveMiniBacktestTagsModal}
+      />
+
+      <TagsEditModal
+        open={strategyTagsModalId != null}
+        draft={strategyTagsDraft}
+        tagsRegistry={tagsRegistry}
+        onDraftChange={setStrategyTagsDraft}
+        onCommitTag={commitStrategyTagsDraftTag}
+        onClose={closeStrategyTagsModal}
+        onSave={saveStrategyTagsModal}
+      />
+
+      <TagsEditModal
+        open={Boolean(indicatorTagsModalKey)}
+        draft={indicatorTagsDraft}
+        tagsRegistry={tagsRegistry}
+        onDraftChange={setIndicatorTagsDraft}
+        onCommitTag={commitIndicatorTagsDraftTag}
+        onClose={closeIndicatorTagsModal}
+        onSave={saveIndicatorTagsModal}
+      />
 
     </div>
   );

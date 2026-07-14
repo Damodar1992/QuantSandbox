@@ -1,6 +1,5 @@
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { cx, ui } from "../../constants/ui";
-import { TAG_OBJECT_TYPES } from "../../constants/tags";
 import { usePagination } from "../../hooks/usePagination";
 import { TablePagination } from "../common/TablePagination";
 import {
@@ -8,6 +7,7 @@ import {
   canDeleteTag,
   countLinkedObjects,
   formatTagDate,
+  formatTagObjectTypeLabel,
   getRelationsForTag,
   getVisibleTags,
   breakRelation,
@@ -25,6 +25,12 @@ export const TagsPage = memo(function TagsPage({
   setTagRelations,
   hyperoptResultsRows,
   setHyperoptResultsRows,
+  strategies = [],
+  setStrategies,
+  pageIndicators = [],
+  setPageIndicators,
+  miniBacktestResults = [],
+  setMiniBacktestResults,
   onTagIdsRemoved,
   onCountChange,
 }) {
@@ -87,6 +93,9 @@ export const TagsPage = memo(function TagsPage({
       tagsRegistry,
       tagRelations,
       hyperoptResultsRows,
+      strategies,
+      pageIndicators,
+      miniBacktestResults,
       role: currentUserRole,
       userId: currentUserId,
     });
@@ -97,6 +106,9 @@ export const TagsPage = memo(function TagsPage({
     setTagsRegistry(result.tagsRegistry);
     setTagRelations(result.tagRelations);
     setHyperoptResultsRows(result.hyperoptResultsRows);
+    setStrategies?.(result.strategies);
+    setPageIndicators?.(result.pageIndicators);
+    setMiniBacktestResults?.(result.miniBacktestResults);
     onTagIdsRemoved?.([deleteTarget.id]);
     setDeleteTarget(null);
     setDeleteError("");
@@ -110,11 +122,17 @@ export const TagsPage = memo(function TagsPage({
     tagsRegistry,
     tagRelations,
     hyperoptResultsRows,
+    strategies,
+    pageIndicators,
+    miniBacktestResults,
     currentUserRole,
     currentUserId,
     setTagsRegistry,
     setTagRelations,
     setHyperoptResultsRows,
+    setStrategies,
+    setPageIndicators,
+    setMiniBacktestResults,
     onTagIdsRemoved,
   ]);
 
@@ -125,6 +143,9 @@ export const TagsPage = memo(function TagsPage({
       tagsRegistry,
       tagRelations,
       hyperoptResultsRows,
+      strategies,
+      pageIndicators,
+      miniBacktestResults,
       role: currentUserRole,
       userId: currentUserId,
     });
@@ -134,6 +155,9 @@ export const TagsPage = memo(function TagsPage({
     }
     setTagRelations(result.tagRelations);
     setHyperoptResultsRows(result.hyperoptResultsRows);
+    setStrategies?.(result.strategies);
+    setPageIndicators?.(result.pageIndicators);
+    setMiniBacktestResults?.(result.miniBacktestResults);
     setBreakTarget(null);
     setBreakError("");
   }, [
@@ -141,10 +165,16 @@ export const TagsPage = memo(function TagsPage({
     tagsRegistry,
     tagRelations,
     hyperoptResultsRows,
+    strategies,
+    pageIndicators,
+    miniBacktestResults,
     currentUserRole,
     currentUserId,
     setTagRelations,
     setHyperoptResultsRows,
+    setStrategies,
+    setPageIndicators,
+    setMiniBacktestResults,
   ]);
 
   const breakTagName = breakTarget
@@ -345,9 +375,7 @@ const TagRowGroup = memo(function TagRowGroup({
                       return (
                         <tr key={rel.id} className="hover:bg-[#1a1a1a]">
                           <td className="px-3 py-2 border-b border-[#303030] text-[#d9d9d9]">
-                            {rel.objectType === TAG_OBJECT_TYPES.HYPEROPT_RESULT
-                              ? "HYPEROPT_RESULT"
-                              : rel.objectType}
+                            {formatTagObjectTypeLabel(rel.objectType)}
                           </td>
                           <td className="px-3 py-2 border-b border-[#303030] text-[#a6a6a6]">
                             {rel.objectRef}

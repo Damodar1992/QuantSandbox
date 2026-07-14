@@ -1,7 +1,8 @@
 import React, { memo } from "react";
+import { TAG_OBJECT_TYPES } from "../../constants/tags";
 import { AppDialog } from "../common/AppDialog";
 import { AppButton } from "../common/AppButton";
-import { TAG_OBJECT_TYPES } from "../../constants/tags";
+import { formatTagObjectTypeLabel } from "../../features/tags/utils/tagStore";
 
 export const BreakRelationModal = memo(function BreakRelationModal({
   open,
@@ -29,7 +30,13 @@ export const BreakRelationModal = memo(function BreakRelationModal({
               Object:{" "}
               {relation.objectType === TAG_OBJECT_TYPES.HYPEROPT_RESULT
                 ? "Hyperopt Result"
-                : relation.objectType}
+                : relation.objectType === TAG_OBJECT_TYPES.STRATEGY
+                  ? "Strategy"
+                  : relation.objectType === TAG_OBJECT_TYPES.INDICATOR
+                    ? "Indicator"
+                    : relation.objectType === TAG_OBJECT_TYPES.MINI_BACKTEST_RESULT
+                      ? "Mini Backtest Result"
+                      : formatTagObjectTypeLabel(relation.objectType)}
             </div>
             <div className="text-[#a6a6a6]">
               Reference: {relation.objectRef}

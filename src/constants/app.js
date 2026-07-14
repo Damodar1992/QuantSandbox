@@ -41,6 +41,7 @@ export const INITIAL_STRATEGIES = [
     id: 1,
     name: "EMA Bounce",
     owner: "bogdan",
+    tagIds: ["tag-momentum"],
     versions: [
       {
         id: 11,
@@ -83,6 +84,7 @@ export const INITIAL_STRATEGIES = [
     id: 2,
     name: "RSI Mean Reversion",
     owner: "bogdan",
+    tagIds: ["tag-baseline"],
     versions: [
       {
         id: 21,

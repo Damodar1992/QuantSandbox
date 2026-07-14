@@ -2,6 +2,7 @@ import React, { memo } from "react";
 import { cx, ui } from "../../constants/ui";
 import { crmSurface } from "../../constants/crmAccent";
 import { EyeIcon } from "../common";
+import { resolveTagNames } from "../../features/tags/utils/tagStore";
 import { RowActionMenu } from "./RowActionMenu";
 
 function getLatestVersion(strategy) {
@@ -9,8 +10,15 @@ function getLatestVersion(strategy) {
   return versions[versions.length - 1] ?? null;
 }
 
-export const StrategyRow = memo(({ strategy, onSelectVersion, onOpenVersionTree }) => {
+export const StrategyRow = memo(({
+  strategy,
+  onSelectVersion,
+  onOpenVersionTree,
+  tagsRegistry = [],
+  onAddTag,
+}) => {
   const version = getLatestVersion(strategy);
+  const tagNames = resolveTagNames(strategy.tagIds, tagsRegistry);
 
   return (
     <tr className={cx(crmSurface.panel, "hover:bg-secondary transition-colors")}>
@@ -37,6 +45,28 @@ export const StrategyRow = memo(({ strategy, onSelectVersion, onOpenVersionTree 
         {version?.description ?? "—"}
       </td>
       <td className={cx("px-2 py-2 border-b text-[12px]", crmSurface.border, crmSurface.text)}>{strategy.owner}</td>
+      <td
+        className={cx("px-2 py-2 border-b text-[12px] max-w-[200px] align-top", crmSurface.border)}
+        title={tagNames.length ? tagNames.join(", ") : undefined}
+      >
+        {tagNames.length ? (
+          <div className="flex flex-wrap gap-1">
+            {tagNames.slice(0, 3).map((t) => (
+              <span
+                key={t}
+                className="rounded border border-[#303030] bg-[#0f0f0f] px-1.5 py-0.5 text-[10px] text-[#d9d9d9]"
+              >
+                {t}
+              </span>
+            ))}
+            {tagNames.length > 3 && (
+              <span className="self-center text-[10px] text-[#8c8c8c]">+{tagNames.length - 3}</span>
+            )}
+          </div>
+        ) : (
+          <span className="text-[#8c8c8c]">—</span>
+        )}
+      </td>
       <td className={cx("px-2 py-2 border-b text-[12px] text-muted-foreground", crmSurface.border)}>
         {version?.createdAt ?? "—"}
       </td>
@@ -53,6 +83,7 @@ export const StrategyRow = memo(({ strategy, onSelectVersion, onOpenVersionTree 
           <RowActionMenu
             onDuplicate={() => alert(`Duplicate strategy: ${strategy.name}`)}
             onDelete={() => alert(`Delete strategy: ${strategy.name}`)}
+            onAddTag={() => onAddTag?.(strategy)}
           />
         </div>
       </td>

@@ -2,8 +2,18 @@ import React, { memo, useCallback, useMemo, useState } from "react";
 import { cx, ui } from "../../../constants/ui";
 import { crmSurface } from "../../../constants/crmAccent";
 import { BASE_INDICATORS, INDICATOR_GROUPS } from "../../../constants/indicators";
+import { resolveTagNames } from "../../tags/utils/tagStore";
 
-export const IndicatorLibrary = memo(({ query, onQueryChange, groupFilter, onGroupChange, onAdd }) => {
+export const IndicatorLibrary = memo(({
+  query,
+  onQueryChange,
+  groupFilter,
+  onGroupChange,
+  onAdd,
+  indicatorTagIdsByKey = {},
+  tagsRegistry = [],
+  onAddTag,
+}) => {
   const [recentlyUsed, setRecentlyUsed] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem("recentIndicators") || "[]");
@@ -58,39 +68,56 @@ export const IndicatorLibrary = memo(({ query, onQueryChange, groupFilter, onGro
   }, [filteredIndicators, recentlyUsed]);
 
   const renderIndicator = useCallback(
-    ([key, info]) => (
-      <div
-        key={key}
-        className={cx("flex items-center gap-2 py-1.5 px-2 rounded group hover:bg-muted")}
-      >
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className={cx("text-[11px] font-medium", crmSurface.text)}>{info.name}</span>
-            <span
-              className={cx(
-                "text-[9px] px-1.5 py-0.5 rounded",
-                info.group === "Trend"
-                  ? "bg-blue-500/10 text-blue-300"
-                  : info.group === "Momentum"
-                    ? "bg-purple-500/10 text-purple-300"
-                    : info.group === "Volatility"
-                      ? "bg-orange-500/10 text-orange-300"
-                      : "bg-amber-500/10 text-amber-300",
-              )}
-            >
-              {info.group}
-            </span>
-          </div>
-        </div>
-        <button
-          onClick={() => handleAdd(key)}
-          className={cx(ui.btnPrimary, "h-6 px-2 text-[10px] whitespace-nowrap")}
+    ([key, info]) => {
+      const tagNames = resolveTagNames(indicatorTagIdsByKey[key] || [], tagsRegistry);
+      return (
+        <div
+          key={key}
+          className={cx("flex items-center gap-2 py-1.5 px-2 rounded group hover:bg-muted")}
         >
-          + Add
-        </button>
-      </div>
-    ),
-    [handleAdd],
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={cx("text-[11px] font-medium", crmSurface.text)}>{info.name}</span>
+              {tagNames.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {tagNames.slice(0, 3).map((t) => (
+                    <span
+                      key={t}
+                      className="rounded border border-[#303030] bg-[#0f0f0f] px-1.5 py-0.5 text-[9px] text-[#d9d9d9]"
+                    >
+                      {t}
+                    </span>
+                  ))}
+                  {tagNames.length > 3 && (
+                    <span className="self-center text-[9px] text-[#8c8c8c]">
+                      +{tagNames.length - 3}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+          {typeof onAddTag === "function" && (
+            <button
+              type="button"
+              onClick={() => onAddTag(key, info)}
+              className={cx(ui.btn, "h-6 px-2 text-[10px] whitespace-nowrap")}
+              title="Add tag"
+              aria-label={`Add tag for ${info.name}`}
+            >
+              Tag
+            </button>
+          )}
+          <button
+            onClick={() => handleAdd(key)}
+            className={cx(ui.btnPrimary, "h-6 px-2 text-[10px] whitespace-nowrap")}
+          >
+            + Add
+          </button>
+        </div>
+      );
+    },
+    [handleAdd, indicatorTagIdsByKey, tagsRegistry, onAddTag],
   );
 
   return (

@@ -3,12 +3,19 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { AppButton } from "@/components/common/AppButton";
 import { MoreIcon } from "../common";
 
-export const IndicatorActionsMenu = memo(({ indicator, onArchiveOrActivate, onUpdate, align = "right" }) => {
+export const IndicatorActionsMenu = memo(({
+  indicator,
+  onArchiveOrActivate,
+  onUpdate,
+  onAddTag,
+  align = "right",
+}) => {
   const isArchived = indicator.status === "Archived";
   return (
     <DropdownMenu>
@@ -18,6 +25,10 @@ export const IndicatorActionsMenu = memo(({ indicator, onArchiveOrActivate, onUp
         </AppButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent align={align === "right" ? "end" : "start"} className="w-40">
+        <DropdownMenuItem className="text-xs" onClick={() => onAddTag?.(indicator)}>
+          Add tag
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <DropdownMenuItem className="text-xs" onClick={() => onArchiveOrActivate?.(indicator)}>
           {isArchived ? "Activate" : "Archive"}
         </DropdownMenuItem>

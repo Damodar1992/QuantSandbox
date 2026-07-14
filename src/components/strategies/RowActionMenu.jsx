@@ -9,7 +9,7 @@ import {
 import { AppButton } from "@/components/common/AppButton";
 import { MoreIcon } from "../common";
 
-export const RowActionMenu = memo(({ onDuplicate, onDelete, align = "right" }) => (
+export const RowActionMenu = memo(({ onDuplicate, onDelete, onAddTag, align = "right" }) => (
   <DropdownMenu>
     <DropdownMenuTrigger asChild>
       <AppButton variant="outline" size="icon-sm" title="More" aria-label="More actions">
@@ -17,6 +17,13 @@ export const RowActionMenu = memo(({ onDuplicate, onDelete, align = "right" }) =
       </AppButton>
     </DropdownMenuTrigger>
     <DropdownMenuContent align={align === "right" ? "end" : "start"} className="w-56">
+      <DropdownMenuItem
+        onClick={() => onAddTag?.()}
+        className="text-xs"
+      >
+        Add tag
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
       <DropdownMenuItem
         onClick={() => onDuplicate?.()}
         className="text-xs"
