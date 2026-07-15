@@ -15,7 +15,9 @@ export const PostProcessingAnalyticsMenu = memo(function PostProcessingAnalytics
   onGenerateFullReport,
   onGenerateTopKReport,
   onAddTruncate,
+  onRangeNarrowing,
   showAddTruncate = true,
+  showRangeNarrowing = true,
   className,
 }) {
   return (
@@ -45,6 +47,11 @@ export const PostProcessingAnalyticsMenu = memo(function PostProcessingAnalytics
             </DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
+        {showRangeNarrowing ? (
+          <DropdownMenuItem className="text-xs" onClick={() => onRangeNarrowing?.()}>
+            Range narrowing
+          </DropdownMenuItem>
+        ) : null}
         {showAddTruncate ? (
           <DropdownMenuItem className="text-xs" onClick={() => onAddTruncate?.()}>
             Add truncate

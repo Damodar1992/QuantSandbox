@@ -1,5 +1,7 @@
 // Tag domain types, seed data, and mock current user
 
+import { buildDefaultRangeNarrowingSeedItem } from "../features/builder/utils/rangeNarrowingMock.js";
+
 /** @typedef {{ id: string, name: string, ownerId: number, ownerLogin: string, createdAt: string }} Tag */
 
 /** @typedef {{ id: string, tagId: string, objectType: "HYPEROPT_RESULT" | "MINI_BACKTEST_RESULT" | "STRATEGY" | "INDICATOR", objectId: string, objectRef: string, assignedAt: string }} TagRelation */
@@ -151,6 +153,7 @@ export const INITIAL_HYPEROPT_RESULTS_ROWS = [
         heatmapsAndReports: [
           { id: "hr1-1-h1", date: "2024-01-15", type: "Heatmap", status: "Finished" },
           { id: "hr1-1-r1", date: "2024-01-15", type: "Report", status: "Completed" },
+          buildDefaultRangeNarrowingSeedItem("hr1-1", "2024-01-15"),
         ],
       },
       {
@@ -163,6 +166,7 @@ export const INITIAL_HYPEROPT_RESULTS_ROWS = [
         maxScore: "0.87",
         heatmapsAndReports: [
           { id: "hr1-2-h1", date: "2024-01-16", type: "Heatmap", status: "Finished" },
+          buildDefaultRangeNarrowingSeedItem("hr1-2", "2024-01-16"),
         ],
       },
     ],
@@ -190,6 +194,7 @@ export const INITIAL_HYPEROPT_RESULTS_ROWS = [
         heatmapsAndReports: [
           { id: "hr2-1-h1", date: "2024-01-14", type: "Heatmap", status: "Finished" },
           { id: "hr2-1-r1", date: "2024-01-14", type: "Report", status: "Completed" },
+          buildDefaultRangeNarrowingSeedItem("hr2-1", "2024-01-14"),
         ],
       },
     ],

@@ -108,8 +108,12 @@ import {
   MiniBacktestPage,
   BestEpochsModal,
   PostProcessingTableActions,
-  HeatmapReportItemActions,
+  AnalyticsItemActions,
+  AddRangeNarrowingModal,
+  RangeNarrowingReadOnlyModal,
+  RangeNarrowingResultsModal,
 } from './components';
+import { applyConfigRowsToIndicators, createRangeNarrowingAnalyticsItem, filterAnalyticsItemsForStage } from './utils/rangeNarrowingMock';
 import { getDefaultDisplayName, formatIndicatorSnapshot } from './utils/indicatorHelpers';
 import { formatHyperoptDateTime, normalizeHyperoptRunStatus } from './utils/hyperoptFormatters';
 import { buildEpochFromHyperoptContext } from './utils/hyperoptEpoch';
@@ -874,6 +878,19 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
   const [showReportModal, setShowReportModal] = useState(false);
   // Hyperopt Results: Run normalization modal (same content as Normalization formulas block)
   const [showNormalizationModal, setShowNormalizationModal] = useState(false);
+  const [showAddRangeNarrowingModal, setShowAddRangeNarrowingModal] = useState(false);
+  const [rangeNarrowingContext, setRangeNarrowingContext] = useState(null);
+  const [rangeNarrowingInfoItem, setRangeNarrowingInfoItem] = useState(null);
+  const [rangeNarrowingResultsItem, setRangeNarrowingResultsItem] = useState(null);
+  // Range Narrowing tab state
+  const [normActiveTab, setNormActiveTab] = useState("stability"); // "stability" | "score" | "narrowing"
+  const [rnEnabled, setRnEnabled] = useState(false);
+  const [rnPlateauWidth, setRnPlateauWidth] = useState(39);
+  const [rnMinImportance, setRnMinImportance] = useState(0.5);
+  const [rnMaxCombinations, setRnMaxCombinations] = useState(122);
+  const [rnMinEpochsPerValue, setRnMinEpochsPerValue] = useState(4);
+  const [rnMarginEnabled, setRnMarginEnabled] = useState(true);
+  const [rnMarginWiden, setRnMarginWiden] = useState(2);
   const [showHyperoptDetailsModal, setShowHyperoptDetailsModal] = useState(false);
   const [hyperoptDetailsModalType, setHyperoptDetailsModalType] = useState("post-processing");
   const [heatmapItemFiltersModalItem, setHeatmapItemFiltersModalItem] = useState(null);
@@ -1552,6 +1569,49 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
       })
       .join(", ");
   }, []);
+
+  const openRangeNarrowingModalForSub = useCallback((rowId, subId) => {
+    if (isRiskStage) return;
+    setRangeNarrowingContext({ rowId, subId });
+    setShowAddRangeNarrowingModal(true);
+  }, [isRiskStage]);
+
+  const handleRunRangeNarrowing = useCallback(
+    (runConfig) => {
+      if (isRiskStage || !rangeNarrowingContext || !setHyperoptResultsRows) return;
+      const { rowId, subId } = rangeNarrowingContext;
+      const item = createRangeNarrowingAnalyticsItem({
+        subId,
+        runConfig,
+        date: new Date().toISOString().slice(0, 10),
+      });
+      setHyperoptResultsRows((prev) =>
+        prev.map((row) => {
+          if (row.id !== rowId) return row;
+          return {
+            ...row,
+            children: (row.children || []).map((sub) => {
+              if (sub.id !== subId) return sub;
+              return {
+                ...sub,
+                heatmapsAndReports: [...(sub.heatmapsAndReports || []), item],
+              };
+            }),
+          };
+        }),
+      );
+      setRangeNarrowingContext(null);
+    },
+    [isRiskStage, rangeNarrowingContext, setHyperoptResultsRows],
+  );
+
+  const handleApplyRangeNarrowingRanges = useCallback(
+    (configRows) => {
+      if (!Array.isArray(configRows) || !configRows.length) return;
+      setIndicators((prev) => applyConfigRowsToIndicators(prev, configRows));
+    },
+    [setIndicators],
+  );
   const stages = useMemo(
     () => [
       {
@@ -3478,7 +3538,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                       type="button"
                                       variant="outline"
                                       size="icon-xs"
-                                      onClick={() => setShowNormalizationModal(true)}
+                                      onClick={() => { setNormActiveTab("stability"); setShowNormalizationModal(true); }}
                                       title="Post-processing"
                                       aria-label="Post-processing"
                                     >
@@ -3530,7 +3590,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                         <tbody>
                                           {row.children.map((sub) => {
                                             const heatMapId = `hyperopt-${row.id}-${sub.id}`;
-                                            const level3Items = sub.heatmapsAndReports || [];
+                                            const level3Items = filterAnalyticsItemsForStage(sub.heatmapsAndReports, isRiskStage);
                                             const hasTruncData = !!sub.truncScores;
                                             const normKey = `${row.id}::${sub.id}`;
                                             const isDetailsExpanded = normalizationDetailsExpanded.has(normKey);
@@ -3555,6 +3615,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                   </td>
                                                   <td className="px-3 py-2 text-right">
                                                     <PostProcessingTableActions
+                                                      showRangeNarrowing={!isRiskStage}
                                                       miniBacktestEnabled={miniBacktestEnabled}
                                                       onShowDetails={() => {
                                                         setHyperoptDetailsModalType("post-processing");
@@ -3565,6 +3626,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                       onGenerateTopKReport={() => setShowReportModal(true)}
                                                       onBestEpochs={() => openBestEpochsModal(row, sub, heatMapId)}
                                                       onRunMiniBacktest={() => openMiniBacktestEpochModal(row, sub, heatMapId)}
+                                                      onRangeNarrowing={() => openRangeNarrowingModalForSub(row.id, sub.id)}
                                                       onAddTruncate={() => {
                                                         setSelectedNormalizationRow(sub);
                                                         setShowTruncateModal(true);
@@ -3575,10 +3637,10 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                 {isDetailsExpanded && (
                                                   <tr>
                                                     <td colSpan={5} className="p-0 align-top bg-[#100a1a]">
-                                                      {/* Branch A: HeatMaps & Reports (full data scope) */}
+                                                      {/* Branch A: Analytics (full data scope) */}
                                                       <div className="ml-4 mt-2 mb-2 rounded-xl border border-[rgba(60,40,80,0.35)] overflow-hidden bg-[#110b1d] shadow-[0_10px_24px_rgba(6,3,20,0.2)]">
                                                         <div className="px-3 py-1.5 font-medium border-b border-[rgba(60,40,80,0.3)] bg-amber-500/10 text-amber-200 text-[11px]">
-                                                          HeatMaps &amp; Reports
+                                                          Analytics
                                                         </div>
                                                         <div className="overflow-x-auto">
                                                           <table className="w-full border-collapse text-[11px]">
@@ -3607,12 +3669,14 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                                     <RunStatusBadge status={item.status || "Finished"} />
                                                                   </td>
                                                                   <td className="px-3 py-2">
-                                                                    <HeatmapReportItemActions
+                                                                    <AnalyticsItemActions
                                                                       item={item}
                                                                       heatMapId={heatMapId}
                                                                       onShowHeatmap={() => setHeatMapViewModalId(heatMapId)}
                                                                       onDownloadReport={() => setShowReportModal(true)}
                                                                       onShowItemFilters={() => setHeatmapItemFiltersModalItem(item)}
+                                                                      onShowRangeNarrowingInfo={() => setRangeNarrowingInfoItem(item)}
+                                                                      onShowRangeNarrowingResults={() => setRangeNarrowingResultsItem(item)}
                                                                     />
                                                                   </td>
                                                                 </tr>
@@ -3674,6 +3738,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                                       <td className="px-3 py-2">
                                                                         <PostProcessingTableActions
                                                                           showAddTruncate={false}
+                                                                          showRangeNarrowing={!isRiskStage}
                                                                           miniBacktestEnabled={miniBacktestEnabled}
                                                                           onShowDetails={() => {
                                                                             setHyperoptDetailsModalType("post-processing");
@@ -3684,16 +3749,17 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                                           onGenerateTopKReport={() => setShowReportModal(true)}
                                                                           onBestEpochs={() => openBestEpochsModal(row, sub, heatMapId)}
                                                                           onRunMiniBacktest={() => openMiniBacktestEpochModal(row, sub, heatMapId)}
+                                                                          onRangeNarrowing={() => openRangeNarrowingModalForSub(row.id, sub.id)}
                                                                         />
                                                                       </td>
                                                                       </tr>
                                                                       {isLevel3ExpandedForRow && level3Items.length > 0 && (
                                                                         <tr>
                                                                           <td colSpan={5} className="p-0 align-top bg-[#100a1a]">
-                                                                          {/* Block 3: HeatMaps & Reports (child of Normalization details) */}
+                                                                          {/* Block 3: Analytics (child of Normalization details) */}
                                                                           <div className="ml-4 mt-2 mb-2 rounded-xl border border-[rgba(60,40,80,0.35)] overflow-hidden bg-[#110b1d] shadow-[0_10px_24px_rgba(6,3,20,0.2)]">
                                                                             <div className="px-3 py-1.5 font-medium border-b border-[rgba(60,40,80,0.3)] bg-amber-500/10 text-amber-200 text-[11px]">
-                                                                              HeatMaps &amp; Reports
+                                                                              Analytics
                                                                             </div>
                                                                             <div className="overflow-x-auto">
                                                                               <table className="w-full border-collapse text-[11px]">
@@ -3714,12 +3780,14 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                                                         <RunStatusBadge status={item.status || "Finished"} />
                                                                                       </td>
                                                                                       <td className="px-3 py-2">
-                                                                                        <HeatmapReportItemActions
+                                                                                        <AnalyticsItemActions
                                                                                           item={item}
                                                                                           heatMapId={heatMapId}
                                                                                           onShowHeatmap={() => setHeatMapViewModalId(heatMapId)}
                                                                                           onDownloadReport={() => setShowReportModal(true)}
                                                                                           onShowItemFilters={() => setHeatmapItemFiltersModalItem(item)}
+                                                                                          onShowRangeNarrowingInfo={() => setRangeNarrowingInfoItem(item)}
+                                                                                          onShowRangeNarrowingResults={() => setRangeNarrowingResultsItem(item)}
                                                                                         />
                                                                                       </td>
                                                                                     </tr>
@@ -3806,7 +3874,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                 showPostProcessing={showPostProcessing}
                                 tagsRegistry={tagsRegistry}
                                 onClose={() => setOpenRunId(null)}
-                                onPostProcessing={() => setShowNormalizationModal(true)}
+                                onPostProcessing={() => { setNormActiveTab("stability"); setShowNormalizationModal(true); }}
                                 onEditTags={(row) => openHyperoptTagsModal(row)}
                                 onEditComment={(row) => openHyperoptCommentModal(row)}
                                 onShowHyperoptDetails={() => {
@@ -4204,21 +4272,31 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
               </span>
               <button type="button" onClick={() => setShowNormalizationModal(false)} className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1">✕</button>
             </div>
-            <div className="overflow-auto p-4">
+            {/* Tab bar */}
+            <div className="flex border-b border-[#303030] px-4 shrink-0">
+              {[
+                ["stability", "Stability formula"],
+                ["score", "Final score formula"],
+                ...(!isRiskStage ? [["narrowing", "Range Narrowing"]] : []),
+              ].map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setNormActiveTab(id)}
+                  className={cx(
+                    "px-3 py-2.5 text-[12px] border-b-2 -mb-px transition-colors whitespace-nowrap",
+                    normActiveTab === id
+                      ? "border-violet-500 text-[#d9d9d9] font-medium"
+                      : "border-transparent text-[#8c8c8c] hover:text-[#d9d9d9]",
+                  )}
+                >{label}</button>
+              ))}
+            </div>
+            <div className="overflow-auto p-4 flex-1 min-h-0">
+              {/* ── Tab: Stability formula ── */}
+              {normActiveTab === "stability" && (
               <div className="space-y-3">
-                  {/* Block 1: Stability formula (collapsible) */}
-                  <div className="rounded-lg border border-[#303030] overflow-hidden bg-[#0f0f0f]/50">
-                    <button
-                      type="button"
-                      onClick={() => toggleNormModalSection("stability")}
-                      className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-[12px] font-medium text-[#d9d9d9] hover:bg-[#1a1a1a] transition-colors"
-                    >
-                      <span className="text-[#8c8c8c] text-[10px]">{normModalCollapsedSections.has("stability") ? "▶" : "▼"}</span>
-                      <span>Stability formula</span>
-                    </button>
-                    {!normModalCollapsedSections.has("stability") && (
-                      <div className="px-3 pb-3 pt-0 space-y-3 border-t border-[#303030]">
-                        <div className="space-y-1.5 pt-3">
+                        <div className="space-y-1.5">
                           <div className="text-[11px] font-medium text-[#d9d9d9]">Stability formula</div>
                     <div className="flex flex-wrap items-center gap-3 gap-y-2">
                       <select value={finStabilityBlockFormula} onChange={(e) => setFinStabilityBlockFormula(e.target.value)} className={cx(ui.input, "h-9 text-[12px] w-full max-w-[200px]")}>
@@ -4320,22 +4398,12 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                       </table>
                     </div>
                   </div>
-                        </div>
-                    )}
-                  </div>
-                  {/* Block 2: Score formula (collapsible) */}
-                  <div className="rounded-lg border border-[#303030] overflow-hidden bg-[#0f0f0f]/50">
-                    <button
-                      type="button"
-                      onClick={() => toggleNormModalSection("score")}
-                      className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-[12px] font-medium text-[#d9d9d9] hover:bg-[#1a1a1a] transition-colors"
-                    >
-                      <span className="text-[#8c8c8c] text-[10px]">{normModalCollapsedSections.has("score") ? "▶" : "▼"}</span>
-                      <span>Final score formula</span>
-                    </button>
-                    {!normModalCollapsedSections.has("score") && (
-                      <div className="px-3 pb-3 pt-0 space-y-3 border-t border-[#303030]">
-                        <div className="space-y-1.5 pt-3">
+              </div>
+              )}
+              {/* ── Tab: Final score formula ── */}
+              {normActiveTab === "score" && (
+              <div className="space-y-3">
+                        <div className="space-y-1.5">
                           <div className="text-[11px] font-medium text-[#d9d9d9]">Final score formula</div>
                           <div className="flex flex-wrap items-center gap-3 gap-y-2">
                             <select
@@ -4496,18 +4564,171 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                       </tfoot>
                     </table>
                   </div>
+                  </div>
+              </div>
+              )}
+              {/* ── Tab: Range Narrowing ── */}
+              {normActiveTab === "narrowing" && (
+              <div className="space-y-4">
+                {/* Toggle: Also calculate parameter range narrowing */}
+                <div className="flex items-start gap-3 rounded-lg border border-[#303030] bg-[#0f0f0f]/50 p-3">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={rnEnabled}
+                    onClick={() => setRnEnabled((v) => !v)}
+                    className={cx(
+                      "relative shrink-0 mt-0.5 h-6 w-10 rounded-full border-2 transition-colors",
+                      rnEnabled ? "bg-violet-600 border-violet-500" : "bg-[#303030] border-[#404040]",
+                    )}
+                  >
+                    <span className={cx(
+                      "absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform",
+                      rnEnabled ? "translate-x-4 left-0.5" : "translate-x-0 left-0.5",
+                    )} />
+                  </button>
+                  <div>
+                    <div className="text-[12px] font-medium text-[#d9d9d9]">Also calculate parameter range narrowing</div>
+                    <div className="text-[11px] text-[#8c8c8c] mt-0.5">Runs on top of this run&apos;s report — no extra epochs, same completed data. Off by default.</div>
+                  </div>
+                </div>
+
+                {/* Info banner — always visible */}
+                <div className="rounded-lg border border-violet-700/40 bg-violet-900/30 px-3 py-2.5 text-[11px] text-violet-200 leading-snug">
+                  Target metric is fixed to <strong className="text-violet-100">final_score</strong>. Native step per parameter is computed automatically from this run&apos;s tested values — nothing to set here.
+                </div>
+
+                {/* All fields — only when rnEnabled */}
+                {rnEnabled && (
+                  <div className="space-y-4">
+                    {/* Sliders row */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <div className="text-[11px] font-medium text-[#d9d9d9]">
+                          Plateau width: <span className="text-violet-300">{rnPlateauWidth}%</span>
                         </div>
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          step={1}
+                          value={rnPlateauWidth}
+                          onChange={(e) => setRnPlateauWidth(Number(e.target.value))}
+                          className="w-full h-2 accent-violet-500"
+                        />
+                        <div className="text-[10px] text-[#8c8c8c]">0% = peak only, 100% = whole curve.</div>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="text-[11px] font-medium text-[#d9d9d9]">
+                          Min importance to keep: <span className="text-violet-300">{rnMinImportance}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min={0}
+                          max={10}
+                          step={0.5}
+                          value={rnMinImportance}
+                          onChange={(e) => setRnMinImportance(Number(e.target.value))}
+                          className="w-full h-2 accent-violet-500"
+                        />
+                        <div className="text-[10px] text-[#8c8c8c]">Importance below this → parameter gets fixed.</div>
+                      </div>
+                    </div>
+
+                    {/* Number fields row */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-medium text-[#d9d9d9]">Max combinations</label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={rnMaxCombinations}
+                          onChange={(e) => setRnMaxCombinations(Number(e.target.value))}
+                          className={cx(ui.input, "h-9 text-[12px] w-full")}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-medium text-[#d9d9d9]">Min. epochs per value</label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={rnMinEpochsPerValue}
+                          onChange={(e) => setRnMinEpochsPerValue(Number(e.target.value))}
+                          className={cx(ui.input, "h-9 text-[12px] w-full")}
+                        />
+                        <div className="text-[10px] text-[#8c8c8c] leading-snug">Values tested on fewer epochs than this are dropped from the curve/range (min_rows_per_value).</div>
+                      </div>
+                    </div>
+
+                    {/* Toggle: Also generate config «margin» */}
+                    <div className="flex items-start gap-3 rounded-lg border border-[#303030] bg-[#0f0f0f]/50 p-3">
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={rnMarginEnabled}
+                        onClick={() => setRnMarginEnabled((v) => !v)}
+                        className={cx(
+                          "relative shrink-0 mt-0.5 h-6 w-10 rounded-full border-2 transition-colors",
+                          rnMarginEnabled ? "bg-violet-600 border-violet-500" : "bg-[#303030] border-[#404040]",
+                        )}
+                      >
+                        <span className={cx(
+                          "absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform",
+                          rnMarginEnabled ? "translate-x-4 left-0.5" : "translate-x-0 left-0.5",
+                        )} />
+                      </button>
+                      <div>
+                        <div className="text-[12px] font-medium text-[#d9d9d9]">Also generate config «margin» (safety range)</div>
+                        <div className="text-[11px] text-[#8c8c8c] mt-0.5">When on, margin recalculates its own points/step and must independently fit within max combinations.</div>
+                      </div>
+                    </div>
+
+                    {/* Margin widen */}
+                    {rnMarginEnabled && (
+                      <div className="flex flex-col gap-1.5">
+                        <label className="block text-[11px] font-medium text-[#d9d9d9]">Margin widen (steps, for the &ldquo;margin&rdquo; config)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={rnMarginWiden}
+                          onChange={(e) => setRnMarginWiden(Number(e.target.value))}
+                          className={cx(ui.input, "h-9 text-[12px] w-full max-w-[240px]")}
+                        />
                       </div>
                     )}
                   </div>
+                )}
               </div>
+              )}
             </div>
-            <div className="px-4 py-3 border-t border-[#303030] flex justify-end">
-              <button type="button" onClick={() => setShowNormalizationModal(false)} className={cx(ui.btnPrimary, "h-8 px-3 text-[11px]")}>Apply</button>
+            <div className="px-4 py-3 border-t border-[#303030] flex justify-end gap-2">
+              <button type="button" onClick={() => setShowNormalizationModal(false)} className={cx(ui.btn, "h-8 px-3 text-[11px]")}>Cancel</button>
+              <button type="button" onClick={() => setShowNormalizationModal(false)} className={cx(ui.btnPrimary, "h-8 px-3 text-[11px]")}>Run post-processing</button>
             </div>
           </div>
         </div>
       )}
+      {!isRiskStage && (
+      <AddRangeNarrowingModal
+        open={showAddRangeNarrowingModal}
+        onClose={() => {
+          setShowAddRangeNarrowingModal(false);
+          setRangeNarrowingContext(null);
+        }}
+        onRun={handleRunRangeNarrowing}
+      />
+      )}
+      <RangeNarrowingReadOnlyModal
+        open={Boolean(rangeNarrowingInfoItem)}
+        runConfig={rangeNarrowingInfoItem?.runConfig}
+        onClose={() => setRangeNarrowingInfoItem(null)}
+      />
+      <RangeNarrowingResultsModal
+        open={Boolean(rangeNarrowingResultsItem)}
+        item={rangeNarrowingResultsItem}
+        onClose={() => setRangeNarrowingResultsItem(null)}
+        onApplyRanges={handleApplyRangeNarrowingRanges}
+      />
       {/* Add truncate modal */}
       {showTruncateModal && (
         <div

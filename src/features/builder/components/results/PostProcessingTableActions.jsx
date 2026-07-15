@@ -11,8 +11,10 @@ export const PostProcessingTableActions = memo(function PostProcessingTableActio
   onBestEpochs,
   onRunMiniBacktest,
   onAddTruncate,
+  onRangeNarrowing,
   miniBacktestEnabled = false,
   showAddTruncate = true,
+  showRangeNarrowing = true,
   className,
 }) {
   return (
@@ -31,10 +33,12 @@ export const PostProcessingTableActions = memo(function PostProcessingTableActio
       />
       <PostProcessingAnalyticsMenu
         showAddTruncate={showAddTruncate}
+        showRangeNarrowing={showRangeNarrowing}
         onConfigureHeatMap={onConfigureHeatMap}
         onGenerateFullReport={onGenerateFullReport}
         onGenerateTopKReport={onGenerateTopKReport}
         onAddTruncate={onAddTruncate}
+        onRangeNarrowing={onRangeNarrowing}
       />
     </div>
   );

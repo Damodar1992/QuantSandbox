@@ -4,7 +4,8 @@ import { crmAccent, crmSurface } from "../../../../constants/crmAccent";
 import { HyperoptDetailsTooltip } from "../../../../components/heatmap";
 import { AppButton } from "../../../../components/common/AppButton";
 import { HeatMapIcon, FileTextIcon } from "../../../../components/shared";
-import { HeatmapReportItemActions } from "./HeatmapReportItemActions";
+import { AnalyticsItemActions } from "./AnalyticsItemActions";
+import { filterAnalyticsItemsForStage } from "../../utils/rangeNarrowingMock";
 import { RunStatusBadge } from "./RunStatusBadge";
 import { PostProcessingEpochMenu } from "./PostProcessingEpochMenu";
 
@@ -12,12 +13,15 @@ function CollapseChevron({ collapsed }) {
   return <span className="text-[10px] text-[#8c8c8c]">{collapsed ? "▶" : "▼"}</span>;
 }
 
-function HeatMapsReportsPanel({
+function AnalyticsPanel({
   items,
   heatMapId,
   onShowHeatmap,
   onDownloadReport,
   onShowItemFilters,
+  onShowRangeNarrowingInfo,
+  onShowRangeNarrowingResults,
+  showRangeNarrowing = true,
   className,
 }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -30,7 +34,7 @@ function HeatMapsReportsPanel({
         className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 border-b border-amber-500/30 bg-amber-500/10 text-amber-200 text-[10px] font-medium text-left hover:bg-amber-500/15 transition-colors"
         aria-expanded={!collapsed}
       >
-        <span>HeatMaps &amp; Reports</span>
+        <span>Analytics</span>
         <CollapseChevron collapsed={collapsed} />
       </button>
       {collapsed ? null : items.length === 0 ? (
@@ -57,12 +61,14 @@ function HeatMapsReportsPanel({
                 </span>
                 <RunStatusBadge status={item.status || "Finished"} />
               </div>
-              <HeatmapReportItemActions
+              <AnalyticsItemActions
                 item={item}
                 heatMapId={heatMapId}
                 onShowHeatmap={onShowHeatmap}
                 onDownloadReport={onDownloadReport}
                 onShowItemFilters={onShowItemFilters}
+                onShowRangeNarrowingInfo={onShowRangeNarrowingInfo}
+                onShowRangeNarrowingResults={onShowRangeNarrowingResults}
               />
             </li>
           ))}
@@ -89,9 +95,12 @@ export const PostProcessingCard = memo(function PostProcessingCard({
   onShowHeatmap,
   onDownloadReport,
   onShowItemFilters,
+  onShowRangeNarrowingInfo,
+  onShowRangeNarrowingResults,
+  isRiskStage = false,
 }) {
   const heatMapId = `hyperopt-${rowId}-${sub.id}`;
-  const items = sub.heatmapsAndReports || [];
+  const items = filterAnalyticsItemsForStage(sub.heatmapsAndReports, isRiskStage);
   const hasTrunc = !!sub.truncScores;
   const [collapsed, setCollapsed] = useState(false);
   const [truncCollapsed, setTruncCollapsed] = useState(false);
@@ -142,13 +151,15 @@ export const PostProcessingCard = memo(function PostProcessingCard({
             />
           </div>
 
-          {/* HeatMaps & Reports */}
-          <HeatMapsReportsPanel
+          {/* Analytics */}
+          <AnalyticsPanel
             items={items}
             heatMapId={heatMapId}
             onShowHeatmap={onShowHeatmap}
             onDownloadReport={onDownloadReport}
             onShowItemFilters={onShowItemFilters}
+            onShowRangeNarrowingInfo={onShowRangeNarrowingInfo}
+            onShowRangeNarrowingResults={onShowRangeNarrowingResults}
           />
 
           <div className="flex flex-wrap items-center gap-2">
@@ -199,12 +210,14 @@ export const PostProcessingCard = memo(function PostProcessingCard({
                       Generate Report
                     </AppButton>
                   </div>
-                  <HeatMapsReportsPanel
+                  <AnalyticsPanel
                     items={items}
                     heatMapId={heatMapId}
                     onShowHeatmap={onShowHeatmap}
                     onDownloadReport={onDownloadReport}
                     onShowItemFilters={onShowItemFilters}
+                    onShowRangeNarrowingInfo={onShowRangeNarrowingInfo}
+                    onShowRangeNarrowingResults={onShowRangeNarrowingResults}
                     className="mx-2.5 mb-2"
                   />
                 </>
