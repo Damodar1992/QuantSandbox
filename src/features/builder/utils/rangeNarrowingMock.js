@@ -19,14 +19,33 @@ const REFERENCE_CONFIG_MARGIN = [
   { indicator: "bb", indicatorType: "BBANDS", parameter: "matype", fixedValue: 0, status: "fixed" },
 ];
 
+/** Product of Count for active (non-fixed) config rows. */
+export function computeCombinationsFromConfigRows(configRows) {
+  if (!Array.isArray(configRows) || !configRows.length) return 0;
+  const factors = configRows
+    .filter((row) => row.status !== "fixed" && row.fixedValue == null)
+    .map((row) => row.count)
+    .filter((c) => c != null && Number.isFinite(c) && c >= 1);
+  if (!factors.length) return 0;
+  return factors.reduce((acc, c) => acc * c, 1);
+}
+
+export function computeReductionStats(before, after) {
+  const safeBefore = Number.isFinite(before) ? before : 0;
+  const safeAfter = Number.isFinite(after) ? after : 0;
+  return {
+    absoluteReduction: safeBefore - safeAfter,
+    remainingPercent: safeBefore > 0 ? (safeAfter / safeBefore) * 100 : 0,
+    reductionMultiplier: safeAfter > 0 ? Math.round(safeBefore / safeAfter) : 0,
+  };
+}
+
 export function buildReferenceRangeNarrowingResults(runConfig = {}, subId = "hr1-1") {
   const marginEnabled = runConfig.marginEnabled ?? true;
   const marginWiden = runConfig.marginWiden ?? 2;
   const before = runConfig.maxCombinations != null ? Math.max(runConfig.maxCombinations * 165, 20000) : 20000;
-  const after = 6;
-  const absoluteReduction = before - after;
-  const remainingPercent = before > 0 ? (after / before) * 100 : 0;
-  const multiplier = after > 0 ? Math.round(before / after) : 0;
+  const after = computeCombinationsFromConfigRows(REFERENCE_CONFIG_MAIN);
+  const { absoluteReduction, remainingPercent, reductionMultiplier } = computeReductionStats(before, after);
 
   return {
     runId: `d7c5${String(subId).replace(/[^a-z0-9]/gi, "").slice(0, 4)}9463`,
@@ -35,7 +54,7 @@ export function buildReferenceRangeNarrowingResults(runConfig = {}, subId = "hr1
     afterCombinations: after,
     absoluteReduction,
     remainingPercent,
-    reductionMultiplier: multiplier,
+    reductionMultiplier,
     configs: {
       main: {
         importanceRows: REFERENCE_IMPORTANCE,

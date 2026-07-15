@@ -1,6 +1,10 @@
 import React, { memo, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { cx, ui } from "../../../../constants/ui";
+import {
+  computeCombinationsFromConfigRows,
+  computeReductionStats,
+} from "../../utils/rangeNarrowingMock";
 
 function formatNumber(n) {
   if (n == null || !Number.isFinite(n)) return "—";
@@ -80,15 +84,23 @@ export const RangeNarrowingResultsModal = memo(function RangeNarrowingResultsMod
 
   const marginWiden = runConfig?.marginWiden ?? results?.configs?.margin?.marginWiden ?? 0;
 
+  const beforeCombinations = results?.beforeCombinations ?? 0;
+
+  const afterCombinations = useMemo(
+    () => computeCombinationsFromConfigRows(activeConfig?.configRows),
+    [activeConfig],
+  );
+
+  const { absoluteReduction, reductionMultiplier } = useMemo(
+    () => computeReductionStats(beforeCombinations, afterCombinations),
+    [beforeCombinations, afterCombinations],
+  );
+
   if (!open || !item || !results) return null;
 
   const {
     runId,
     targetMetric = "final_score",
-    beforeCombinations,
-    afterCombinations,
-    absoluteReduction,
-    reductionMultiplier,
   } = results;
 
   const handleApply = () => {
