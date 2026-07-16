@@ -25,6 +25,7 @@ const badgeVariants = cva(
         failed: "bg-red-500/10 text-red-200 border-red-500/40",
         warning: "bg-amber-500/10 text-amber-200 border-amber-500/40",
         muted: "bg-white/5 text-muted-foreground border-border",
+        rawDeleted: "bg-violet-500/5 text-violet-400/60 border-dashed border-violet-500/25",
       },
     },
     defaultVariants: {

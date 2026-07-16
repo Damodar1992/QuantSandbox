@@ -75,6 +75,9 @@ import { TagsPage, TagsEditModal } from "./components/tags";
 import { ReleaseNotesPage, ReleaseNoteModal } from "./components/releaseNotes";
 import { INITIAL_RELEASE_NOTES } from "./constants/releaseNotes";
 import { BuilderStepper } from "./features/builder/BuilderStepper";
+import { useStorageState } from "./features/storage/hooks/useStorageState";
+import { StoragePage } from "./components/storage";
+import { canManageStorage } from "./features/storage/utils/storagePermissions";
 /**
  * Quant Sandbox CRM Mock — Properly structured React app
  * - Login + Forgot Password (mock)
@@ -685,6 +688,14 @@ export default function App() {
   const [userToChangePassword, setUserToChangePassword] = useState(null);
   const [userToResetPassword, setUserToResetPassword] = useState(null);
 
+  // Storage RAW data management
+  const storageState = useStorageState({ role: currentUserRole, userId: MOCK_CURRENT_USER.id });
+
+  const handleOpenStorage = useCallback(() => {
+    setActiveSection("Storage");
+    setSelected(null);
+  }, []);
+
   // Release notes (mock)
   const [releaseNotes, setReleaseNotes] = useState(() => INITIAL_RELEASE_NOTES);
   const [releaseNoteModalOpen, setReleaseNoteModalOpen] = useState(false);
@@ -920,6 +931,9 @@ export default function App() {
     if (section !== "Mini Backtest") {
       setGlobalMiniBacktestDetailId(null);
     }
+    if (section !== "Storage") {
+      // keep storage state alive; no cleanup needed
+    }
   }, []);
 
   const handleFeatureFlagChange = useCallback((key, value) => {
@@ -1110,6 +1124,9 @@ export default function App() {
           onFeatureFlagChange={handleFeatureFlagChange}
           releaseNotesActive={activeSection === "ReleaseNotes"}
           onOpenReleaseNotes={handleOpenReleaseNotes}
+          storageTotals={canManageStorage(currentUserRole) ? storageState.totals : undefined}
+          storageActive={activeSection === "Storage"}
+          onOpenStorage={canManageStorage(currentUserRole) ? handleOpenStorage : undefined}
       />
 
       <main className="flex-1 overflow-visible p-6">
@@ -1585,6 +1602,11 @@ export default function App() {
             onSelectId={setSelectedReleaseNoteId}
             onEditNote={handleEditReleaseNote}
           />
+        )}
+
+        {/* Storage RAW data management page */}
+        {activeSection === "Storage" && canManageStorage(currentUserRole) && (
+          <StoragePage storageState={storageState} />
         )}
 
         {/* Indicators page (mock) */}

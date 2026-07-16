@@ -21,6 +21,8 @@ const STATUS_VARIANTS = {
   Momentum: "secondary",
   Volatility: "warning",
   Custom: "warning",
+  Running: "inProgress",
+  "Raw data deleted": "rawDeleted",
 };
 
 export const AppBadge = memo(function AppBadge({ status, variant, type, className, children }) {

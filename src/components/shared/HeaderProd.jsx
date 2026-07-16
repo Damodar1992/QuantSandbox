@@ -5,6 +5,7 @@ import { Logo, MenuIcon } from "../common";
 import { PillTabs, ProdButton } from "../prod";
 import { QueueIcon, ReleaseNotesIcon, DragHandleIcon, TrashIcon } from "./Icons";
 import { FeatureFlagsDropdown } from "./FeatureFlagsDropdown";
+import { StorageUsageBarCompact } from "../storage/StorageUsageBar";
 
 export const HeaderProd = memo(function HeaderProd({
   onLogout,
@@ -28,6 +29,9 @@ export const HeaderProd = memo(function HeaderProd({
   onFeatureFlagChange,
   releaseNotesActive = false,
   onOpenReleaseNotes,
+  storageTotals,
+  storageActive = false,
+  onOpenStorage,
 }) {
   const queueRef = useOutsideClose(queueOpen, onQueueClose);
   const [draggedIndex, setDraggedIndex] = useState(null);
@@ -165,6 +169,15 @@ export const HeaderProd = memo(function HeaderProd({
             <option value="Admin run">Admin</option>
           </select>
           <FeatureFlagsDropdown flags={featureFlags} onFlagChange={onFeatureFlagChange} />
+          {storageTotals && onOpenStorage && (
+            <StorageUsageBarCompact
+              usedGb={storageTotals.usedGb}
+              quotaGb={storageTotals.quotaGb}
+              pct={storageTotals.pct}
+              onClick={onOpenStorage}
+              isActive={storageActive}
+            />
+          )}
           <ProdButton
             variant="headerControl"
             size="lg"
