@@ -4,19 +4,19 @@
 const REFERENCE_IMPORTANCE = [
   { indicator: "bb", indicatorType: "BBANDS", parameter: "timeperiod", importance: 53.7, status: "active" },
   { indicator: "bb", indicatorType: "BBANDS", parameter: "nbdevup", importance: 4.1, status: "active" },
-  { indicator: "bb", indicatorType: "BBANDS", parameter: "matype", importance: 1.5, status: "fixed", fixedValue: 0 },
+  { indicator: "bb", indicatorType: "BBANDS", parameter: "matype", importance: 1.5, status: "fixed", fixedValue: 1 },
 ];
 
 const REFERENCE_CONFIG_MAIN = [
   { indicator: "bb", indicatorType: "BBANDS", parameter: "timeperiod", min: 10, max: 30, step: 5, count: 5, status: "active" },
   { indicator: "bb", indicatorType: "BBANDS", parameter: "nbdevup", min: 1.5, max: 2.5, step: 0.5, count: 3, status: "active" },
-  { indicator: "bb", indicatorType: "BBANDS", parameter: "matype", fixedValue: 0, status: "fixed" },
+  { indicator: "bb", indicatorType: "BBANDS", parameter: "matype", min: 1, max: 1, step: 1, count: 1, fixedValue: 1, status: "fixed" },
 ];
 
 const REFERENCE_CONFIG_MARGIN = [
   { indicator: "bb", indicatorType: "BBANDS", parameter: "timeperiod", min: 8, max: 34, step: 5, count: 6, status: "active" },
   { indicator: "bb", indicatorType: "BBANDS", parameter: "nbdevup", min: 1, max: 3, step: 0.5, count: 5, status: "active" },
-  { indicator: "bb", indicatorType: "BBANDS", parameter: "matype", fixedValue: 0, status: "fixed" },
+  { indicator: "bb", indicatorType: "BBANDS", parameter: "matype", min: 1, max: 1, step: 1, count: 1, fixedValue: 1, status: "fixed" },
 ];
 
 /** Product of Count for active (non-fixed) config rows. */

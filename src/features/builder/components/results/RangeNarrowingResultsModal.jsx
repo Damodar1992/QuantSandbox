@@ -368,18 +368,10 @@ export const RangeNarrowingResultsModal = memo(function RangeNarrowingResultsMod
                           >
                             <td className="px-3 py-2">{row.indicator}</td>
                             <td className="px-3 py-2 font-mono text-[#a6a6a6]">{row.parameter}</td>
-                            {fixed ? (
-                              <td className="px-3 py-2 text-amber-400" colSpan={4}>
-                                Fixed: {row.fixedValue ?? row.min ?? "—"}
-                              </td>
-                            ) : (
-                              <>
-                                <td className="px-3 py-2">{row.min ?? "—"}</td>
-                                <td className="px-3 py-2">{row.max ?? "—"}</td>
-                                <td className="px-3 py-2">{row.step ?? "—"}</td>
-                                <td className="px-3 py-2">{row.count ?? "—"}</td>
-                              </>
-                            )}
+                            <td className="px-3 py-2">{fixed ? 1 : (row.min ?? "—")}</td>
+                            <td className="px-3 py-2">{fixed ? 1 : (row.max ?? "—")}</td>
+                            <td className="px-3 py-2">{fixed ? 1 : (row.step ?? "—")}</td>
+                            <td className="px-3 py-2">{fixed ? 1 : (row.count ?? "—")}</td>
                           </tr>
                         );
                       })}
