@@ -3,13 +3,14 @@
  */
 
 import React, { useState } from "react";
-import { cx } from "../../constants/ui";
 import { StorageUsageBarFull } from "./StorageUsageBar";
 import { StorageFilters } from "./StorageFilters";
 import { StorageSelectionSummary } from "./StorageSelectionSummary";
 import { StorageTable } from "./StorageTable";
 import { StorageDeleteConfirmModal } from "./StorageDeleteConfirmModal";
 import { StorageDeleteProgressModal } from "./StorageDeleteProgressModal";
+import { StorageHowItWorksModal } from "./StorageHowItWorksModal";
+import { AppButton } from "../common";
 
 export function StoragePage({ storageState }) {
   const {
@@ -41,6 +42,7 @@ export function StoragePage({ storageState }) {
   } = storageState;
 
   const [showConfirm, setShowConfirm] = useState(false);
+  const [showHowItWorks, setShowHowItWorks] = useState(false);
 
   const handleDeleteClick = () => setShowConfirm(true);
   const handleConfirm = () => {
@@ -48,13 +50,14 @@ export function StoragePage({ storageState }) {
     startDelete();
   };
   const handleCancelConfirm = () => setShowConfirm(false);
+  const handleHowItWorksOpen = () => setShowHowItWorks(true);
+  const handleHowItWorksClose = () => setShowHowItWorks(false);
 
   const deleteInProgress =
     deleteOp.phase === "preparing" || deleteOp.phase === "deleting";
 
   return (
     <div className="space-y-5">
-      {/* Header row */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-[18px] font-semibold tracking-tight text-foreground">Storage</h1>
@@ -72,7 +75,6 @@ export function StoragePage({ storageState }) {
         </div>
       </div>
 
-      {/* Controls row */}
       <div className="flex items-center gap-3 flex-wrap">
         <StorageFilters
           filters={filters}
@@ -81,11 +83,19 @@ export function StoragePage({ storageState }) {
           strategies={allStrategies ?? strategies}
         />
 
-        <div className="ml-auto flex items-center gap-2 text-[11px] text-muted-foreground">
+        <div className="ml-auto flex items-center gap-2 text-[11px] text-[#8c8c8c]">
+          <AppButton
+            onClick={handleHowItWorksOpen}
+            variant="outline"
+            size="xs"
+            className="border-violet-500/70 bg-violet-500/10 text-violet-200 hover:bg-violet-500/20"
+          >
+            How it Works?
+          </AppButton>
           <button
             type="button"
             onClick={expandAll}
-            className="hover:text-foreground underline-offset-2 hover:underline"
+            className="hover:text-[#d9d9d9] underline-offset-2 hover:underline"
           >
             Expand all
           </button>
@@ -93,14 +103,13 @@ export function StoragePage({ storageState }) {
           <button
             type="button"
             onClick={collapseAll}
-            className="hover:text-foreground underline-offset-2 hover:underline"
+            className="hover:text-[#d9d9d9] underline-offset-2 hover:underline"
           >
             Collapse all
           </button>
         </div>
       </div>
 
-      {/* Selection summary */}
       <StorageSelectionSummary
         selectionSummary={selectionSummary}
         onClearSelection={clearSelection}
@@ -108,7 +117,6 @@ export function StoragePage({ storageState }) {
         disabled={deleteInProgress}
       />
 
-      {/* Table */}
       <StorageTable
         strategies={filteredStrategies}
         allStrategies={allStrategies ?? strategies}
@@ -125,7 +133,6 @@ export function StoragePage({ storageState }) {
         deleteOp={deleteOp}
       />
 
-      {/* Confirm modal */}
       {showConfirm && (
         <StorageDeleteConfirmModal
           eligibleSet={eligibleSet}
@@ -136,7 +143,6 @@ export function StoragePage({ storageState }) {
         />
       )}
 
-      {/* Progress / result modal */}
       {(deleteOp.phase === "preparing" ||
         deleteOp.phase === "deleting" ||
         deleteOp.phase === "done") && (
@@ -145,6 +151,8 @@ export function StoragePage({ storageState }) {
           onDismiss={dismissDeleteResult}
         />
       )}
+
+      {showHowItWorks && <StorageHowItWorksModal onClose={handleHowItWorksClose} />}
     </div>
   );
 }

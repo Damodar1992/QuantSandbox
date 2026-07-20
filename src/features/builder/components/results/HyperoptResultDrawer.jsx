@@ -2,7 +2,7 @@ import React, { memo } from "react";
 import { cx, ui } from "../../../../constants/ui";
 import { HyperoptDetailsTooltip } from "../../../../components/heatmap";
 import { AppButton } from "../../../../components/common/AppButton";
-import { formatHyperoptDateTime } from "../../utils/hyperoptFormatters";
+import { formatHyperoptDateTime, isHyperoptRawDataDeleted } from "../../utils/hyperoptFormatters";
 import { resolveTagNames } from "../../../../features/tags/utils/tagStore";
 import { PostProcessingCard } from "./PostProcessingCard";
 import { RunStatusBadge } from "./RunStatusBadge";
@@ -38,6 +38,8 @@ export const HyperoptResultDrawer = memo(function HyperoptResultDrawer({
   if (!run) return null;
   const children = run.children || [];
   const tagNames = resolveTagNames(run.tagIds, tagsRegistry);
+  const rawDataDeleted = isHyperoptRawDataDeleted(run.status);
+  const canLaunchPostProcessing = showPostProcessing && !rawDataDeleted;
 
   return (
     <div className={cx(ui.radius, "border border-[#303030] bg-[#141414] overflow-hidden")}>
@@ -119,7 +121,7 @@ export const HyperoptResultDrawer = memo(function HyperoptResultDrawer({
             </div>
           </div>
 
-          {showPostProcessing && (
+          {canLaunchPostProcessing && (
             <div className="border-t border-[#303030]/50 mt-2.5 pt-2.5">
               <AppButton type="button" variant="primary" size="sm" onClick={() => onPostProcessing?.()}>
                 Post-processing
@@ -145,6 +147,7 @@ export const HyperoptResultDrawer = memo(function HyperoptResultDrawer({
                   key={sub.id}
                   rowId={run.id}
                   sub={sub}
+                  rawDataDeleted={rawDataDeleted}
                   onShowDetails={onShowPostProcessingDetails}
                   onConfigureHeatMap={onConfigureHeatMap}
                   onGenerateReport={onGenerateReport}

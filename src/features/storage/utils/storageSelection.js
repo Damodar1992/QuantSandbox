@@ -6,9 +6,9 @@
  */
 
 import {
+  getStageOnlyHyperoptIds,
   getStrategyHyperoptIds,
-  getStageHyperoptIds,
-  getVersionBranchHyperoptIds,
+  getVersionDirectHyperoptIds,
 } from "./storageTree";
 
 // ─── Tri-state derivation ────────────────────────────────────────────────────
@@ -32,11 +32,11 @@ export function strategyScopeIds(strategy) {
 }
 
 export function stageScopeIds(strategy, stageType) {
-  return getStageHyperoptIds(strategy, stageType);
+  return getStageOnlyHyperoptIds(strategy, stageType);
 }
 
 export function versionScopeIds(strategy, versionId) {
-  return getVersionBranchHyperoptIds(strategy, versionId);
+  return getVersionDirectHyperoptIds(strategy, versionId);
 }
 
 // ─── Toggle helper ───────────────────────────────────────────────────────────

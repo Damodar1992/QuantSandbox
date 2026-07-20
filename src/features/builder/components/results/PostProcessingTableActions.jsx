@@ -13,6 +13,7 @@ export const PostProcessingTableActions = memo(function PostProcessingTableActio
   onAddTruncate,
   onRangeNarrowing,
   miniBacktestEnabled = false,
+  showEpochs = true,
   showAddTruncate = true,
   showRangeNarrowing = true,
   className,
@@ -27,6 +28,7 @@ export const PostProcessingTableActions = memo(function PostProcessingTableActio
       />
       <PostProcessingEpochMenu
         iconOnly
+        showEpochs={showEpochs}
         miniBacktestEnabled={miniBacktestEnabled}
         onBestEpochs={onBestEpochs}
         onRunMiniBacktest={onRunMiniBacktest}

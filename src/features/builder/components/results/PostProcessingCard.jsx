@@ -98,10 +98,13 @@ export const PostProcessingCard = memo(function PostProcessingCard({
   onShowRangeNarrowingInfo,
   onShowRangeNarrowingResults,
   isRiskStage = false,
+  rawDataDeleted = false,
 }) {
   const heatMapId = `hyperopt-${rowId}-${sub.id}`;
   const items = filterAnalyticsItemsForStage(sub.heatmapsAndReports, isRiskStage);
   const hasTrunc = !!sub.truncScores;
+  const showEpochs = !rawDataDeleted;
+  const showAddTruncate = !rawDataDeleted;
   const [collapsed, setCollapsed] = useState(false);
   const [truncCollapsed, setTruncCollapsed] = useState(false);
 
@@ -145,6 +148,7 @@ export const PostProcessingCard = memo(function PostProcessingCard({
               Generate Report
             </AppButton>
             <PostProcessingEpochMenu
+              showEpochs={showEpochs}
               miniBacktestEnabled={miniBacktestEnabled}
               onBestEpochs={() => onBestEpochs?.(sub)}
               onRunMiniBacktest={() => onRunMiniBacktest?.(sub)}
@@ -162,11 +166,13 @@ export const PostProcessingCard = memo(function PostProcessingCard({
             onShowRangeNarrowingResults={onShowRangeNarrowingResults}
           />
 
-          <div className="flex flex-wrap items-center gap-2">
-            <AppButton type="button" variant="outline" size="sm" onClick={() => onAddTruncate?.(sub)}>
-              Add truncate
-            </AppButton>
-          </div>
+          {showAddTruncate ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <AppButton type="button" variant="outline" size="sm" onClick={() => onAddTruncate?.(sub)}>
+                Add truncate
+              </AppButton>
+            </div>
+          ) : null}
 
           {/* Trunc details */}
           {hasTrunc && (

@@ -1,12 +1,18 @@
 /**
  * Filters panel for the Storage page.
- * Grouped: Strategy level | Stage level | Hyperopt level.
+ * Grouped: Strategy level | Stage level | Hyperopt level | User.
+ * Filters narrow visible rows; they do not change selection.
  */
 
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { cx } from "../../constants/ui";
 import { useOutsideClose } from "../../hooks/useOutsideClose";
-import { EMPTY_FILTERS, STAGE_TYPE_OPTIONS, collectStatuses, collectTimeframes } from "../../features/storage/utils/storageFilters";
+import {
+  STAGE_TYPE_OPTIONS,
+  collectOwners,
+  collectStatuses,
+  collectTimeframes,
+} from "../../features/storage/utils/storageFilters";
 import { INITIAL_TAGS_REGISTRY } from "../../constants/tags";
 
 function FilterPill({ label, active, children }) {
@@ -56,22 +62,42 @@ function TextInput({ label, value, onChange, placeholder }) {
   );
 }
 
-function SelectInput({ label, value, onChange, options }) {
+function MultiSelectInput({ label, values, onChange, options }) {
+  const toggle = useCallback(
+    (value) => {
+      const next = values.includes(value) ? values.filter((v) => v !== value) : [...values, value];
+      onChange(next);
+    },
+    [values, onChange],
+  );
+
   return (
-    <div className="space-y-1">
+    <div className="space-y-1.5">
       {label && <div className="text-[10px] text-muted-foreground">{label}</div>}
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded border border-border bg-background px-2 py-1.5 text-[11px] outline-none focus:border-violet-500/60"
-      >
-        <option value="">All</option>
-        {options.map((o) => (
-          <option key={o.value ?? o} value={o.value ?? o}>
-            {o.label ?? o}
-          </option>
-        ))}
-      </select>
+      <div className="flex flex-col gap-1 max-h-40 overflow-y-auto">
+        {options.map((o) => {
+          const value = o.value ?? o;
+          const optionLabel = o.label ?? o;
+          const active = values.includes(value);
+          return (
+            <label
+              key={value}
+              className={cx(
+                "flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-[11px] transition-colors",
+                active ? "bg-violet-500/10 text-violet-200" : "text-muted-foreground hover:bg-accent/30",
+              )}
+            >
+              <input
+                type="checkbox"
+                checked={active}
+                onChange={() => toggle(value)}
+                className="h-3 w-3 rounded border-border accent-violet-500"
+              />
+              <span>{optionLabel}</span>
+            </label>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -79,17 +105,19 @@ function SelectInput({ label, value, onChange, options }) {
 export function StorageFilters({ filters, updateFilter, clearFilters, strategies }) {
   const timeframes = useMemo(() => collectTimeframes(strategies ?? []), [strategies]);
   const statuses = useMemo(() => collectStatuses(strategies ?? []), [strategies]);
+  const owners = useMemo(() => collectOwners(strategies ?? []), [strategies]);
 
   const hasStrategyFilter = !!filters.strategyName;
-  const hasStageFilter = !!filters.stageType;
+  const hasStageFilter = filters.stageTypes?.length > 0;
+  const hasUserFilter = filters.ownerLogins?.length > 0;
   const hasHyperoptFilter =
-    !!filters.timeframe ||
-    filters.tagIds.length > 0 ||
-    !!filters.status ||
+    filters.timeframes?.length > 0 ||
+    filters.tagIds?.length > 0 ||
+    filters.statuses?.length > 0 ||
     filters.minSizeGb !== "" ||
     filters.maxSizeGb !== "";
 
-  const hasAny = hasStrategyFilter || hasStageFilter || hasHyperoptFilter;
+  const hasAny = hasStrategyFilter || hasStageFilter || hasUserFilter || hasHyperoptFilter;
 
   const toggleTag = useCallback(
     (tagId) => {
@@ -103,7 +131,6 @@ export function StorageFilters({ filters, updateFilter, clearFilters, strategies
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      {/* Strategy level */}
       <FilterPill label="Strategy" active={hasStrategyFilter}>
         <TextInput
           label="Strategy name"
@@ -113,30 +140,37 @@ export function StorageFilters({ filters, updateFilter, clearFilters, strategies
         />
       </FilterPill>
 
-      {/* Stage level */}
       <FilterPill label="Stage" active={hasStageFilter}>
-        <SelectInput
+        <MultiSelectInput
           label="Stage type"
-          value={filters.stageType}
-          onChange={(v) => updateFilter("stageType", v)}
+          values={filters.stageTypes ?? []}
+          onChange={(v) => updateFilter("stageTypes", v)}
           options={STAGE_TYPE_OPTIONS}
         />
       </FilterPill>
 
-      {/* Hyperopt level */}
+      <FilterPill label="User" active={hasUserFilter}>
+        <MultiSelectInput
+          label="Owner"
+          values={filters.ownerLogins ?? []}
+          onChange={(v) => updateFilter("ownerLogins", v)}
+          options={owners.map((login) => ({ value: login, label: login }))}
+        />
+      </FilterPill>
+
       <FilterPill label="Hyperopt" active={hasHyperoptFilter}>
         <div className="space-y-3 w-52">
-          <SelectInput
+          <MultiSelectInput
             label="Timeframe"
-            value={filters.timeframe}
-            onChange={(v) => updateFilter("timeframe", v)}
+            values={filters.timeframes ?? []}
+            onChange={(v) => updateFilter("timeframes", v)}
             options={timeframes}
           />
 
-          <SelectInput
+          <MultiSelectInput
             label="Status"
-            value={filters.status}
-            onChange={(v) => updateFilter("status", v)}
+            values={filters.statuses ?? []}
+            onChange={(v) => updateFilter("statuses", v)}
             options={statuses}
           />
 

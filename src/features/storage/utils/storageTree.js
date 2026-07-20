@@ -24,7 +24,7 @@ export function getStrategyHyperoptIds(strategy) {
 
 /**
  * Returns all hyperopt ids for stages whose order is >= order(stageType).
- * Used for the "selected stage + subsequent stages" cascade (§8.3).
+ * @deprecated Prefer getStageOnlyHyperoptIds for checkbox cascade in the table tree.
  */
 export function getStageHyperoptIds(strategy, stageType) {
   const minOrder = STAGE_ORDER[stageType] ?? 1;
@@ -32,6 +32,20 @@ export function getStageHyperoptIds(strategy, stageType) {
     .filter((sv) => (STAGE_ORDER[sv.stageType] ?? 0) >= minOrder)
     .flatMap((sv) => sv.hyperopts ?? [])
     .map((h) => h.id);
+}
+
+/** Hyperopt ids for versions of a single stage type (direct children in the table tree). */
+export function getStageOnlyHyperoptIds(strategy, stageType) {
+  return (strategy.stageVersions ?? [])
+    .filter((sv) => sv.stageType === stageType)
+    .flatMap((sv) => sv.hyperopts ?? [])
+    .map((h) => h.id);
+}
+
+/** Hyperopt ids directly under a version row (not descendant versions in other stages). */
+export function getVersionDirectHyperoptIds(strategy, versionId) {
+  const sv = (strategy.stageVersions ?? []).find((v) => v.id === versionId);
+  return (sv?.hyperopts ?? []).map((h) => h.id);
 }
 
 /**

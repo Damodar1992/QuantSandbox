@@ -1130,7 +1130,7 @@ export default function App() {
       />
 
       <main className="flex-1 overflow-visible p-6">
-        {!(activeSection === "Strategies" && selectedStrategy) && (
+        {!(activeSection === "Strategies" && selectedStrategy) && activeSection !== "Storage" && (
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <h1 className="text-[16px] font-semibold text-[#f5f5f5] flex items-center gap-2">

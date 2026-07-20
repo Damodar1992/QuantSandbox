@@ -115,7 +115,7 @@ import {
 } from './components';
 import { applyConfigRowsToIndicators, createRangeNarrowingAnalyticsItem, filterAnalyticsItemsForStage } from './utils/rangeNarrowingMock';
 import { getDefaultDisplayName, formatIndicatorSnapshot } from './utils/indicatorHelpers';
-import { formatHyperoptDateTime, normalizeHyperoptRunStatus } from './utils/hyperoptFormatters';
+import { formatHyperoptDateTime, normalizeHyperoptRunStatus, isHyperoptRawDataDeleted } from './utils/hyperoptFormatters';
 import { buildEpochFromHyperoptContext } from './utils/hyperoptEpoch';
 import { MINI_BACKTEST_DEFAULTS } from '../../constants/miniBacktest';
 import { dedupeMiniBacktestResultIds } from './utils/miniBacktestEngine';
@@ -3533,7 +3533,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                               </td>
                               <td className="px-3 py-2">
                                 <div className="flex items-center gap-1.5">
-                                  {hyperoptRun !== "Pipeline" && (
+                                  {hyperoptRun !== "Pipeline" && !isHyperoptRawDataDeleted(row.status) && (
                                     <AppButton
                                       type="button"
                                       variant="outline"
@@ -3594,6 +3594,8 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                             const hasTruncData = !!sub.truncScores;
                                             const normKey = `${row.id}::${sub.id}`;
                                             const isDetailsExpanded = normalizationDetailsExpanded.has(normKey);
+                                            const rawDataDeleted = isHyperoptRawDataDeleted(row.status);
+                                            const showMutatingPostActions = !rawDataDeleted;
 
                                             return (
                                               <React.Fragment key={sub.id}>
@@ -3615,7 +3617,9 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                   </td>
                                                   <td className="px-3 py-2 text-right">
                                                     <PostProcessingTableActions
-                                                      showRangeNarrowing={!isRiskStage}
+                                                      showEpochs={showMutatingPostActions}
+                                                      showAddTruncate={showMutatingPostActions}
+                                                      showRangeNarrowing={showMutatingPostActions && !isRiskStage}
                                                       miniBacktestEnabled={miniBacktestEnabled}
                                                       onShowDetails={() => {
                                                         setHyperoptDetailsModalType("post-processing");
@@ -3737,8 +3741,9 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                                       </td>
                                                                       <td className="px-3 py-2">
                                                                         <PostProcessingTableActions
+                                                                          showEpochs={showMutatingPostActions}
                                                                           showAddTruncate={false}
-                                                                          showRangeNarrowing={!isRiskStage}
+                                                                          showRangeNarrowing={showMutatingPostActions && !isRiskStage}
                                                                           miniBacktestEnabled={miniBacktestEnabled}
                                                                           onShowDetails={() => {
                                                                             setHyperoptDetailsModalType("post-processing");

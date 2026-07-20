@@ -15,8 +15,11 @@ export const PostProcessingEpochMenu = memo(function PostProcessingEpochMenu({
   miniBacktestEnabled = false,
   useLegacyBtn = false,
   iconOnly = false,
+  showEpochs = true,
   className,
 }) {
+  if (!showEpochs) return null;
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>

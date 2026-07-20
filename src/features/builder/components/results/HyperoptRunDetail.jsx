@@ -2,7 +2,7 @@ import React, { memo } from "react";
 import { cx, ui } from "../../../../constants/ui";
 import { HyperoptDetailsTooltip } from "../../../../components/heatmap";
 import { AppButton } from "../../../../components/common/AppButton";
-import { formatHyperoptDateTime } from "../../utils/hyperoptFormatters";
+import { formatHyperoptDateTime, isHyperoptRawDataDeleted } from "../../utils/hyperoptFormatters";
 import { resolveTagNames } from "../../../../features/tags/utils/tagStore";
 import { PostProcessingCard } from "./PostProcessingCard";
 import { RunStatusBadge } from "./RunStatusBadge";
@@ -34,6 +34,8 @@ export const HyperoptRunDetail = memo(function HyperoptRunDetail({
   if (!run) return null;
   const children = run.children || [];
   const tagNames = resolveTagNames(run.tagIds, tagsRegistry);
+  const rawDataDeleted = isHyperoptRawDataDeleted(run.status);
+  const canLaunchPostProcessing = showPostProcessing && !rawDataDeleted;
 
   return (
     <div className="space-y-3">
@@ -113,7 +115,7 @@ export const HyperoptRunDetail = memo(function HyperoptRunDetail({
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5 pt-1">
-          {showPostProcessing && (
+          {canLaunchPostProcessing && (
             <AppButton type="button" variant="default" size="xs" onClick={() => onPostProcessing?.()}>
               Post-processing
             </AppButton>
@@ -145,6 +147,7 @@ export const HyperoptRunDetail = memo(function HyperoptRunDetail({
               key={sub.id}
               rowId={run.id}
               sub={sub}
+              rawDataDeleted={rawDataDeleted}
               onShowDetails={onShowPostProcessingDetails}
               onConfigureHeatMap={onConfigureHeatMap}
               onGenerateReport={onGenerateReport}

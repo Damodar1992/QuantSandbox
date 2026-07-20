@@ -3,7 +3,7 @@ import { cx, ui } from "../../../../constants/ui";
 import { crmAccent, crmSurface } from "../../../../constants/crmAccent";
 import { HyperoptDetailsTooltip } from "../../../../components/heatmap";
 import { AppButton } from "../../../../components/common/AppButton";
-import { formatHyperoptDateTime } from "../../utils/hyperoptFormatters";
+import { formatHyperoptDateTime, isHyperoptRawDataDeleted } from "../../utils/hyperoptFormatters";
 import { resolveTagNames } from "../../../../features/tags/utils/tagStore";
 import { RunStatusBadge } from "./RunStatusBadge";
 
@@ -25,6 +25,7 @@ export const HyperoptResultCard = memo(function HyperoptResultCard({
 }) {
   const ppCount = row.children?.length ?? 0;
   const tagNames = resolveTagNames(row.tagIds, tagsRegistry);
+  const canLaunchPostProcessing = showPostProcessing && !isHyperoptRawDataDeleted(row.status);
 
   return (
     <div
@@ -116,7 +117,7 @@ export const HyperoptResultCard = memo(function HyperoptResultCard({
         className="mt-auto flex flex-wrap items-center gap-1.5 pt-1"
         onClick={(e) => e.stopPropagation()}
       >
-        {showPostProcessing && (
+        {canLaunchPostProcessing && (
           <AppButton type="button" variant="default" size="xs" onClick={() => onPostProcessing?.()}>
             Post-processing
           </AppButton>

@@ -30,3 +30,8 @@ export function normalizeHyperoptRunStatus(status) {
   if (status === "Done") return "Completed";
   return status;
 }
+
+/** True when hyperopt RAW data was deleted — re-run actions are locked. */
+export function isHyperoptRawDataDeleted(status) {
+  return normalizeHyperoptRunStatus(status) === "Raw data deleted";
+}

@@ -326,7 +326,34 @@ const s3 = [
   },
 ];
 
-export const INITIAL_STORAGE_STRATEGIES = [
+/** Hyperopt-level owner overrides for demo variety (defaults to strategy owner). */
+const HYPEROPT_OWNER_OVERRIDES = {
+  "sto-h3": { ownerId: 1, ownerLogin: "admin" },
+  "sto-h7": { ownerId: 3, ownerLogin: "old@example.com" },
+  "sto-h20": { ownerId: 1, ownerLogin: "admin" },
+  "sto-h22": { ownerId: 3, ownerLogin: "old@example.com" },
+  "sto-h25": { ownerId: 1, ownerLogin: "admin" },
+  "sto-h32": { ownerId: 3, ownerLogin: "old@example.com" },
+};
+
+function withHyperoptOwners(strategies) {
+  return strategies.map((strategy) => ({
+    ...strategy,
+    stageVersions: (strategy.stageVersions ?? []).map((sv) => ({
+      ...sv,
+      hyperopts: (sv.hyperopts ?? []).map((h) => {
+        const override = HYPEROPT_OWNER_OVERRIDES[h.id];
+        return {
+          ...h,
+          ownerId: override?.ownerId ?? strategy.ownerId,
+          ownerLogin: override?.ownerLogin ?? strategy.ownerLogin,
+        };
+      }),
+    })),
+  }));
+}
+
+export const INITIAL_STORAGE_STRATEGIES = withHyperoptOwners([
   {
     id: "str-1",
     name: "EMA Bounce",
@@ -351,4 +378,4 @@ export const INITIAL_STORAGE_STRATEGIES = [
     ownerLogin: "bogdan",
     stageVersions: s3,
   },
-];
+]);

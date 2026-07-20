@@ -8,7 +8,7 @@ import {
   INITIAL_STORAGE_STRATEGIES,
   STORAGE_QUOTA_GB,
 } from "../../../constants/storageMock";
-import { EMPTY_FILTERS, applyFilters } from "../utils/storageFilters";
+import { EMPTY_FILTERS, filterStrategies, hasActiveFilters } from "../utils/storageFilters";
 import {
   deriveRowState,
   eligibleForDelete,
@@ -71,7 +71,7 @@ export function useStorageState({ role = "Admin", userId = MOCK_CURRENT_USER.id 
   );
 
   const filteredStrategies = useMemo(
-    () => applyFilters(permittedStrategies, filters),
+    () => filterStrategies(permittedStrategies, filters),
     [permittedStrategies, filters],
   );
 
@@ -151,7 +151,7 @@ export function useStorageState({ role = "Admin", userId = MOCK_CURRENT_USER.id 
     [selectedHyperoptIds],
   );
 
-  // ─── Filters ───────────────────────────────────────────────────────────────
+  // ─── Filters (visibility only; selection is independent) ───────────────────
   const updateFilter = useCallback((key, value) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
   }, []);
@@ -262,6 +262,7 @@ export function useStorageState({ role = "Admin", userId = MOCK_CURRENT_USER.id 
     filters,
     updateFilter,
     clearFilters,
+    hasActiveFilters: hasActiveFilters(filters),
     // Delete
     deleteOp,
     startDelete,

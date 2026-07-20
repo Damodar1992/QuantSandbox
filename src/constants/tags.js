@@ -199,4 +199,31 @@ export const INITIAL_HYPEROPT_RESULTS_ROWS = [
       },
     ],
   },
+  {
+    id: "hr3",
+    hyperoptNumber: 3,
+    date: "2024-01-10T14:22:00",
+    status: "Raw data deleted",
+    pairs: "BTC/USDT",
+    timeFrame: "1h",
+    knowRange: "2019-01-01 – 2022-12-31",
+    unknowRange: "2023-01-01 – 2023-06-30",
+    tagIds: ["tag-baseline"],
+    comment: "RAW data purged; existing post-processing artifacts remain read-only.",
+    children: [
+      {
+        id: "hr3-1",
+        analyzerNumber: 1,
+        date: "2024-01-10T18:05:00",
+        status: "Finished",
+        minScore: "0.19",
+        avgScore: "0.51",
+        maxScore: "0.88",
+        heatmapsAndReports: [
+          { id: "hr3-1-h1", date: "2024-01-10", type: "Heatmap", status: "Finished" },
+          { id: "hr3-1-r1", date: "2024-01-10", type: "Report", status: "Completed" },
+        ],
+      },
+    ],
+  },
 ];
