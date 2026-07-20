@@ -8,7 +8,7 @@ const DEFAULT_FORM = {
   minImportance: 2,
   maxCombinations: 120,
   minEpochsPerValue: 5,
-  marginEnabled: false,
+  marginEnabled: true,
   marginWiden: 2,
 };
 
@@ -16,6 +16,7 @@ export const AddRangeNarrowingModal = memo(function AddRangeNarrowingModal({
   open,
   onClose,
   onRun,
+  originalCombinations = 20000,
 }) {
   const [plateauWidth, setPlateauWidth] = useState(DEFAULT_FORM.plateauWidth);
   const [minImportance, setMinImportance] = useState(DEFAULT_FORM.minImportance);
@@ -49,6 +50,8 @@ export const AddRangeNarrowingModal = memo(function AddRangeNarrowingModal({
     onClose?.();
   };
 
+  const combinationsLabel = Number(originalCombinations).toLocaleString();
+
   return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
@@ -57,24 +60,38 @@ export const AddRangeNarrowingModal = memo(function AddRangeNarrowingModal({
       <div
         className={cx(
           ui.radius,
-          "bg-[#141414] border border-[#303030] max-w-[560px] w-full max-h-[90vh] overflow-hidden flex flex-col shadow-xl",
+          "bg-[#141414] border border-[#303030] max-w-[640px] w-full max-h-[90vh] overflow-hidden flex flex-col shadow-xl",
         )}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[#303030]">
-          <span className="text-[14px] font-medium text-[#d9d9d9]">Add Range Narrowing</span>
-          <button type="button" onClick={onClose} className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1">
+        <div className="flex items-start justify-between gap-3 px-4 py-3 border-b border-[#303030]">
+          <div className="min-w-0 space-y-1">
+            <div className="text-[15px] font-semibold text-[#d9d9d9]">
+              Parameter Importance &amp; Range Narrowing
+            </div>
+            <div className="text-[11px] text-[#8c8c8c] leading-snug">
+              Measures how strongly each indicator parameter drives the final score, narrows ranges for
+              important parameters and fixes the rest.
+            </div>
+          </div>
+          <button type="button" onClick={onClose} className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1 shrink-0">
             ✕
           </button>
         </div>
 
         <div className="overflow-auto p-4 flex-1 min-h-0 space-y-4">
+          <div className="rounded-lg border border-[#303030] bg-[#0f0f0f]/60 px-3 py-3 flex items-baseline justify-center gap-2">
+            <div className="text-[22px] font-semibold text-[#d9d9d9] tabular-nums">
+              {combinationsLabel}
+            </div>
+            <div className="text-[10px] text-[#8c8c8c]">original combinations</div>
+          </div>
+
           <div className="rounded-lg border border-violet-700/40 bg-violet-900/30 px-3 py-2.5 text-[11px] text-violet-200 leading-snug">
-            Fallback path — use this when the post-processing run already finished{" "}
-            <em>without</em> range narrowing enabled.
-            Computes on top of the existing report, no recompute of Stability/Score formulas. Target metric is fixed
-            to <strong className="text-violet-100">final_score</strong>; native step is computed automatically from
-            the report&apos;s tested values.
+            The analysis runs on top of the completed post-processing (analyzer) report only: no new
+            hyperopt runs, no recompute of Stability/Score formulas. Target metric is fixed to the{" "}
+            <strong className="text-violet-100">final score</strong> computed by the analyzer; the grid
+            step of every parameter is detected automatically from the report&apos;s tested values.
           </div>
 
           <RangeNarrowingFormFields
@@ -91,6 +108,12 @@ export const AddRangeNarrowingModal = memo(function AddRangeNarrowingModal({
             marginWiden={marginWiden}
             onMarginWidenChange={setMarginWiden}
           />
+
+          <div className="text-[11px] text-[#8c8c8c] leading-snug">
+            After the run you will see a results screen: importance of every parameter, the suggested
+            narrowed ranges with steps, and the total number of combinations for the next hyperopt.
+            Nothing is applied automatically — you review the result first.
+          </div>
         </div>
 
         <div className="px-4 py-3 border-t border-[#303030] flex justify-end gap-2">

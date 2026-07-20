@@ -1612,6 +1612,13 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
     },
     [setIndicators],
   );
+
+  const handleRunHyperoptFromRangeNarrowing = useCallback(
+    (configRows) => {
+      handleApplyRangeNarrowingRanges(configRows);
+    },
+    [handleApplyRangeNarrowingRanges],
+  );
   const stages = useMemo(
     () => [
       {
@@ -4733,6 +4740,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
         item={rangeNarrowingResultsItem}
         onClose={() => setRangeNarrowingResultsItem(null)}
         onApplyRanges={handleApplyRangeNarrowingRanges}
+        onRunHyperopt={handleRunHyperoptFromRangeNarrowing}
       />
       {/* Add truncate modal */}
       {showTruncateModal && (

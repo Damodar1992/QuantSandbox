@@ -37,7 +37,7 @@ export const RangeNarrowingReadOnlyModal = memo(function RangeNarrowingReadOnlyM
           </button>
         </div>
 
-        <div className="overflow-auto p-4 flex-1 min-h-0 space-y-4 pointer-events-none opacity-90">
+        <div className="overflow-auto p-4 flex-1 min-h-0 space-y-4 opacity-90">
           <div className="rounded-lg border border-violet-700/40 bg-violet-900/30 px-3 py-2.5 text-[11px] text-violet-200 leading-snug">
             Read-only snapshot of parameters used for this Range Narrowing run.
           </div>
