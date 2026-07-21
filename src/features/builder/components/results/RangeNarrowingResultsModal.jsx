@@ -11,6 +11,8 @@ import {
 const TOOLTIPS = {
   importanceCurve:
     "Response curve = the average final score for every tested value of the parameter, built from the broad run. Importance = share of the total final score variation explained by the parameter; computed automatically, not set manually. High importance → strongly drives the score, keeps a range. Low importance → its value barely matters, fixed at its best value. Note: importance is measured per parameter independently — interactions between parameters are not modeled.",
+  configMain:
+    "The ready focused config for the next hyperopt: narrowed Min/Max/Step for active parameters, a single value for fixed ones. Predicted combinations never exceed the Max combinations limit.",
   main: {
     min: "Lower boundary of the kept range — the continuous top-scoring zone around the best value (set by Plateau width). The best tested value is always inside the range. Values below this boundary scored under the cutoff, were tested on too few epochs, or are separated from the peak by a dip.",
     max: "Upper boundary of the kept range — the continuous top-scoring zone around the best value (set by Plateau width). Values above this boundary scored under the cutoff, were tested on too few epochs, or are separated from the peak by a dip.",
@@ -22,6 +24,14 @@ const TOOLTIPS = {
     count: "How many values of this parameter the next run will test. Product of Counts over active parameters = total combinations.",
   },
 };
+
+function buildConfigSectionTooltip(tab, widen) {
+  if (tab === "margin") {
+    const steps = Number.isFinite(widen) ? widen : 2;
+    return `Safety version of the «main» config: every active range is extended by the chosen Margin widen (${steps} grid steps per side in this run), never beyond the values tested in the broad run. Fixed parameters stay fixed. Use it as insurance in case the optimum sits just outside the narrowed range — at the cost of more combinations.`;
+  }
+  return TOOLTIPS.configMain;
+}
 
 function buildMarginConfigTooltips(widen) {
   const steps = Number.isFinite(widen) ? widen : 2;
@@ -327,8 +337,12 @@ export const RangeNarrowingResultsModal = memo(function RangeNarrowingResultsMod
               </div>
 
               <div>
-                <div className="text-[12px] font-medium text-[#d9d9d9] mb-2">
-                  Config — «{activeConfigTab}»
+                <div className="mb-2 flex items-center gap-1.5 text-[12px] font-medium text-[#d9d9d9]">
+                  <span>Config — «{activeConfigTab}»</span>
+                  <FieldHelpTooltip
+                    label={`Config ${activeConfigTab}`}
+                    text={buildConfigSectionTooltip(activeConfigTab, marginWiden)}
+                  />
                 </div>
                 <div className="overflow-x-auto border border-[#303030] rounded-lg">
                   <table className="w-full text-[11px] border-collapse">
