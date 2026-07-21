@@ -78,6 +78,12 @@ export function riskHyperoptParamGrid(def, params) {
   return { min, max, step };
 }
 
+export const RISK_LOSS_STREAK_KEYS = RISK_HYPEROPT_PARAM_DEFS.map((d) => d.paramKey);
+
+export const RISK_LOSS_STREAK_LABELS = Object.fromEntries(
+  RISK_HYPEROPT_PARAM_DEFS.map((d) => [d.paramKey, d.label]),
+);
+
 /** Midpoint of each stoploss range for fixed HeatMap slice */
 export function riskStoplossMidpoints(ranges) {
   const out = {};
@@ -89,14 +95,29 @@ export function riskStoplossMidpoints(ranges) {
   return out;
 }
 
+/** Midpoints of loss-streak hyperopt ranges when the section is enabled */
+export function riskLossStreakMidpoints(hyperoptParams) {
+  if (!hyperoptParams?.loss_streak_cooldown_enabled) return {};
+  const out = {};
+  for (const def of RISK_HYPEROPT_PARAM_DEFS) {
+    const grid = riskHyperoptParamGrid(def, hyperoptParams);
+    if (!grid) continue;
+    out[def.paramKey] = (grid.min + grid.max) / 2;
+  }
+  return out;
+}
+
 /** Default HeatMap config for Stage 4 Risk */
-export function buildDefaultRiskHeatmapConfig(riskStoplossRanges) {
+export function buildDefaultRiskHeatmapConfig(riskStoplossRanges, riskHyperoptParams) {
   return {
     heatmapVariant: "risk",
     indicators: [],
     xAxis: [DEFAULT_RISK_HEATMAP_AXES.x],
     yAxis: [DEFAULT_RISK_HEATMAP_AXES.y],
-    fixedParams: riskStoplossMidpoints(riskStoplossRanges),
+    fixedParams: {
+      ...riskStoplossMidpoints(riskStoplossRanges),
+      ...riskLossStreakMidpoints(riskHyperoptParams),
+    },
     filters: { logic: "and", groups: [] },
   };
 }

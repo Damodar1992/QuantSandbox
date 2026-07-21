@@ -6,6 +6,7 @@ import { BASE_INDICATORS } from "../../constants/indicators";
 import {
   DEFAULT_RISK_HEATMAP_AXES,
   RISK_HEATMAP_METRICS,
+  riskLossStreakMidpoints,
   riskStoplossMidpoints,
 } from "../../constants/risk";
 import { getParamLabel } from "../../utils/indicators";
@@ -214,6 +215,7 @@ export const HeatMapConfigurator = memo(function HeatMapConfigurator({
   onGenerate,
   variant = "indicators",
   riskStoplossRanges,
+  riskHyperoptParams,
 }) {
   const isRisk = variant === "risk";
 
@@ -313,8 +315,11 @@ export const HeatMapConfigurator = memo(function HeatMapConfigurator({
 
   useEffect(() => {
     if (!isRisk || !riskStoplossRanges) return;
-    setFixedParams(riskStoplossMidpoints(riskStoplossRanges));
-  }, [isRisk, riskStoplossRanges]);
+    setFixedParams({
+      ...riskStoplossMidpoints(riskStoplossRanges),
+      ...riskLossStreakMidpoints(riskHyperoptParams),
+    });
+  }, [isRisk, riskStoplossRanges, riskHyperoptParams]);
 
   const toggleIndicator = useCallback((id) => {
     setSelectedIndicatorIds((prev) =>
@@ -474,9 +479,10 @@ export const HeatMapConfigurator = memo(function HeatMapConfigurator({
         indicators: [],
         xAxis: xAxisKeys,
         yAxis: yAxisKeys,
-        fixedParams: riskStoplossRanges
-          ? riskStoplossMidpoints(riskStoplossRanges)
-          : fixedParams,
+        fixedParams: {
+          ...(riskStoplossRanges ? riskStoplossMidpoints(riskStoplossRanges) : fixedParams),
+          ...riskLossStreakMidpoints(riskHyperoptParams),
+        },
         filters: buildFiltersConfig(),
         filterPreset: filterPreset || undefined,
       };

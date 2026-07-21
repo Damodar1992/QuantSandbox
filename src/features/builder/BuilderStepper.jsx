@@ -39,7 +39,7 @@ import {
   FORMULA_TYPES,
   FORMULA_SUBTYPES,
 } from '../../constants/formulas';
-import { DEFAULT_RISK_STOPLOSS_RANGES, DEFAULT_RISK_HYPEROPT_PARAMS, RISK_STOPLOSS_LABELS, buildDefaultRiskHeatmapConfig } from '../../constants/risk';
+import { DEFAULT_RISK_STOPLOSS_RANGES, DEFAULT_RISK_HYPEROPT_PARAMS, RISK_STOPLOSS_LABELS, RISK_LOSS_STREAK_LABELS, buildDefaultRiskHeatmapConfig } from '../../constants/risk';
 import { TIME_RANGES } from '../../constants/app';
 import {
   STAGE_ID_TO_TYPE,
@@ -1136,7 +1136,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
 
     let config;
     if (isRiskStage) {
-      config = buildDefaultRiskHeatmapConfig(riskStoplossRanges);
+      config = buildDefaultRiskHeatmapConfig(riskStoplossRanges, riskHyperoptParams);
     } else {
       const stageIndicators = pickByStage(activeStage, {
         signal: signalIndicators,
@@ -1165,6 +1165,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
     activeStage,
     isRiskStage,
     riskStoplossRanges,
+    riskHyperoptParams,
     signalIndicators,
     entryIndicators,
     exitIndicators,
@@ -1195,6 +1196,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
             profit_factor: "Profit factor",
             drawdown: "Drawdown",
             ...RISK_STOPLOSS_LABELS,
+            ...RISK_LOSS_STREAK_LABELS,
           };
           Object.entries(rawParams).forEach(([key, value]) => {
             const label = riskLabels[key] || key;
@@ -5363,6 +5365,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                 variant={isRiskStage ? "risk" : "indicators"}
                 indicators={indicators}
                 riskStoplossRanges={riskStoplossRanges}
+                riskHyperoptParams={riskHyperoptParams}
                 onGenerate={(config) => handleGenerateHeatMap(config, heatMapConfigModalId)}
               />
             </div>
