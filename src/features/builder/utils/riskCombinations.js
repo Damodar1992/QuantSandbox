@@ -12,7 +12,7 @@ export function countRangeValues(min, max, step) {
 }
 
 /**
- * Product of combination counts for value + step risk hyperopt params.
+ * Product of combination counts for min/max/step risk hyperopt params.
  * @param {Record<string, number>} params
  */
 export function countRiskHyperoptParamCombinations(params) {

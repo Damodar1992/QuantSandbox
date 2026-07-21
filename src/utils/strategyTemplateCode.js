@@ -32,8 +32,8 @@ function formatRiskParametersDict(ranges, hyperoptParams) {
     for (const def of RISK_HYPEROPT_PARAM_DEFS) {
       const grid = riskHyperoptParamGrid(def, hyperoptParams);
       if (!grid) continue;
-      const defaultVal = hyperoptParams?.[def.valueKey];
-      lines.push(`        "${def.valueKey}": {`);
+      const defaultVal = hyperoptParams?.[def.maxKey] ?? grid.max;
+      lines.push(`        "${def.paramKey}": {`);
       lines.push(`            "default": ${defaultVal},`);
       lines.push(`            "min": ${grid.min},`);
       lines.push(`            "max": ${grid.max},`);

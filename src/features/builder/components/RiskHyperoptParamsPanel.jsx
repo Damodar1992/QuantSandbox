@@ -35,21 +35,33 @@ export const RiskHyperoptParamsPanel = memo(function RiskHyperoptParamsPanel({ p
       {enabled ? (
         <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
           {RISK_HYPEROPT_PARAM_DEFS.map((def) => {
-            const value = params?.[def.valueKey] ?? 0;
+            const min = params?.[def.minKey] ?? def.minFloor;
+            const max = params?.[def.maxKey] ?? 0;
             const step = params?.[def.stepKey] ?? 1;
-            const invalid = value < def.minFloor || step <= 0;
+            const invalid = min < def.minFloor || max < min || step <= 0;
             return (
-              <div key={def.valueKey} className="space-y-1">
+              <div key={def.paramKey} className="space-y-1">
                 <div className="text-[11px] font-medium text-[#f0f0f0]">{def.label}</div>
                 <div className="flex items-end gap-2">
                   <div className="space-y-1">
-                    <label className={cx("block text-[10px]", ui.textMuted)}>Value</label>
+                    <label className={cx("block text-[10px]", ui.textMuted)}>Min</label>
                     <input
                       type="number"
                       min={def.minFloor}
                       step={1}
-                      value={value}
-                      onChange={(e) => handleChange(def.valueKey, e.target.value)}
+                      value={min}
+                      onChange={(e) => handleChange(def.minKey, e.target.value)}
+                      className={cx(ui.input, "h-8 text-[11px] w-24 font-mono", invalid && "border-amber-500/50")}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className={cx("block text-[10px]", ui.textMuted)}>Max</label>
+                    <input
+                      type="number"
+                      min={def.minFloor}
+                      step={1}
+                      value={max}
+                      onChange={(e) => handleChange(def.maxKey, e.target.value)}
                       className={cx(ui.input, "h-8 text-[11px] w-24 font-mono", invalid && "border-amber-500/50")}
                     />
                   </div>

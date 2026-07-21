@@ -37,16 +37,20 @@ export const DEFAULT_RISK_HEATMAP_AXES = {
   y: "drawdown",
 };
 
-/** Value + step hyperopt params for Stage 4 Risk (section 3) */
+/** Min / max / step hyperopt params for Stage 4 Risk (section 3) */
 export const RISK_HYPEROPT_PARAM_DEFS = [
   {
-    valueKey: "loss_streak_threshold",
+    paramKey: "loss_streak_threshold",
+    minKey: "loss_streak_threshold_min",
+    maxKey: "loss_streak_threshold_max",
     stepKey: "loss_streak_threshold_step",
     label: "Loss streak threshold",
     minFloor: 1,
   },
   {
-    valueKey: "post_loss_cooldown_candles",
+    paramKey: "post_loss_cooldown_candles",
+    minKey: "post_loss_cooldown_candles_min",
+    maxKey: "post_loss_cooldown_candles_max",
     stepKey: "post_loss_cooldown_candles_step",
     label: "Post-loss cooldown (candles)",
     minFloor: 0,
@@ -55,19 +59,22 @@ export const RISK_HYPEROPT_PARAM_DEFS = [
 
 export const DEFAULT_RISK_HYPEROPT_PARAMS = {
   loss_streak_cooldown_enabled: false,
-  loss_streak_threshold: 5,
+  loss_streak_threshold_min: 1,
+  loss_streak_threshold_max: 5,
   loss_streak_threshold_step: 1,
-  post_loss_cooldown_candles: 3,
+  post_loss_cooldown_candles_min: 0,
+  post_loss_cooldown_candles_max: 3,
   post_loss_cooldown_candles_step: 1,
 };
 
-/** Hyperopt grid min/max/step from value + step fields (min = minFloor, max = value). */
+/** Hyperopt grid min/max/step from editable range fields. */
 export function riskHyperoptParamGrid(def, params) {
   if (!def || !params) return null;
-  const max = Number(params[def.valueKey]);
+  const min = Number(params[def.minKey]);
+  const max = Number(params[def.maxKey]);
   const step = Number(params[def.stepKey]);
-  const min = def.minFloor;
-  if (!Number.isFinite(max) || !Number.isFinite(step) || step <= 0 || max < min) return null;
+  if (!Number.isFinite(min) || !Number.isFinite(max) || !Number.isFinite(step)) return null;
+  if (step <= 0 || max < min || min < def.minFloor) return null;
   return { min, max, step };
 }
 
