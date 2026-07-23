@@ -33,17 +33,17 @@ export const RiskHyperoptParamsPanel = memo(function RiskHyperoptParamsPanel({ p
       </label>
 
       {enabled ? (
-        <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
           {RISK_HYPEROPT_PARAM_DEFS.map((def) => {
             const min = params?.[def.minKey] ?? def.minFloor;
             const max = params?.[def.maxKey] ?? 0;
             const step = params?.[def.stepKey] ?? 1;
             const invalid = min < def.minFloor || max < min || step <= 0;
             return (
-              <div key={def.paramKey} className="space-y-1">
-                <div className="text-[11px] font-medium text-[#f0f0f0]">{def.label}</div>
+              <div key={def.paramKey} className={cx(ui.radius, ui.panelMuted, "p-3 min-w-0")}>
+                <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">{def.label}</div>
                 <div className="flex items-end gap-2">
-                  <div className="space-y-1">
+                  <div className="space-y-1 flex-1 min-w-0">
                     <label className={cx("block text-[10px]", ui.textMuted)}>Min</label>
                     <input
                       type="number"
@@ -51,10 +51,10 @@ export const RiskHyperoptParamsPanel = memo(function RiskHyperoptParamsPanel({ p
                       step={1}
                       value={min}
                       onChange={(e) => handleChange(def.minKey, e.target.value)}
-                      className={cx(ui.input, "h-8 text-[11px] w-24 font-mono", invalid && "border-amber-500/50")}
+                      className={cx(ui.input, "h-8 text-[11px] w-full font-mono", invalid && "border-amber-500/50")}
                     />
                   </div>
-                  <div className="space-y-1">
+                  <div className="space-y-1 flex-1 min-w-0">
                     <label className={cx("block text-[10px]", ui.textMuted)}>Max</label>
                     <input
                       type="number"
@@ -62,10 +62,10 @@ export const RiskHyperoptParamsPanel = memo(function RiskHyperoptParamsPanel({ p
                       step={1}
                       value={max}
                       onChange={(e) => handleChange(def.maxKey, e.target.value)}
-                      className={cx(ui.input, "h-8 text-[11px] w-24 font-mono", invalid && "border-amber-500/50")}
+                      className={cx(ui.input, "h-8 text-[11px] w-full font-mono", invalid && "border-amber-500/50")}
                     />
                   </div>
-                  <div className="space-y-1">
+                  <div className="space-y-1 flex-1 min-w-0">
                     <label className={cx("block text-[10px]", ui.textMuted)}>Step</label>
                     <input
                       type="number"
@@ -73,7 +73,7 @@ export const RiskHyperoptParamsPanel = memo(function RiskHyperoptParamsPanel({ p
                       step={1}
                       value={step}
                       onChange={(e) => handleChange(def.stepKey, e.target.value)}
-                      className={cx(ui.input, "h-8 text-[11px] w-24 font-mono", invalid && "border-amber-500/50")}
+                      className={cx(ui.input, "h-8 text-[11px] w-full font-mono", invalid && "border-amber-500/50")}
                     />
                   </div>
                 </div>

@@ -99,7 +99,6 @@ import {
   TableBasedEditor,
   FormulaEditor,
   RiskStagePanel,
-  RiskHyperoptParamsPanel,
   HyperoptResultCard,
   HyperoptResultListItem,
   HyperoptResultDrawer,
@@ -1902,6 +1901,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                 riskStoplossRanges={riskStoplossRanges}
                 onRiskStoplossRangesChange={setRiskStoplossRanges}
                 riskHyperoptParams={riskHyperoptParams}
+                onRiskHyperoptParamsChange={setRiskHyperoptParams}
                 signalIndicators={signalIndicators}
                 entryFormula={entryFormula}
                 exitFormula={exitFormula}
@@ -2289,12 +2289,6 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                     </div>
                   )}
                 </div>
-
-                {isRiskStage && (
-                  <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
-                    <RiskHyperoptParamsPanel params={riskHyperoptParams} onChange={setRiskHyperoptParams} />
-                  </div>
-                )}
 
                 {/* Intermediate formula and Post-processing are hidden for Brute Force (and on Risk stage) */}
                 {hyperoptType !== "Brute Force" && !isRiskStage && (

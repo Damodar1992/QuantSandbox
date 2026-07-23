@@ -1,9 +1,10 @@
 import React, { memo, useMemo } from "react";
 import { BuilderSectionShell } from "../layout/BuilderSectionShell";
 import { RiskStoplossPanel } from "./RiskStoplossPanel";
+import { RiskHyperoptParamsPanel } from "./RiskHyperoptParamsPanel";
 import { StrategyTemplatePreview } from "./StrategyTemplatePreview";
 import { TotalCombinationsBadge } from "./IndicatorRangesPanel";
-import { countRiskCombinations } from "../utils/riskCombinations";
+import { countRiskCombinations, countRiskHyperoptParamCombinations } from "../utils/riskCombinations";
 
 export const RiskStagePanel = memo(function RiskStagePanel({
   collapsedSections,
@@ -11,14 +12,17 @@ export const RiskStagePanel = memo(function RiskStagePanel({
   riskStoplossRanges,
   onRiskStoplossRangesChange,
   riskHyperoptParams,
+  onRiskHyperoptParamsChange,
   signalIndicators,
   entryFormula,
   exitFormula,
   timeRange,
 }) {
-  const stoplossCombinations = useMemo(
-    () => countRiskCombinations(riskStoplossRanges),
-    [riskStoplossRanges],
+  const totalCombinations = useMemo(
+    () =>
+      countRiskCombinations(riskStoplossRanges) *
+      countRiskHyperoptParamCombinations(riskHyperoptParams),
+    [riskStoplossRanges, riskHyperoptParams],
   );
 
   return (
@@ -29,9 +33,15 @@ export const RiskStagePanel = memo(function RiskStagePanel({
         subtitle="Min, max, and step for stoploss hyperopt grid"
         collapsed={collapsedSections.has(1)}
         onToggle={() => toggleSection(1)}
-        headerRight={<TotalCombinationsBadge totalCombinations={stoplossCombinations} />}
+        headerRight={<TotalCombinationsBadge totalCombinations={totalCombinations} />}
       >
-        <RiskStoplossPanel ranges={riskStoplossRanges} onChange={onRiskStoplossRangesChange} />
+        <div className="space-y-3">
+          <RiskStoplossPanel ranges={riskStoplossRanges} onChange={onRiskStoplossRangesChange} />
+          <RiskHyperoptParamsPanel
+            params={riskHyperoptParams}
+            onChange={onRiskHyperoptParamsChange}
+          />
+        </div>
       </BuilderSectionShell>
 
       <BuilderSectionShell
