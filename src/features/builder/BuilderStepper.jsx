@@ -3486,7 +3486,10 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                               <td className="px-3 py-2">{row.timeFrame}</td>
                               <td className="px-3 py-2 text-[#a6a6a6]">{row.knowRange}</td>
                               <td className="px-3 py-2">
-                                <RunStatusBadge status={normalizeHyperoptRunStatus(row.status)} />
+                                <RunStatusBadge
+                                  status={normalizeHyperoptRunStatus(row.status)}
+                                  eta={row.estimationTime}
+                                />
                               </td>
                               <td
                                 className="px-3 py-2 max-w-[200px] align-top"
@@ -3616,7 +3619,10 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                   <td className="px-2 py-2 text-center text-[#8c8c8c]">{sub.analyzerNumber ?? "—"}</td>
                                                   <td className="px-3 py-2 text-[#a6a6a6] whitespace-nowrap">{formatHyperoptDateTime(sub.date)}</td>
                                                   <td className="px-3 py-2">
-                                                    <RunStatusBadge status={sub.status || "Finished"} />
+                                                    <RunStatusBadge
+                                                      status={sub.status || "Finished"}
+                                                      eta={sub.estimationTime}
+                                                    />
                                                   </td>
                                                   <td className="px-3 py-2 text-right">
                                                     <PostProcessingTableActions
@@ -3740,7 +3746,10 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                                       <td className="px-3 py-2 text-[#a6a6a6] whitespace-nowrap">{formatHyperoptDateTime(sub.date)}</td>
                                                                       <td className="px-3 py-2">{sub.foldSize ?? "-"}</td>
                                                                       <td className="px-3 py-2">
-                                                                        <RunStatusBadge status={sub.status || "Finished"} />
+                                                                        <RunStatusBadge
+                                                      status={sub.status || "Finished"}
+                                                      eta={sub.estimationTime}
+                                                    />
                                                                       </td>
                                                                       <td className="px-3 py-2">
                                                                         <PostProcessingTableActions

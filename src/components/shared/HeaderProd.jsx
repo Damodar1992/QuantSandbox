@@ -3,9 +3,10 @@ import { cx, ui } from "../../constants/ui";
 import { useOutsideClose } from "../../hooks/useOutsideClose";
 import { Logo, MenuIcon } from "../common";
 import { PillTabs, ProdButton } from "../prod";
-import { QueueIcon, ReleaseNotesIcon, DragHandleIcon, TrashIcon } from "./Icons";
+import { QueueIcon, ReleaseNotesIcon } from "./Icons";
 import { FeatureFlagsDropdown } from "./FeatureFlagsDropdown";
 import { StorageUsageBarCompact } from "../storage/StorageUsageBar";
+import { QueuePanel } from "./QueuePanel";
 
 export const HeaderProd = memo(function HeaderProd({
   onLogout,
@@ -19,7 +20,7 @@ export const HeaderProd = memo(function HeaderProd({
   queueOpen,
   onQueueToggle,
   onQueueClose,
-  queueItems = [],
+  queueItemsByTab = { hyperopt: [], postProcessing: [] },
   onQueueReorder,
   onQueueRemove,
   hyperoptRun = "Admin run",
@@ -34,7 +35,6 @@ export const HeaderProd = memo(function HeaderProd({
   onOpenStorage,
 }) {
   const queueRef = useOutsideClose(queueOpen, onQueueClose);
-  const [draggedIndex, setDraggedIndex] = useState(null);
   const [panelEnter, setPanelEnter] = useState(false);
 
   useEffect(() => {
@@ -44,37 +44,6 @@ export const HeaderProd = memo(function HeaderProd({
       return () => clearTimeout(t);
     }
   }, [queueOpen]);
-
-  const handleDragStart = useCallback((e, index) => {
-    setDraggedIndex(index);
-    e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData("text/plain", String(index));
-    e.dataTransfer.setDragImage(e.currentTarget, 0, 0);
-  }, []);
-
-  const handleDragOver = useCallback((e) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-  }, []);
-
-  const handleDrop = useCallback(
-    (e, dropIndex) => {
-      e.preventDefault();
-      const dragIndex = Number(e.dataTransfer.getData("text/plain"));
-      if (Number.isNaN(dragIndex) || dragIndex === dropIndex) {
-        setDraggedIndex(null);
-        return;
-      }
-      const next = [...queueItems];
-      const [removed] = next.splice(dragIndex, 1);
-      next.splice(dropIndex, 0, removed);
-      onQueueReorder?.(next);
-      setDraggedIndex(null);
-    },
-    [queueItems, onQueueReorder],
-  );
-
-  const handleDragEnd = useCallback(() => setDraggedIndex(null), []);
 
   const navItems = useMemo(() => {
     const items = [];
@@ -198,46 +167,14 @@ export const HeaderProd = memo(function HeaderProd({
             <QueueIcon />
           </ProdButton>
           {queueOpen && (
-            <>
-              <div className="fixed inset-0 z-20 bg-black/50" onClick={onQueueClose} aria-hidden />
-              <div
-                className={cx(
-                  "fixed right-0 top-0 bottom-0 z-30 w-[320px] flex flex-col overflow-hidden border-l bg-card shadow-[-8px_0_24px_rgba(0,0,0,0.4)] transition-transform duration-300",
-                  ui.divider,
-                  panelEnter ? "translate-x-0" : "translate-x-full",
-                )}
-              >
-                <div className={cx("shrink-0 p-3 border-b text-[12px] font-medium", ui.divider)}>Queue</div>
-                <div className="flex-1 overflow-auto min-h-0">
-                  <table className="w-full text-[11px] border-collapse">
-                    <tbody>
-                      {queueItems.map((item, index) => (
-                        <tr
-                          key={item.id}
-                          draggable
-                          onDragStart={(e) => handleDragStart(e, index)}
-                          onDragOver={handleDragOver}
-                          onDrop={(e) => handleDrop(e, index)}
-                          onDragEnd={handleDragEnd}
-                          className={cx("border-b", ui.divider, draggedIndex === index && "opacity-50")}
-                        >
-                          <td className="px-2 py-2">
-                            <DragHandleIcon />
-                          </td>
-                          <td className="px-3 py-2 text-violet-300">{item.strategyName} {item.version}</td>
-                          <td className="px-3 py-2 text-muted-foreground">{item.estimationTime ?? "—"}</td>
-                          <td className="px-2 py-2">
-                            <button type="button" onClick={() => onQueueRemove?.(item.id)} aria-label="Remove">
-                              <TrashIcon />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </>
+            <QueuePanel
+              open={queueOpen}
+              onClose={onQueueClose}
+              panelEnter={panelEnter}
+              itemsByTab={queueItemsByTab}
+              onReorder={onQueueReorder}
+              onRemove={onQueueRemove}
+            />
           )}
           <ProdButton variant="ghost" size="lg" onClick={onLogout}>
             Logout

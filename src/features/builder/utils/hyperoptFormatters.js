@@ -28,7 +28,13 @@ export function formatHyperoptDateTime(value) {
 export function normalizeHyperoptRunStatus(status) {
   if (!status) return "Completed";
   if (status === "Done") return "Completed";
+  if (status === "In progress") return "In Progress";
   return status;
+}
+
+/** True when a hyperopt/analyzer run is still running. */
+export function isHyperoptInProgress(status) {
+  return normalizeHyperoptRunStatus(status) === "In Progress";
 }
 
 /** True when hyperopt RAW data was deleted — re-run actions are locked. */

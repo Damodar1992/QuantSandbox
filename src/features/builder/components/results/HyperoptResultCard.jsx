@@ -55,7 +55,7 @@ export const HyperoptResultCard = memo(function HyperoptResultCard({
           <div className="flex items-center gap-2 min-w-0">
             <div className={cx("text-[12px] font-semibold", crmSurface.textBright)}>{formatHyperoptDateTime(row.date)}</div>
             <span className="rounded bg-[#2a2a2a] px-1 py-0.5 text-[10px] font-medium text-[#a6a6a6]">#{row.hyperoptNumber ?? "—"}</span>
-            <RunStatusBadge status={row.status} />
+            <RunStatusBadge status={row.status} eta={row.estimationTime} />
           </div>
           <div className="mt-0.5 text-[10px] text-[#8c8c8c]">
             {ppCount} post-processing

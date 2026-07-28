@@ -637,18 +637,70 @@ export default function App() {
   const [filterStatus, setFilterStatus] = useState("All");
   const [filterOwner, setFilterOwner] = useState("All");
 
-  // Queue panel (header): list of jobs with drag-and-drop reorder
+  // Queue panel (header): Hyperopt / Post-processing tabs
   const [showQueuePanel, setShowQueuePanel] = useState(false);
-  const [queueItems, setQueueItems] = useState(() => [
-    { id: "q1", strategyName: "Hyperopt Ema bounce", version: "v1", status: "In progress", estimationTime: "5m" },
-    { id: "q2", strategyName: "Hyperopt Ema bounce", version: "v2", status: "Waiting", estimationTime: "10m" },
-    { id: "q3", strategyName: "RSI Mean Reversion", version: "v1", status: "Waiting", estimationTime: "13m" },
-  ]);
-  const handleQueueReorder = useCallback((newOrder) => {
-    setQueueItems(newOrder);
+  const [queueItemsByTab, setQueueItemsByTab] = useState(() => ({
+    hyperopt: [
+      {
+        id: "h1",
+        strategyName: "Ema bounce",
+        version: "1",
+        stageName: "Signal",
+        status: "In progress",
+        estimationTime: "5m",
+      },
+      {
+        id: "h2",
+        strategyName: "Ema bounce",
+        version: "1.1",
+        stageName: "Entry",
+        status: "Queued",
+        estimationTime: "10m",
+      },
+      {
+        id: "h3",
+        strategyName: "RSI Mean Reversion",
+        version: "1.1.1",
+        stageName: "Exit",
+        status: "Queued",
+        estimationTime: "13m",
+      },
+    ],
+    postProcessing: [
+      {
+        id: "p1",
+        strategyName: "Ema bounce",
+        version: "1",
+        stageName: "Signal",
+        status: "In progress",
+        estimationTime: "3m",
+      },
+      {
+        id: "p2",
+        strategyName: "MACD Cross",
+        version: "1.1",
+        stageName: "Entry",
+        status: "In progress",
+        estimationTime: "7m",
+      },
+      {
+        id: "p3",
+        strategyName: "RSI Mean Reversion",
+        version: "1.1.1.1",
+        stageName: "Risk",
+        status: "Queued",
+        estimationTime: "12m",
+      },
+    ],
+  }));
+  const handleQueueReorder = useCallback((tab, newOrder) => {
+    setQueueItemsByTab((prev) => ({ ...prev, [tab]: newOrder }));
   }, []);
-  const handleQueueRemove = useCallback((id) => {
-    setQueueItems((prev) => prev.filter((item) => item.id !== id));
+  const handleQueueRemove = useCallback((tab, id) => {
+    setQueueItemsByTab((prev) => ({
+      ...prev,
+      [tab]: (prev[tab] || []).filter((item) => item.id !== id),
+    }));
   }, []);
 
   // Mock role
@@ -1114,7 +1166,7 @@ export default function App() {
           queueOpen={showQueuePanel}
           onQueueToggle={() => setShowQueuePanel((v) => !v)}
           onQueueClose={() => setShowQueuePanel(false)}
-          queueItems={queueItems}
+          queueItemsByTab={queueItemsByTab}
           onQueueReorder={handleQueueReorder}
           onQueueRemove={handleQueueRemove}
           hyperoptRun={builderHyperoptRun}

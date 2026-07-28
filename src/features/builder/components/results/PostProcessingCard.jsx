@@ -127,7 +127,7 @@ export const PostProcessingCard = memo(function PostProcessingCard({
           <CollapseChevron collapsed={collapsed} />
           <span className="text-[11px] font-semibold text-sky-200">{sub.date}</span>
           <span className="rounded bg-[#2a2a2a] px-1 py-0.5 text-[10px] font-medium text-[#a6a6a6]">#{sub.analyzerNumber ?? "—"}</span>
-          <RunStatusBadge status={sub.status || "Finished"} />
+          <RunStatusBadge status={sub.status || "Finished"} eta={sub.estimationTime} />
         </button>
         <HyperoptDetailsTooltip
           title="Post-processing formula info"
@@ -203,7 +203,7 @@ export const PostProcessingCard = memo(function PostProcessingCard({
                     )}
                     <div className="flex items-center gap-1.5">
                       <span className="text-[#8c8c8c]">Status</span>
-                      <RunStatusBadge status={sub.status || "Finished"} />
+                      <RunStatusBadge status={sub.status || "Finished"} eta={sub.estimationTime} />
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 px-2.5 pb-2">
