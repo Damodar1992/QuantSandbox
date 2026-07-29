@@ -3489,6 +3489,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                 <RunStatusBadge
                                   status={normalizeHyperoptRunStatus(row.status)}
                                   eta={row.estimationTime}
+                                  progress={row.progress}
                                 />
                               </td>
                               <td
@@ -3622,6 +3623,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                     <RunStatusBadge
                                                       status={sub.status || "Finished"}
                                                       eta={sub.estimationTime}
+                                                      progress={sub.progress}
                                                     />
                                                   </td>
                                                   <td className="px-3 py-2 text-right">
@@ -3749,6 +3751,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                                         <RunStatusBadge
                                                       status={sub.status || "Finished"}
                                                       eta={sub.estimationTime}
+                                                      progress={sub.progress}
                                                     />
                                                                       </td>
                                                                       <td className="px-3 py-2">

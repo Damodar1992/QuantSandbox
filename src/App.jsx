@@ -648,6 +648,7 @@ export default function App() {
         stageName: "Signal",
         status: "In progress",
         estimationTime: "5m",
+        progress: 62,
       },
       {
         id: "h2",
@@ -674,6 +675,7 @@ export default function App() {
         stageName: "Signal",
         status: "In progress",
         estimationTime: "3m",
+        progress: 41,
       },
       {
         id: "p2",
@@ -682,6 +684,7 @@ export default function App() {
         stageName: "Entry",
         status: "In progress",
         estimationTime: "7m",
+        progress: 78,
       },
       {
         id: "p3",

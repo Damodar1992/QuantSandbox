@@ -1,5 +1,6 @@
 import React, { memo, useCallback, useEffect, useState } from "react";
 import { cx, ui } from "../../constants/ui";
+import { EtaProgress } from "../common/EtaProgress";
 import { DragHandleIcon, TrashIcon } from "./Icons";
 
 export const QUEUE_TABS = [
@@ -9,8 +10,13 @@ export const QUEUE_TABS = [
 
 const STATUS_STYLES = {
   "In progress": "bg-blue-500/10 text-blue-200 border-blue-500/40",
+  "In Progress": "bg-blue-500/10 text-blue-200 border-blue-500/40",
   Queued: "bg-white/5 text-muted-foreground border-border",
 };
+
+function isQueueInProgress(status) {
+  return status === "In progress" || status === "In Progress";
+}
 
 function QueueStatusBadge({ status }) {
   return (
@@ -133,16 +139,20 @@ export const QueuePanel = memo(function QueuePanel({
                   <span className="mt-0.5 shrink-0 text-muted-foreground">
                     <DragHandleIcon />
                   </span>
-                  <div className="min-w-0 flex-1 space-y-1">
+                  <div className="min-w-0 flex-1 space-y-1.5">
                     <div className="truncate text-[11px] font-medium text-violet-300">
                       {item.strategyName} {item.version}
+                      <span className="text-muted-foreground font-normal">
+                        {" · "}
+                        {item.stageName || "—"}
+                      </span>
                     </div>
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground">
-                      <span>{item.stageName || "—"}</span>
-                      <span aria-hidden>·</span>
-                      <span>ETA {item.estimationTime ?? "—"}</span>
+                    <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                      <QueueStatusBadge status={item.status || "Queued"} />
+                      {isQueueInProgress(item.status) ? (
+                        <EtaProgress eta={item.estimationTime} progress={item.progress} />
+                      ) : null}
                     </div>
-                    <QueueStatusBadge status={item.status || "Queued"} />
                   </div>
                   <button
                     type="button"
