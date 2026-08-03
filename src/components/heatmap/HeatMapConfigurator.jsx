@@ -1,6 +1,7 @@
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { cx, ui } from "../../constants/ui";
-import { useOutsideClose } from "../../hooks/useOutsideClose";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 import { HEATMAP_FILTER_KEYS, FILTER_OPERATIONS } from "../../constants/heatmap";
 import { BASE_INDICATORS } from "../../constants/indicators";
 import {
@@ -12,6 +13,12 @@ import {
 import { getParamLabel } from "../../utils/indicators";
 import { genId, FILTER_PRESET_BUILTIN, cloneFilterRootWithNewIds } from "./heatmapFilterPresets";
 import { getBbHeatmapAxisKeys } from "../../features/builder/utils/defaultBbSetup";
+import { AppSelect } from "../common/AppSelect";
+import { AppInput } from "../common/AppInput";
+import { AppButton } from "../common/AppButton";
+
+const FILTER_FIELD_OPTIONS = HEATMAP_FILTER_KEYS.map((f) => ({ value: f, label: f }));
+const FILTER_OP_OPTIONS = FILTER_OPERATIONS.map((op) => ({ value: op.value, label: op.label }));
 
 const FiltersSection = memo(function FiltersSection({
   filterRoot,
@@ -33,26 +40,20 @@ const FiltersSection = memo(function FiltersSection({
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <label className={cx("text-[10px]", ui.textMuted)}>Filter Preset</label>
-          <select
-            value={filterPreset}
-            onChange={handlePresetChange}
-            className={cx(ui.input, "h-8 text-[11px] min-w-[160px]")}
-          >
-            <option value="">—</option>
-            {Object.keys(FILTER_PRESET_BUILTIN).map((key) => (
-              <option key={key} value={key}>
-                {key}
-              </option>
-            ))}
-            {customPresets.map((p) => (
-              <option key={p.id} value={p.name}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-          <button type="button" onClick={handleSaveFilterAs} className={cx(ui.btn, "h-8 px-3 text-[11px]")}>
+          <AppSelect
+            value={filterPreset || ""}
+            onValueChange={handlePresetChange}
+            options={[
+              { value: "", label: "—" },
+              ...Object.keys(FILTER_PRESET_BUILTIN).map((key) => ({ value: key, label: key })),
+              ...customPresets.map((p) => ({ value: p.name, label: p.name })),
+            ]}
+            className="min-w-[160px]"
+            triggerClassName="h-8 text-[11px]"
+          />
+          <AppButton type="button" onClick={handleSaveFilterAs} variant="outline" className="h-8 px-3 text-[11px]">
             Save filter as
-          </button>
+          </AppButton>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex rounded-md overflow-hidden border border-[#303030]">
@@ -159,43 +160,30 @@ const FiltersSection = memo(function FiltersSection({
                       >
                         ×
                       </button>
-                      <select
+                      <AppSelect
                         value={cond.field}
-                        onChange={(e) => updateCondition(group.id, cond.id, { field: e.target.value })}
-                        className={cx(
-                          ui.input,
-                          "h-6 text-[10px] flex-1 min-w-0 bg-sky-900/30 border-sky-500/50 text-sky-100",
-                        )}
-                      >
-                        {HEATMAP_FILTER_KEYS.map((f) => (
-                          <option key={f} value={f}>
-                            {f}
-                          </option>
-                        ))}
-                      </select>
-                      <select
+                        onValueChange={(field) => updateCondition(group.id, cond.id, { field })}
+                        options={FILTER_FIELD_OPTIONS}
+                        className="flex-1 min-w-0"
+                        triggerClassName="h-6 text-[10px] bg-sky-900/30 border-sky-500/50 text-sky-100"
+                      />
+                      <AppSelect
                         value={cond.op}
-                        onChange={(e) => updateCondition(group.id, cond.id, { op: e.target.value })}
-                        className={cx(
-                          ui.input,
-                          "h-6 text-[10px] flex-1 min-w-0 bg-emerald-900/30 border-emerald-500/50 text-emerald-100",
-                        )}
-                      >
-                        {FILTER_OPERATIONS.map((op) => (
-                          <option key={op.value} value={op.value}>
-                            {op.label}
-                          </option>
-                        ))}
-                      </select>
+                        onValueChange={(op) => updateCondition(group.id, cond.id, { op })}
+                        options={FILTER_OP_OPTIONS}
+                        className="flex-1 min-w-0"
+                        triggerClassName="h-6 text-[10px] bg-emerald-900/30 border-emerald-500/50 text-emerald-100"
+                      />
                       {noValue ? (
                         <span className="text-[10px] text-[#595959] flex-1 min-w-0">(no value)</span>
                       ) : (
-                        <input
+                        <AppInput
                           type="text"
                           value={cond.value}
                           onChange={(e) => updateCondition(group.id, cond.id, { value: e.target.value })}
                           placeholder="Value"
-                          className={cx(ui.input, "h-6 text-[10px] flex-1 min-w-0 bg-[#1a1a1a] text-[#d9d9d9]")}
+                          wrapperClassName="flex-1 min-w-0"
+                          className="h-6 text-[10px] bg-[#1a1a1a] text-[#d9d9d9]"
                         />
                       )}
                     </div>
@@ -233,12 +221,6 @@ export const HeatMapConfigurator = memo(function HeatMapConfigurator({
   }));
   const [filterPreset, setFilterPreset] = useState(() => (isRisk ? "" : "Super filter"));
   const [customPresets, setCustomPresets] = useState([]);
-  const [openIndicatorDropdown, setOpenIndicatorDropdown] = useState(false);
-  const [openXDropdown, setOpenXDropdown] = useState(false);
-  const [openYDropdown, setOpenYDropdown] = useState(false);
-  const indicatorDropdownRef = useOutsideClose(openIndicatorDropdown, () => setOpenIndicatorDropdown(false));
-  const xDropdownRef = useOutsideClose(openXDropdown, () => setOpenXDropdown(false));
-  const yDropdownRef = useOutsideClose(openYDropdown, () => setOpenYDropdown(false));
 
   useEffect(() => {
     if (isRisk) return;
@@ -442,8 +424,7 @@ export const HeatMapConfigurator = memo(function HeatMapConfigurator({
   );
 
   const handlePresetChange = useCallback(
-    (e) => {
-      const value = e.target.value;
+    (value) => {
       setFilterPreset(value);
       applyFilterPreset(value);
     },
@@ -518,30 +499,35 @@ export const HeatMapConfigurator = memo(function HeatMapConfigurator({
   const getAxisLabel = (p) => (isRisk ? p.label : p.label);
   const getAxisKey = (p) => p[axisKeyField];
 
-  const renderAxisDropdown = (axis, open, setOpen, dropdownRef, selectedKeys, otherKeys, onToggle) => (
-    <div ref={dropdownRef} className="relative">
+  const renderAxisDropdown = (axis, selectedKeys, otherKeys, onToggle) => (
+    <div>
       <label className={cx("block mb-1 text-xs", ui.textMuted)}>
         {axis} Axis {isRisk ? "Metric" : "Parameter"}
       </label>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={cx(ui.input, "h-9 text-[12px] w-full text-left flex items-center justify-between gap-2")}
-      >
-        <span className={cx("truncate", !selectedKeys.length && "text-[#595959]")}>
-          {selectedKeys.length
-            ? axisOptions
-                .filter((p) => selectedKeys.includes(getAxisKey(p)))
-                .map((p) => getAxisLabel(p))
-                .join(", ")
-            : isRisk
-              ? "Select metric..."
-              : "Select parameters..."}
-        </span>
-        <span className="text-[10px] shrink-0">{open ? "▲" : "▼"}</span>
-      </button>
-      {open && (
-        <div className="absolute z-50 mt-1 w-full rounded-md border border-[#303030] bg-[#1a1a1a] shadow-lg max-h-64 overflow-y-auto">
+      <Popover>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className={cx(ui.input, "h-9 text-[12px] w-full text-left flex items-center justify-between gap-2")}
+          >
+            <span className={cx("truncate", !selectedKeys.length && "text-[#595959]")}>
+              {selectedKeys.length
+                ? axisOptions
+                    .filter((p) => selectedKeys.includes(getAxisKey(p)))
+                    .map((p) => getAxisLabel(p))
+                    .join(", ")
+                : isRisk
+                  ? "Select metric..."
+                  : "Select parameters..."}
+            </span>
+            <span className="text-[10px] shrink-0">▼</span>
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          align="start"
+          className="w-[var(--radix-popover-trigger-width)] max-h-64 gap-0 overflow-y-auto p-0"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
           {axisOptions.map((p) => {
             const key = getAxisKey(p);
             const inOther = otherKeys.includes(key);
@@ -550,24 +536,33 @@ export const HeatMapConfigurator = memo(function HeatMapConfigurator({
               <label
                 key={key}
                 className={cx(
-                  "flex items-center gap-2 py-2 px-3 cursor-pointer hover:bg-[#252525] border-0 border-b border-[#303030] last:border-0",
-                  inOther && "opacity-50 cursor-not-allowed",
+                  "flex items-center gap-2 border-0 border-b border-[#303030] px-3 py-2 last:border-0",
+                  inOther ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-[#252525]",
                 )}
               >
-                <input
-                  type={isRisk ? "radio" : "checkbox"}
-                  name={isRisk ? `heatmap-axis-${axis}` : undefined}
-                  checked={checked}
-                  disabled={inOther}
-                  onChange={() => !inOther && onToggle(key)}
-                  className="w-3.5 h-3.5"
-                />
+                {isRisk ? (
+                  <input
+                    type="radio"
+                    name={`heatmap-axis-${axis}`}
+                    checked={checked}
+                    disabled={inOther}
+                    onChange={() => !inOther && onToggle(key)}
+                    className="h-3.5 w-3.5"
+                  />
+                ) : (
+                  <Checkbox
+                    checked={checked}
+                    disabled={inOther}
+                    onCheckedChange={() => !inOther && onToggle(key)}
+                    className="size-3.5 border-[#505050]"
+                  />
+                )}
                 <span className="text-[11px] text-[#d9d9d9]">{getAxisLabel(p)}</span>
               </label>
             );
           })}
-        </div>
-      )}
+        </PopoverContent>
+      </Popover>
     </div>
   );
 
@@ -591,65 +586,56 @@ export const HeatMapConfigurator = memo(function HeatMapConfigurator({
         )}
 
         {!isRisk && (
-          <div ref={indicatorDropdownRef} className="relative">
+          <div>
             <label className={cx("block mb-1 text-xs", ui.textMuted)}>Select Indicator</label>
-            <button
-              type="button"
-              onClick={() => setOpenIndicatorDropdown((v) => !v)}
-              className={cx(ui.input, "h-9 text-[12px] w-full text-left flex items-center justify-between gap-2")}
-            >
-              <span className={cx("truncate", !selectedIndicatorIds.length && "text-[#595959]")}>
-                {selectedIndicatorIds.length
-                  ? indicators
-                      .filter((ind) => selectedIndicatorIds.includes(ind.id))
-                      .map((ind) => ind.name)
-                      .join(", ")
-                  : "Select indicators..."}
-              </span>
-              <span className="text-[10px] shrink-0">{openIndicatorDropdown ? "▲" : "▼"}</span>
-            </button>
-            {openIndicatorDropdown && (
-              <div className="absolute z-50 mt-1 w-full rounded-md border border-[#303030] bg-[#1a1a1a] shadow-lg max-h-64 overflow-y-auto">
-                {indicators.map((ind) => (
-                  <label
-                    key={ind.id}
-                    className="flex items-center gap-2 py-2 px-3 cursor-pointer hover:bg-[#252525] border-0 border-b border-[#303030] last:border-0"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedIndicatorIds.includes(ind.id)}
-                      onChange={() => toggleIndicator(ind.id)}
-                      className="w-3.5 h-3.5"
-                    />
-                    <span className="text-[11px] text-[#d9d9d9]">{ind.name}</span>
-                  </label>
-                ))}
-              </div>
-            )}
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className={cx(ui.input, "h-9 text-[12px] w-full text-left flex items-center justify-between gap-2")}
+                >
+                  <span className={cx("truncate", !selectedIndicatorIds.length && "text-[#595959]")}>
+                    {selectedIndicatorIds.length
+                      ? indicators
+                          .filter((ind) => selectedIndicatorIds.includes(ind.id))
+                          .map((ind) => ind.name)
+                          .join(", ")
+                      : "Select indicators..."}
+                  </span>
+                  <span className="text-[10px] shrink-0">▼</span>
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="start"
+                className="w-[var(--radix-popover-trigger-width)] max-h-64 gap-0 overflow-y-auto p-0"
+                onOpenAutoFocus={(e) => e.preventDefault()}
+              >
+                {indicators.map((ind) => {
+                  const checked = selectedIndicatorIds.includes(ind.id);
+                  return (
+                    <label
+                      key={ind.id}
+                      className="flex cursor-pointer items-center gap-2 border-0 border-b border-[#303030] px-3 py-2 last:border-0 hover:bg-[#252525]"
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={() => toggleIndicator(ind.id)}
+                        className="size-3.5 border-[#505050]"
+                      />
+                      <span className="text-[11px] text-[#d9d9d9]">{ind.name}</span>
+                    </label>
+                  );
+                })}
+              </PopoverContent>
+            </Popover>
           </div>
         )}
 
         {showAxisSection && (
           <>
             <div className="grid grid-cols-2 gap-3">
-              {renderAxisDropdown(
-                "X",
-                openXDropdown,
-                setOpenXDropdown,
-                xDropdownRef,
-                xAxisKeys,
-                yAxisKeys,
-                toggleXAxis,
-              )}
-              {renderAxisDropdown(
-                "Y",
-                openYDropdown,
-                setOpenYDropdown,
-                yDropdownRef,
-                yAxisKeys,
-                xAxisKeys,
-                toggleYAxis,
-              )}
+              {renderAxisDropdown("X", xAxisKeys, yAxisKeys, toggleXAxis)}
+              {renderAxisDropdown("Y", yAxisKeys, xAxisKeys, toggleYAxis)}
             </div>
 
             <FiltersSection
@@ -667,9 +653,9 @@ export const HeatMapConfigurator = memo(function HeatMapConfigurator({
               handleSaveFilterAs={handleSaveFilterAs}
             />
 
-            <button type="button" onClick={handleGenerate} className={cx(ui.btnPrimary, "w-full h-9")}>
+            <AppButton type="button" onClick={handleGenerate} variant="default" className="w-full h-9">
               🎨 Generate HeatMap
-            </button>
+            </AppButton>
           </>
         )}
       </div>

@@ -1,4 +1,9 @@
 import React, { memo } from "react";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { cx, ui } from "@/constants/ui";
 
 export const BuilderAccordion = memo(function BuilderAccordion({
@@ -12,10 +17,13 @@ export const BuilderAccordion = memo(function BuilderAccordion({
   className,
 }) {
   return (
-    <div className={cx(ui.builderSection, "builder-section-flat", className)}>
-      <button
+    <Collapsible
+      open={!collapsed}
+      onOpenChange={() => onToggle?.()}
+      className={cx(ui.builderSection, "builder-section-flat", className)}
+    >
+      <CollapsibleTrigger
         type="button"
-        onClick={onToggle}
         className={cx(
           "builder-section-trigger w-full flex items-center justify-between gap-2 text-left px-4 py-3",
           ui.builderSectionHeader,
@@ -34,8 +42,10 @@ export const BuilderAccordion = memo(function BuilderAccordion({
           {headerRight}
           <span className="text-muted-foreground text-[10px]">{collapsed ? "▶" : "▼"}</span>
         </div>
-      </button>
-      {!collapsed ? <div className="p-4">{children}</div> : null}
-    </div>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="p-4">{children}</div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 });

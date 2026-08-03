@@ -1,6 +1,6 @@
 import React, { memo } from "react";
 import { ui } from "../../constants/ui";
-import { ModalShell } from "../common";
+import { ModalShell, AppButton } from "../common";
 
 export const ResetPasswordModal = memo(function ResetPasswordModal({ user, onClose }) {
   if (!user) return null;
@@ -13,18 +13,18 @@ export const ResetPasswordModal = memo(function ResetPasswordModal({ user, onClo
           <span className="text-[#f5f5f5] font-medium">{user.login}</span>?
         </p>
         <div className="flex justify-end gap-2 pt-2">
-          <button onClick={onClose} className={ui.btn}>
+          <AppButton onClick={onClose} variant="outline">
             Cancel
-          </button>
-          <button
+          </AppButton>
+          <AppButton
             onClick={() => {
               alert(`Password reset email sent to ${user.login} (mock)`);
               onClose();
             }}
-            className={ui.btnPrimary}
+            variant="default"
           >
             Reset password
-          </button>
+          </AppButton>
         </div>
       </div>
     </ModalShell>

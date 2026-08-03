@@ -1,231 +1,134 @@
-import React, { memo } from "react";
+import React, { memo, useMemo } from "react";
 
-import { cx, ui } from "../../../../constants/ui";
-
+import { AppSelect } from "@/components/common/AppSelect";
+import { AppButton } from "@/components/common/AppButton";
 import { EMPTY_GLOBAL_MINI_BACKTEST_FILTERS } from "../../utils/miniBacktestFilters";
 
-
-
-const selectClass = cx(ui.select, "h-8 w-[132px] shrink-0");
-
-
-
 export const MiniBacktestGlobalFilters = memo(function MiniBacktestGlobalFilters({
-
   filters,
-
   onFiltersChange,
-
   options,
-
 }) {
-
   const setFilter = (key, value) => {
-
     onFiltersChange?.({ ...filters, [key]: value });
-
   };
-
-
 
   const hasActiveFilters = Object.values(filters).some(Boolean);
 
-
-
-  return (
-
-    <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-
-      <select
-
-        value={filters.strategy}
-
-        onChange={(e) => setFilter("strategy", e.target.value)}
-
-        className={selectClass}
-
-        aria-label="Filter by strategy"
-
-      >
-
-        <option value="">All strategies</option>
-
-        {options.strategies.map((item) => (
-
-          <option key={item.value} value={item.value}>
-
-            {item.label}
-
-          </option>
-
-        ))}
-
-      </select>
-
-
-
-      <select
-
-        value={filters.stage}
-
-        onChange={(e) => setFilter("stage", e.target.value)}
-
-        className={selectClass}
-
-        aria-label="Filter by stage"
-
-      >
-
-        <option value="">All stages</option>
-
-        {options.stages.map((stage) => (
-
-          <option key={stage.value} value={stage.value}>
-
-            {stage.label}
-
-          </option>
-
-        ))}
-
-      </select>
-
-
-
-      <select
-
-        value={filters.tradingMode}
-
-        onChange={(e) => setFilter("tradingMode", e.target.value)}
-
-        className={selectClass}
-
-        aria-label="Filter by trading mode"
-
-      >
-
-        <option value="">All modes</option>
-
-        {options.tradingModes.map((item) => (
-
-          <option key={item.value} value={item.value}>
-
-            {item.label}
-
-          </option>
-
-        ))}
-
-      </select>
-
-
-
-      <select
-
-        value={filters.exchange}
-
-        onChange={(e) => setFilter("exchange", e.target.value)}
-
-        className={selectClass}
-
-        aria-label="Filter by exchange"
-
-      >
-
-        <option value="">All exchanges</option>
-
-        {options.exchanges.map((item) => (
-
-          <option key={item.value} value={item.value}>
-
-            {item.label}
-
-          </option>
-
-        ))}
-
-      </select>
-
-
-
-      <select
-
-        value={filters.pairs}
-
-        onChange={(e) => setFilter("pairs", e.target.value)}
-
-        className={selectClass}
-
-        aria-label="Filter by pairs"
-
-      >
-
-        <option value="">All pairs</option>
-
-        {options.pairs.map((item) => (
-
-          <option key={item.value} value={item.value}>
-
-            {item.label}
-
-          </option>
-
-        ))}
-
-      </select>
-
-
-
-      <select
-
-        value={filters.status}
-
-        onChange={(e) => setFilter("status", e.target.value)}
-
-        className={selectClass}
-
-        aria-label="Filter by status"
-
-      >
-
-        <option value="">All statuses</option>
-
-        {options.statuses.map((status) => (
-
-          <option key={status} value={status}>
-
-            {status}
-
-          </option>
-
-        ))}
-
-      </select>
-
-
-
-      {hasActiveFilters ? (
-
-        <button
-
-          type="button"
-
-          onClick={() => onFiltersChange?.({ ...EMPTY_GLOBAL_MINI_BACKTEST_FILTERS })}
-
-          className={cx(ui.btn, "h-8 px-2 text-[12px] whitespace-nowrap")}
-
-        >
-
-          Clear filters
-
-        </button>
-
-      ) : null}
-
-    </div>
-
+  const strategyOptions = useMemo(
+    () => [
+      { value: "", label: "All strategies" },
+      ...(options.strategies ?? []).map((item) => ({ value: item.value, label: item.label })),
+    ],
+    [options.strategies],
   );
 
+  const stageOptions = useMemo(
+    () => [
+      { value: "", label: "All stages" },
+      ...(options.stages ?? []).map((stage) => ({ value: stage.value, label: stage.label })),
+    ],
+    [options.stages],
+  );
+
+  const tradingModeOptions = useMemo(
+    () => [
+      { value: "", label: "All modes" },
+      ...(options.tradingModes ?? []).map((item) => ({ value: item.value, label: item.label })),
+    ],
+    [options.tradingModes],
+  );
+
+  const exchangeOptions = useMemo(
+    () => [
+      { value: "", label: "All exchanges" },
+      ...(options.exchanges ?? []).map((item) => ({ value: item.value, label: item.label })),
+    ],
+    [options.exchanges],
+  );
+
+  const pairsOptions = useMemo(
+    () => [
+      { value: "", label: "All pairs" },
+      ...(options.pairs ?? []).map((item) => ({ value: item.value, label: item.label })),
+    ],
+    [options.pairs],
+  );
+
+  const statusOptions = useMemo(
+    () => [
+      { value: "", label: "All statuses" },
+      ...(options.statuses ?? []).map((status) => ({ value: status, label: status })),
+    ],
+    [options.statuses],
+  );
+
+  return (
+    <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+      <AppSelect
+        value={filters.strategy}
+        onValueChange={(v) => setFilter("strategy", v)}
+        options={strategyOptions}
+        className="w-[132px] shrink-0"
+        triggerClassName="h-8"
+        aria-label="Filter by strategy"
+      />
+
+      <AppSelect
+        value={filters.stage}
+        onValueChange={(v) => setFilter("stage", v)}
+        options={stageOptions}
+        className="w-[132px] shrink-0"
+        triggerClassName="h-8"
+        aria-label="Filter by stage"
+      />
+
+      <AppSelect
+        value={filters.tradingMode}
+        onValueChange={(v) => setFilter("tradingMode", v)}
+        options={tradingModeOptions}
+        className="w-[132px] shrink-0"
+        triggerClassName="h-8"
+        aria-label="Filter by trading mode"
+      />
+
+      <AppSelect
+        value={filters.exchange}
+        onValueChange={(v) => setFilter("exchange", v)}
+        options={exchangeOptions}
+        className="w-[132px] shrink-0"
+        triggerClassName="h-8"
+        aria-label="Filter by exchange"
+      />
+
+      <AppSelect
+        value={filters.pairs}
+        onValueChange={(v) => setFilter("pairs", v)}
+        options={pairsOptions}
+        className="w-[132px] shrink-0"
+        triggerClassName="h-8"
+        aria-label="Filter by pairs"
+      />
+
+      <AppSelect
+        value={filters.status}
+        onValueChange={(v) => setFilter("status", v)}
+        options={statusOptions}
+        className="w-[132px] shrink-0"
+        triggerClassName="h-8"
+        aria-label="Filter by status"
+      />
+
+      {hasActiveFilters ? (
+        <AppButton
+          type="button"
+          variant="outline"
+          onClick={() => onFiltersChange?.({ ...EMPTY_GLOBAL_MINI_BACKTEST_FILTERS })}
+          className="h-8 px-2 text-[12px] whitespace-nowrap"
+        >
+          Clear filters
+        </AppButton>
+      ) : null}
+    </div>
+  );
 });
-
-

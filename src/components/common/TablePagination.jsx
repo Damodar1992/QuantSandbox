@@ -1,5 +1,7 @@
-import React, { memo } from "react";
+import React, { memo, useMemo } from "react";
 import { cx, ui } from "../../constants/ui";
+import { AppSelect } from "./AppSelect";
+import { AppButton } from "./AppButton";
 
 export const TablePagination = memo(function TablePagination({
   page,
@@ -12,6 +14,11 @@ export const TablePagination = memo(function TablePagination({
   pageSizeOptions = [10, 25, 50],
   className,
 }) {
+  const sizeOptions = useMemo(
+    () => pageSizeOptions.map((size) => ({ value: String(size), label: String(size) })),
+    [pageSizeOptions],
+  );
+
   if (totalItems === 0) return null;
 
   return (
@@ -26,44 +33,44 @@ export const TablePagination = memo(function TablePagination({
       </span>
       <div className="flex items-center gap-2">
         {onPageSizeChange && (
-          <label className="flex items-center gap-1.5 text-[#8c8c8c]">
+          <div className="flex items-center gap-1.5 text-[#8c8c8c]">
             <span>Per page</span>
-            <select
-              value={pageSize}
-              onChange={(e) => onPageSizeChange(Number(e.target.value))}
-              className={cx(ui.select, "h-7 text-[11px] py-0")}
-            >
-              {pageSizeOptions.map((size) => (
-                <option key={size} value={size}>
-                  {size}
-                </option>
-              ))}
-            </select>
-          </label>
+            <AppSelect
+              value={String(pageSize)}
+              onValueChange={(v) => onPageSizeChange(Number(v))}
+              options={sizeOptions}
+              className="w-[72px]"
+              triggerClassName="h-7 text-[11px]"
+              aria-label="Items per page"
+            />
+          </div>
         )}
         <span className="text-[#a6a6a6]">
           Page {page} of {totalPages}
         </span>
-        <button
+        <AppButton
           type="button"
+          variant="outline"
+          size="sm"
           onClick={onPrev}
           disabled={page <= 1}
-          className={cx(ui.btn, "h-7 px-2 text-[11px]", page <= 1 && "opacity-40 cursor-not-allowed")}
+          className={cx("h-7 px-2 text-[11px]", page <= 1 && "opacity-40 cursor-not-allowed")}
         >
           Prev
-        </button>
-        <button
+        </AppButton>
+        <AppButton
           type="button"
+          variant="outline"
+          size="sm"
           onClick={onNext}
           disabled={page >= totalPages}
           className={cx(
-            ui.btn,
             "h-7 px-2 text-[11px]",
             page >= totalPages && "opacity-40 cursor-not-allowed",
           )}
         >
           Next
-        </button>
+        </AppButton>
       </div>
     </div>
   );

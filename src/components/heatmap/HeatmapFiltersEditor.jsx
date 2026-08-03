@@ -6,6 +6,12 @@ import {
   FILTER_PRESET_BUILTIN,
   cloneFilterRootWithNewIds,
 } from "./heatmapFilterPresets";
+import { AppSelect } from "../common/AppSelect";
+import { AppInput } from "../common/AppInput";
+import { AppButton } from "../common/AppButton";
+
+const FILTER_FIELD_OPTIONS = HEATMAP_FILTER_KEYS.map((f) => ({ value: f, label: f }));
+const FILTER_OP_OPTIONS = FILTER_OPERATIONS.map((op) => ({ value: op.value, label: op.label }));
 
 export const HeatmapFiltersEditor = memo(function HeatmapFiltersEditor({
   filterRoot,
@@ -111,8 +117,7 @@ export const HeatmapFiltersEditor = memo(function HeatmapFiltersEditor({
   );
 
   const handlePresetChange = useCallback(
-    (e) => {
-      const value = e.target.value;
+    (value) => {
       onFilterPresetChange?.(value);
       applyFilterPreset(value);
     },
@@ -140,27 +145,21 @@ export const HeatmapFiltersEditor = memo(function HeatmapFiltersEditor({
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <label className={cx("text-[10px] shrink-0", ui.textMuted)}>Filter Preset</label>
-            <select
+            <AppSelect
               value={filterPreset || ""}
-              onChange={handlePresetChange}
-              className={cx(ui.input, "h-8 text-[11px] flex-1 min-w-0")}
-            >
-              <option value="">—</option>
-              {Object.keys(FILTER_PRESET_BUILTIN).map((key) => (
-                <option key={key} value={key}>
-                  {key}
-                </option>
-              ))}
-              {customPresets.map((p) => (
-                <option key={p.id} value={p.name}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+              onValueChange={handlePresetChange}
+              options={[
+                { value: "", label: "—" },
+                ...Object.keys(FILTER_PRESET_BUILTIN).map((key) => ({ value: key, label: key })),
+                ...customPresets.map((p) => ({ value: p.name, label: p.name })),
+              ]}
+              className="flex-1 min-w-0"
+              triggerClassName="h-8 text-[11px]"
+            />
           </div>
-          <button type="button" onClick={handleSaveFilterAs} className={cx(ui.btn, "h-8 px-2 text-[10px] w-full")}>
+          <AppButton type="button" onClick={handleSaveFilterAs} variant="outline" className="h-8 px-2 text-[10px] w-full">
             Save filter as
-          </button>
+          </AppButton>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex rounded-md overflow-hidden border border-[#303030]">
@@ -261,39 +260,32 @@ export const HeatmapFiltersEditor = memo(function HeatmapFiltersEditor({
                       >
                         ×
                       </button>
-                      <select
+                      <AppSelect
                         value={cond.field}
-                        onChange={(e) => updateCondition(group.id, cond.id, { field: e.target.value })}
-                        className={cx(ui.input, "h-6 text-[10px] flex-[1.15] min-w-0 bg-sky-900/30 border-sky-500/50 text-sky-100")}
-                        title={cond.field}
-                      >
-                        {HEATMAP_FILTER_KEYS.map((f) => (
-                          <option key={f} value={f}>
-                            {f}
-                          </option>
-                        ))}
-                      </select>
-                      <select
+                        onValueChange={(field) => updateCondition(group.id, cond.id, { field })}
+                        options={FILTER_FIELD_OPTIONS}
+                        className="flex-[1.15] min-w-0"
+                        triggerClassName="h-6 text-[10px] bg-sky-900/30 border-sky-500/50 text-sky-100"
+                        aria-label={cond.field}
+                      />
+                      <AppSelect
                         value={cond.op}
-                        onChange={(e) => updateCondition(group.id, cond.id, { op: e.target.value })}
-                        className={cx(ui.input, "h-6 text-[10px] flex-1 min-w-0 bg-emerald-900/30 border-emerald-500/50 text-emerald-100")}
-                        title={FILTER_OPERATIONS.find((op) => op.value === cond.op)?.label ?? cond.op}
-                      >
-                        {FILTER_OPERATIONS.map((op) => (
-                          <option key={op.value} value={op.value}>
-                            {op.label}
-                          </option>
-                        ))}
-                      </select>
+                        onValueChange={(op) => updateCondition(group.id, cond.id, { op })}
+                        options={FILTER_OP_OPTIONS}
+                        className="flex-1 min-w-0"
+                        triggerClassName="h-6 text-[10px] bg-emerald-900/30 border-emerald-500/50 text-emerald-100"
+                        aria-label={FILTER_OPERATIONS.find((op) => op.value === cond.op)?.label ?? cond.op}
+                      />
                       {noValue ? (
                         <span className="text-[10px] text-[#595959] flex-[0.8] min-w-0 truncate">(no value)</span>
                       ) : (
-                        <input
+                        <AppInput
                           type="text"
                           value={cond.value}
                           onChange={(e) => updateCondition(group.id, cond.id, { value: e.target.value })}
                           placeholder="Value"
-                          className={cx(ui.input, "h-6 text-[10px] flex-[0.8] min-w-0 bg-[#1a1a1a] text-[#d9d9d9]")}
+                          wrapperClassName="flex-[0.8] min-w-0"
+                          className="h-6 text-[10px] bg-[#1a1a1a] text-[#d9d9d9]"
                         />
                       )}
                     </div>
@@ -304,9 +296,9 @@ export const HeatmapFiltersEditor = memo(function HeatmapFiltersEditor({
           </div>
         ))}
       </div>
-      <button type="button" onClick={handleApply} className={cx(ui.btnPrimary, "w-full h-8 mt-3 text-[11px] shrink-0")}>
+      <AppButton type="button" onClick={handleApply} variant="default" className="w-full h-8 mt-3 text-[11px] shrink-0">
         {applyLabel}
-      </button>
+      </AppButton>
     </div>
   );
 });

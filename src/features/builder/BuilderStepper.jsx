@@ -1,5 +1,4 @@
-﻿import React, { memo, useCallback, useEffect, useId, useMemo, useRef, useState, Suspense, lazy } from 'react';
-import { createPortal } from 'react-dom';
+import React, { memo, useCallback, useEffect, useId, useMemo, useRef, useState, Suspense, lazy } from 'react';
 import { Blocks, FlaskConical, Workflow, Tag, Pencil } from 'lucide-react';
 import { useHyperoptResultsState } from './hooks/useHyperoptResultsState';
 import { useCollapsedSections, useBuilderStageConfig } from './hooks/useBuilderStageState';
@@ -66,7 +65,11 @@ import { generatePythonCode } from '../../utils/pythonCode';
 import { generateMockResults } from '../../utils/mockResults';
 import { useOutsideClose } from '../../hooks/useOutsideClose';
 import { Logo, Badge, MoreIcon, EyeIcon, MenuIcon, ModalShell } from '../../components/common';
+import { TagMultiSelect } from '../../components/common/TagMultiSelect';
 import { AppButton } from '../../components/common/AppButton';
+import { AppDialog } from '../../components/common/AppDialog';
+import { AppSelect } from '../../components/common/AppSelect';
+import { DateRangePicker } from '../../components/common/DateRangePicker';
 import { BuilderSectionShell } from './layout/BuilderSectionShell';
 import { BuilderStepsSidebar } from '../../components/prod';
 import { TableViewIcon, CardViewIcon, TrashIcon } from '../../components/shared';
@@ -906,11 +909,17 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
     setHyperoptCommentModalRowId(null);
     setHyperoptCommentDraft({ comment: "" });
   }, []);
-  const [hyperoptTagFilterOpen, setHyperoptTagFilterOpen] = useState(false);
-  const hyperoptTagFilterRef = useOutsideClose(hyperoptTagFilterOpen, () => setHyperoptTagFilterOpen(false));
   const hyperoptAvailableTagIds = useMemo(
     () => getAvailableTagIdsForFilter(hyperoptResultsRows, tagsRegistry, currentUserRole, currentUserId),
     [hyperoptResultsRows, tagsRegistry, currentUserRole, currentUserId],
+  );
+  const hyperoptTagFilterOptions = useMemo(
+    () =>
+      hyperoptAvailableTagIds.map((tagId) => ({
+        value: tagId,
+        label: tagsRegistry.find((tag) => tag.id === tagId)?.name || tagId,
+      })),
+    [hyperoptAvailableTagIds, tagsRegistry],
   );
   const filteredHyperoptResultsRows = useMemo(() => {
     if (hyperoptTagFilter.length === 0) return hyperoptResultsRows;
@@ -918,10 +927,6 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
       (row.tagIds || []).some((tagId) => hyperoptTagFilter.includes(tagId)),
     );
   }, [hyperoptResultsRows, hyperoptTagFilter]);
-  const activeHyperoptTagNames = useMemo(
-    () => resolveTagNames(hyperoptTagFilter, tagsRegistry),
-    [hyperoptTagFilter, tagsRegistry],
-  );
   const hyperoptResultsOverview = useMemo(
     () =>
       filteredHyperoptResultsRows.reduce(
@@ -2046,51 +2051,49 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                     Hyperopt type ({stageCopy.stageTag})
                   </div>
                   <div className="flex flex-wrap items-end gap-3">
-                    <div className="space-y-1">
-                      <label className={cx("block text-[11px]", ui.textMuted)}>Hyperopt type</label>
-                      <select
-                        value={hyperoptType}
-                        onChange={(e) => setHyperoptType(e.target.value)}
-                        className={cx(ui.input, "h-9 text-[12px] w-full min-w-[170px]")}
-                      >
-                        <option value="Brute Force">Brute Force</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <label className={cx("block text-[11px]", ui.textMuted)}>Trading mode</label>
-                      <select
-                        value={tradingMode}
-                        onChange={(e) => setTradingMode(e.target.value)}
-                        className={cx(ui.input, "h-9 text-[12px] w-full min-w-[170px]")}
-                      >
-                        <option value="futures">futures</option>
-                        <option value="spot">spot</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <label className={cx("block text-[11px]", ui.textMuted)}>Exchange</label>
-                      <select
-                        value={exchange}
-                        onChange={(e) => setExchange(e.target.value)}
-                        className={cx(ui.input, "h-9 text-[12px] w-full min-w-[170px]")}
-                      >
-                        <option value="binance">binance</option>
-                        <option value="htx">htx</option>
-                        <option value="synthetic">Synthetic dataset</option>
-                      </select>
-                    </div>
+                    <AppSelect
+                      label="Hyperopt type"
+                      value={hyperoptType}
+                      onValueChange={setHyperoptType}
+                      options={[{ value: "Brute Force", label: "Brute Force" }]}
+                      className="min-w-[170px]"
+                      triggerClassName="h-9 text-[12px]"
+                    />
+                    <AppSelect
+                      label="Trading mode"
+                      value={tradingMode}
+                      onValueChange={setTradingMode}
+                      options={[
+                        { value: "futures", label: "futures" },
+                        { value: "spot", label: "spot" },
+                      ]}
+                      className="min-w-[170px]"
+                      triggerClassName="h-9 text-[12px]"
+                    />
+                    <AppSelect
+                      label="Exchange"
+                      value={exchange}
+                      onValueChange={setExchange}
+                      options={[
+                        { value: "binance", label: "binance" },
+                        { value: "htx", label: "htx" },
+                        { value: "synthetic", label: "Synthetic dataset" },
+                      ]}
+                      className="min-w-[170px]"
+                      triggerClassName="h-9 text-[12px]"
+                    />
                     {exchange === "synthetic" ? (
-                      <div className="space-y-1">
-                        <label className={cx("block text-[11px]", ui.textMuted)}>Synthetic dataset</label>
-                        <select
-                          value={syntheticDataset}
-                          onChange={(e) => setSyntheticDataset(e.target.value)}
-                          className={cx(ui.input, "h-9 text-[12px] w-full min-w-[170px]")}
-                        >
-                          <option value="dataset1">Dataset 1 (BTC/USDT)</option>
-                          <option value="dataset2">Dataset 2 (ETC/USDT)</option>
-                        </select>
-                      </div>
+                      <AppSelect
+                        label="Synthetic dataset"
+                        value={syntheticDataset}
+                        onValueChange={setSyntheticDataset}
+                        options={[
+                          { value: "dataset1", label: "Dataset 1 (BTC/USDT)" },
+                          { value: "dataset2", label: "Dataset 2 (ETC/USDT)" },
+                        ]}
+                        className="min-w-[170px]"
+                        triggerClassName="h-9 text-[12px]"
+                      />
                     ) : null}
                   </div>
                 </div>
@@ -2210,35 +2213,18 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                             />
                           </div>
                         )}
-                        <div className={cx("space-y-1.5", isSignalStage && "xl:col-span-3")}>
-                          <label className={cx("block mb-1 text-xs", ui.textMuted)}>Time Range</label>
-                          <div
-                            className={cx(
-                              ui.input,
-                              "h-8 w-full px-1.5 grid grid-cols-[1fr_auto_1fr] items-center gap-1",
-                              hasSourceBestScore && "opacity-80 cursor-not-allowed",
-                            )}
-                          >
-                            <input
-                              type="date"
-                              value={hasSourceBestScore ? selectedStageTimeRangeStart : timeFrameStart}
-                              onChange={(e) => onTimeFrameStartChange(e.target.value)}
-                              readOnly={hasSourceBestScore}
-                              disabled={hasSourceBestScore}
-                              className="h-7 min-w-0 bg-transparent border-0 px-1 text-[11px] leading-7 [color-scheme:dark] focus:outline-none"
-                              title="From"
-                            />
-                            <span className={cx("text-[12px] text-center", ui.textMuted)}>-</span>
-                            <input
-                              type="date"
-                              value={hasSourceBestScore ? selectedStageTimeRangeEnd : timeFrameEnd}
-                              onChange={(e) => onTimeFrameEndChange(e.target.value)}
-                              readOnly={hasSourceBestScore}
-                              disabled={hasSourceBestScore}
-                              className="h-7 min-w-0 bg-transparent border-0 px-1 text-[11px] leading-7 [color-scheme:dark] focus:outline-none"
-                              title="To"
-                            />
-                          </div>
+                        <div className={cx(isSignalStage && "xl:col-span-3")}>
+                          <DateRangePicker
+                            label="Time Range"
+                            from={hasSourceBestScore ? selectedStageTimeRangeStart : timeFrameStart}
+                            to={hasSourceBestScore ? selectedStageTimeRangeEnd : timeFrameEnd}
+                            onChange={({ from: nextFrom, to: nextTo }) => {
+                              onTimeFrameStartChange?.(nextFrom);
+                              onTimeFrameEndChange?.(nextTo);
+                            }}
+                            disabled={hasSourceBestScore}
+                            triggerClassName="h-8 text-[11px]"
+                          />
                         </div>
                         {isSignalStage && isSignalTimeRangeFilled && (
                           <div className={cx("space-y-1", isSignalStage && "xl:col-span-3")}>
@@ -3367,57 +3353,14 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                       </div>
                       <div className="flex flex-col items-start gap-1 lg:items-end">
                         <span className="text-[10px] font-medium uppercase tracking-wide text-[#8c8c8c]">Tags filter</span>
-                        <div className="relative" ref={hyperoptTagFilterRef}>
-                          <button
-                            type="button"
-                            onClick={() => setHyperoptTagFilterOpen((prev) => !prev)}
-                            className={cx(
-                              ui.input,
-                              "h-8 min-w-[240px] px-2.5 text-[10px] inline-flex items-center justify-between gap-2 border-[rgba(60,40,80,0.45)] bg-[#0f0a1b]",
-                            )}
-                            aria-expanded={hyperoptTagFilterOpen}
-                          >
-                            <span className="truncate text-left">
-                              {activeHyperoptTagNames.length === 0
-                                ? "Tags: All"
-                                : `Tags: ${activeHyperoptTagNames.join(", ")}`}
-                            </span>
-                            <span className="text-[#8c8c8c]">{hyperoptTagFilterOpen ? "▲" : "▼"}</span>
-                          </button>
-                          {hyperoptTagFilterOpen && (
-                            <div className="absolute right-0 z-30 mt-1 w-[260px] rounded-md border border-[rgba(60,40,80,0.45)] bg-[#0f0a1b] shadow-lg p-1.5 space-y-1">
-                              <button
-                                type="button"
-                                onClick={() => setHyperoptTagFilter([])}
-                                className="w-full h-7 px-2 rounded text-left text-[10px] text-[#d9d9d9] hover:bg-[#1a1a1a]"
-                              >
-                                All
-                              </button>
-                              {hyperoptAvailableTagIds.map((tagId) => {
-                                const tagName =
-                                  tagsRegistry.find((tag) => tag.id === tagId)?.name || tagId;
-                                const checked = hyperoptTagFilter.includes(tagId);
-                                return (
-                                  <label key={tagId} className="flex items-center gap-2 h-7 px-2 rounded text-[10px] text-[#d9d9d9] hover:bg-[#1a1a1a] cursor-pointer">
-                                    <input
-                                      type="checkbox"
-                                      checked={checked}
-                                      onChange={() =>
-                                        setHyperoptTagFilter((prev) =>
-                                          prev.includes(tagId)
-                                            ? prev.filter((item) => item !== tagId)
-                                            : [...prev, tagId],
-                                        )
-                                      }
-                                      className="h-3 w-3 accent-emerald-500"
-                                    />
-                                    <span className="truncate">{tagName}</span>
-                                  </label>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
+                        <TagMultiSelect
+                          options={hyperoptTagFilterOptions}
+                          value={hyperoptTagFilter}
+                          onChange={setHyperoptTagFilter}
+                          align="end"
+                          triggerClassName="h-8 min-w-[240px] text-[10px] border-[rgba(60,40,80,0.45)] bg-[#0f0a1b]"
+                          contentClassName="w-[260px] border-[rgba(60,40,80,0.45)] bg-[#0f0a1b]"
+                        />
                       </div>
                     </div>
                   </div>
@@ -4129,6 +4072,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
       {showReportModal && (
         <Suspense fallback={<LoadingFallback />}>
           <GenerateReportModal
+            open={showReportModal}
             indicators={indicators}
             onClose={() => setShowReportModal(false)}
             onGenerate={(config) => {
@@ -4139,161 +4083,139 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
         </Suspense>
       )}
       {/* Formula Editor modal */}
-      {showFormulaEditor && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={handleFormulaEditorCancel}>
-          <div
-            className={cx(
-              ui.radius,
-              "bg-[#141414] border border-[#303030] max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col shadow-xl"
-            )}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#303030]">
-              <span className="text-[14px] font-medium text-[#d9d9d9]">Formula Editor</span>
-              <button
-                type="button"
-                onClick={handleFormulaEditorCancel}
-                className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1"
+      <AppDialog
+        open={showFormulaEditor}
+        onOpenChange={(next) => {
+          if (!next) handleFormulaEditorCancel();
+        }}
+        title="Formula Editor"
+        className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col"
+      >
+        <div className="flex-1 overflow-auto space-y-4 min-h-0">
+          {/* Textarea */}
+          <div className="space-y-1.5">
+            <div className="text-[11px] font-medium text-[#d9d9d9]">Score formula</div>
+            <div className="relative min-h-[140px] rounded-md border border-[#303030] bg-[#0f0f0f] overflow-hidden">
+              <div
+                ref={formulaEditorMirrorRef}
+                className="absolute inset-0 overflow-auto px-3 py-2 text-[11px] font-mono text-[#d9d9d9] whitespace-pre-wrap break-words pointer-events-none [&::-webkit-scrollbar]:hidden"
+                style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+                aria-hidden
               >
-                ✕
-              </button>
+                {formulaEditorValue ? (
+                  renderFormulaEditorWithVariables(formulaEditorValue)
+                ) : (
+                  <span className="text-[#595959]">Enter formula...</span>
+                )}
+              </div>
+              <textarea
+                ref={formulaEditorRef}
+                value={formulaEditorValue}
+                onChange={handleFormulaEditorChange}
+                onSelect={handleFormulaEditorSelect}
+                onScroll={(e) => {
+                  const m = formulaEditorMirrorRef.current;
+                  if (m) {
+                    m.scrollTop = e.target.scrollTop;
+                    m.scrollLeft = e.target.scrollLeft;
+                  }
+                }}
+                className={cx(
+                  "relative z-10 w-full min-h-[140px] resize-y rounded-md border-0 bg-transparent px-3 py-2 text-[11px] font-mono text-transparent caret-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset"
+                )}
+                placeholder="Enter formula..."
+              />
             </div>
-            <div className="flex-1 overflow-auto p-4 space-y-4">
-              {/* Textarea */}
-              <div className="space-y-1.5">
-                <div className="text-[11px] font-medium text-[#d9d9d9]">Score formula</div>
-                <div className="relative min-h-[140px] rounded-md border border-[#303030] bg-[#0f0f0f] overflow-hidden">
-                  <div
-                    ref={formulaEditorMirrorRef}
-                    className="absolute inset-0 overflow-auto px-3 py-2 text-[11px] font-mono text-[#d9d9d9] whitespace-pre-wrap break-words pointer-events-none [&::-webkit-scrollbar]:hidden"
-                    style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-                    aria-hidden
-                  >
-                    {formulaEditorValue ? (
-                      renderFormulaEditorWithVariables(formulaEditorValue)
-                    ) : (
-                      <span className="text-[#595959]">Enter formula...</span>
-                    )}
-                  </div>
-                  <textarea
-                    ref={formulaEditorRef}
-                    value={formulaEditorValue}
-                    onChange={handleFormulaEditorChange}
-                    onSelect={handleFormulaEditorSelect}
-                    onScroll={(e) => {
-                      const m = formulaEditorMirrorRef.current;
-                      if (m) {
-                        m.scrollTop = e.target.scrollTop;
-                        m.scrollLeft = e.target.scrollLeft;
-                      }
-                    }}
-                    className={cx(
-                      "relative z-10 w-full min-h-[140px] resize-y rounded-md border-0 bg-transparent px-3 py-2 text-[11px] font-mono text-transparent caret-[#d9d9d9] focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-inset"
-                    )}
-                    placeholder="Enter formula..."
-                  />
-                </div>
-              </div>
-              {/* Variables & Functions */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <div className="text-[11px] font-medium text-[#d9d9d9]">Variables</div>
-                  <div className="flex items-center gap-2">
-                    <select
-                      className={cx(ui.input, "h-8 text-[11px] flex-1")}
-                      onChange={(e) => {
-                        if (!e.target.value) return;
-                        insertIntoFormulaEditor(e.target.value);
-                        e.target.selectedIndex = 0;
-                      }}
-                    >
-                      <option value="">Select variable…</option>
-                      {FORMULA_EDITOR_VARIABLES.map((v) => (
-                        <option key={v} value={v}>
-                          {v}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <div className="text-[11px] font-medium text-[#d9d9d9]">Functions</div>
-                  <div className="flex items-center gap-2">
-                    <select
-                      className={cx(ui.input, "h-8 text-[11px] flex-1")}
-                      onChange={(e) => {
-                        if (!e.target.value) return;
-                        insertIntoFormulaEditor(e.target.value);
-                        e.target.selectedIndex = 0;
-                      }}
-                    >
-                      <option value="">Select function…</option>
-                      {FORMULA_EDITOR_FUNCTIONS.map((fn) => (
-                        <option key={fn.label} value={fn.template}>
-                          {fn.label} — {fn.template}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-              {/* Operators */}
-              <div className="space-y-2">
-                <div className="text-[11px] font-medium text-[#d9d9d9]">Operators</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {FORMULA_EDITOR_OPERATORS.map((op) => (
-                    <button
-                      key={op}
-                      type="button"
-                      onClick={() => insertIntoFormulaEditor(op)}
-                      className="inline-flex items-center justify-center rounded-md border border-[#303030] bg-[#0f0f0f] px-2.5 py-1 text-[11px] text-[#d9d9d9] hover:bg-[#1f1f1f] active:translate-y-[0.5px]"
-                    >
-                      {op}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-[#303030] bg-[#111111]">
-              <button
-                type="button"
-                onClick={handleFormulaEditorClear}
-                className="text-[11px] text-[#8c8c8c] hover:text-[#d9d9d9]"
-              >
-                Clear
-              </button>
+          </div>
+          {/* Variables & Functions */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <div className="text-[11px] font-medium text-[#d9d9d9]">Variables</div>
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleFormulaEditorCancel}
-                  className={cx(ui.btn, "h-8 px-3 text-[11px]")}
+                <select
+                  className={cx(ui.input, "h-8 text-[11px] flex-1")}
+                  onChange={(e) => {
+                    if (!e.target.value) return;
+                    insertIntoFormulaEditor(e.target.value);
+                    e.target.selectedIndex = 0;
+                  }}
                 >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleFormulaEditorApply}
-                  className={cx(ui.btnPrimary, "h-8 px-3 text-[11px]")}
+                  <option value="">Select variable…</option>
+                  {FORMULA_EDITOR_VARIABLES.map((v) => (
+                    <option key={v} value={v}>
+                      {v}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="text-[11px] font-medium text-[#d9d9d9]">Functions</div>
+              <div className="flex items-center gap-2">
+                <select
+                  className={cx(ui.input, "h-8 text-[11px] flex-1")}
+                  onChange={(e) => {
+                    if (!e.target.value) return;
+                    insertIntoFormulaEditor(e.target.value);
+                    e.target.selectedIndex = 0;
+                  }}
                 >
-                  Apply
-                </button>
+                  <option value="">Select function…</option>
+                  {FORMULA_EDITOR_FUNCTIONS.map((fn) => (
+                    <option key={fn.label} value={fn.template}>
+                      {fn.label} — {fn.template}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>
-        </div>
-      )}
-      {/* Run normalization modal — same block as Normalization formulas */}
-      {showNormalizationModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={() => setShowNormalizationModal(false)}>
-          <div className={cx(ui.radius, "bg-[#141414] border border-[#303030] max-w-[720px] w-full max-h-[90vh] overflow-hidden flex flex-col shadow-xl")} onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#303030]">
-              <span className="text-[14px] font-medium text-[#d9d9d9]">
-                Run normalization ({stageCopy.stageTag})
-              </span>
-              <button type="button" onClick={() => setShowNormalizationModal(false)} className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1">✕</button>
+          {/* Operators */}
+          <div className="space-y-2">
+            <div className="text-[11px] font-medium text-[#d9d9d9]">Operators</div>
+            <div className="flex flex-wrap gap-1.5">
+              {FORMULA_EDITOR_OPERATORS.map((op) => (
+                <button
+                  key={op}
+                  type="button"
+                  onClick={() => insertIntoFormulaEditor(op)}
+                  className="inline-flex items-center justify-center rounded-md border border-[#303030] bg-[#0f0f0f] px-2.5 py-1 text-[11px] text-[#d9d9d9] hover:bg-[#1f1f1f] active:translate-y-[0.5px]"
+                >
+                  {op}
+                </button>
+              ))}
             </div>
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-2 pt-2">
+          <button
+            type="button"
+            onClick={handleFormulaEditorClear}
+            className="text-[11px] text-[#8c8c8c] hover:text-[#d9d9d9]"
+          >
+            Clear
+          </button>
+          <div className="flex items-center gap-2">
+            <AppButton type="button" variant="outline" size="sm" onClick={handleFormulaEditorCancel}>
+              Cancel
+            </AppButton>
+            <AppButton type="button" variant="default" size="sm" onClick={handleFormulaEditorApply}>
+              Apply
+            </AppButton>
+          </div>
+        </div>
+      </AppDialog>
+      {/* Run normalization modal — same block as Normalization formulas */}
+      <AppDialog
+        open={showNormalizationModal}
+        onOpenChange={(next) => {
+          if (!next) setShowNormalizationModal(false);
+        }}
+        title={`Run normalization (${stageCopy.stageTag})`}
+        className="max-w-[720px] max-h-[90vh] overflow-hidden flex flex-col"
+      >
             {/* Tab bar */}
-            <div className="flex border-b border-[#303030] px-4 shrink-0">
+            <div className="flex border-b border-[#303030] shrink-0 -mt-2">
               {[
                 ["stability", "Stability formula"],
                 ["score", "Final score formula"],
@@ -4312,7 +4234,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                 >{label}</button>
               ))}
             </div>
-            <div className="overflow-auto p-4 flex-1 min-h-0">
+            <div className="overflow-auto flex-1 min-h-0">
               {/* ── Tab: Stability formula ── */}
               {normActiveTab === "stability" && (
               <div className="space-y-3">
@@ -4721,13 +4643,11 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
               </div>
               )}
             </div>
-            <div className="px-4 py-3 border-t border-[#303030] flex justify-end gap-2">
-              <button type="button" onClick={() => setShowNormalizationModal(false)} className={cx(ui.btn, "h-8 px-3 text-[11px]")}>Cancel</button>
-              <button type="button" onClick={() => setShowNormalizationModal(false)} className={cx(ui.btnPrimary, "h-8 px-3 text-[11px]")}>Run post-processing</button>
+            <div className="flex justify-end gap-2 pt-2">
+              <AppButton type="button" variant="outline" size="sm" onClick={() => setShowNormalizationModal(false)}>Cancel</AppButton>
+              <AppButton type="button" variant="default" size="sm" onClick={() => setShowNormalizationModal(false)}>Run post-processing</AppButton>
             </div>
-          </div>
-        </div>
-      )}
+      </AppDialog>
       {!isRiskStage && (
       <AddRangeNarrowingModal
         open={showAddRangeNarrowingModal}
@@ -4751,90 +4671,73 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
         onRunHyperopt={handleRunHyperoptFromRangeNarrowing}
       />
       {/* Add truncate modal */}
-      {showTruncateModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
-          onClick={() => {
+      <AppDialog
+        open={showTruncateModal}
+        onOpenChange={(next) => {
+          if (!next) {
             setShowTruncateModal(false);
             setSelectedNormalizationRow(null);
-          }}
-        >
-          <div
-            className={cx(
-              ui.radius,
-              "bg-[#141414] border border-[#303030] max-w-[420px] w-full max-h-[90vh] overflow-hidden flex flex-col shadow-xl",
-            )}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#303030]">
-              <span className="text-[14px] font-medium text-[#d9d9d9]">Add truncate</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowTruncateModal(false);
-                  setSelectedNormalizationRow(null);
-                }}
-                className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1"
-              >
-                ✕
-              </button>
+          }
+        }}
+        title="Add truncate"
+        className="max-w-[420px] max-h-[90vh] overflow-hidden flex flex-col"
+      >
+        <div className="space-y-4">
+          {selectedNormalizationRow && (
+            <div className="text-[11px] text-[#8c8c8c]">
+              <div className="font-medium text-[#d9d9d9] mb-1">Normalization context</div>
+              <div>Date: {selectedNormalizationRow.date}</div>
             </div>
-            <div className="overflow-auto p-4 space-y-4">
-              {selectedNormalizationRow && (
-                <div className="text-[11px] text-[#8c8c8c]">
-                  <div className="font-medium text-[#d9d9d9] mb-1">Normalization context</div>
-                  <div>Date: {selectedNormalizationRow.date}</div>
-                </div>
-              )}
-              <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] font-medium text-[#d9d9d9]">
-                    Fold size
-                    <input
-                      type="number"
-                      min={1}
-                      step={1}
-                      inputMode="numeric"
-                      value={truncateForm.foldSize}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        if (v === "" || /^\d+$/.test(v))
-                          setTruncateForm((prev) => ({ ...prev, foldSize: v }));
-                      }}
-                      className={cx(ui.input, "mt-1 h-8 text-[12px]")}
-                      placeholder="e.g. 12"
-                    />
-                  </label>
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-2 border-t border-[#303030] px-4 py-3 bg-[#101010]">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowTruncateModal(false);
-                  setSelectedNormalizationRow(null);
-                }}
-                className={cx(ui.btnGhost, "h-8 px-3 text-[12px]")}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  // Placeholder: here in future we'll persist truncate settings
-                  // For now just close modal.
-                  setShowTruncateModal(false);
-                  setSelectedNormalizationRow(null);
-                }}
-                className={cx(ui.btn, "h-8 px-3 text-[12px]")}
-              >
-                Save
-              </button>
+          )}
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <label className="block text-[11px] font-medium text-[#d9d9d9]">
+                Fold size
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  inputMode="numeric"
+                  value={truncateForm.foldSize}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === "" || /^\d+$/.test(v))
+                      setTruncateForm((prev) => ({ ...prev, foldSize: v }));
+                  }}
+                  className={cx(ui.input, "mt-1 h-8 text-[12px]")}
+                  placeholder="e.g. 12"
+                />
+              </label>
             </div>
           </div>
         </div>
-      )}
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <AppButton
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setShowTruncateModal(false);
+              setSelectedNormalizationRow(null);
+            }}
+          >
+            Cancel
+          </AppButton>
+          <AppButton
+            type="button"
+            variant="default"
+            size="sm"
+            onClick={() => {
+              // Placeholder: here in future we'll persist truncate settings
+              // For now just close modal.
+              setShowTruncateModal(false);
+              setSelectedNormalizationRow(null);
+            }}
+          >
+            Save
+          </AppButton>
+        </div>
+      </AppDialog>
       <TagsEditModal
         open={Boolean(hyperoptTagsModalRowId)}
         draft={hyperoptTagsDraft}
@@ -4844,250 +4747,206 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
         onClose={closeHyperoptTagsModal}
         onSave={saveHyperoptTagsModal}
       />
-      {hyperoptCommentModalRowId &&
-        typeof document !== "undefined" &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/70"
+      <AppDialog
+        open={Boolean(hyperoptCommentModalRowId)}
+        onOpenChange={(next) => {
+          if (!next) closeHyperoptCommentModal();
+        }}
+        title="Comment"
+        className="max-w-[480px] max-h-[90vh] overflow-hidden flex flex-col"
+      >
+        <div className="space-y-1.5">
+          <label className="block text-[11px] font-medium text-[#d9d9d9]">Comment</label>
+          <textarea
+            value={hyperoptCommentDraft.comment}
+            onChange={(e) =>
+              setHyperoptCommentDraft((prev) => ({ ...prev, comment: e.target.value }))
+            }
+            rows={6}
+            className={cx(ui.input, "w-full text-[12px] resize-y min-h-[120px] py-2")}
+            placeholder="Notes for this run…"
+          />
+        </div>
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <AppButton
+            type="button"
+            variant="outline"
+            size="icon-sm"
             onClick={closeHyperoptCommentModal}
+            title="Cancel"
+            aria-label="Cancel"
           >
-            <div
-              className={cx(
-                ui.radius,
-                "bg-[#141414] border border-[#303030] max-w-[480px] w-full max-h-[90vh] overflow-hidden flex flex-col shadow-xl",
-              )}
-              onClick={(e) => e.stopPropagation()}
+            <svg
+              viewBox="0 0 24 24"
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              aria-hidden
             >
-              <div className="flex items-center justify-between px-4 py-3 border-b border-[#303030]">
-                <span className="text-[14px] font-medium text-[#d9d9d9]">Comment</span>
-                <button
-                  type="button"
-                  onClick={closeHyperoptCommentModal}
-                  className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1"
-                  aria-label="Close"
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="overflow-auto p-4">
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] font-medium text-[#d9d9d9]">Comment</label>
-                  <textarea
-                    value={hyperoptCommentDraft.comment}
-                    onChange={(e) =>
-                      setHyperoptCommentDraft((prev) => ({ ...prev, comment: e.target.value }))
-                    }
-                    rows={6}
-                    className={cx(ui.input, "w-full text-[12px] resize-y min-h-[120px] py-2")}
-                    placeholder="Notes for this run…"
-                  />
-                </div>
-              </div>
-              <div className="flex items-center justify-end gap-2 border-t border-[#303030] px-4 py-3 bg-[#101010]">
-                <button
-                  type="button"
-                  onClick={closeHyperoptCommentModal}
-                  className={cx(
-                    ui.btnGhost,
-                    "h-8 w-8 p-0 inline-flex items-center justify-center",
-                  )}
-                  title="Cancel"
-                  aria-label="Cancel"
-                >
-                  <svg
-                    viewBox="0 0 24 24"
-                    className="h-4 w-4"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    aria-hidden
-                  >
-                    <path d="M18 6 6 18M6 6l12 12" />
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  onClick={saveHyperoptCommentModal}
-                  className={cx(
-                    ui.btnPrimary,
-                    "h-8 w-8 p-0 inline-flex items-center justify-center",
-                  )}
-                  title="Save"
-                  aria-label="Save"
-                >
-                  <svg
-                    viewBox="0 0 24 24"
-                    className="h-4 w-4"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden
-                  >
-                    <path d="M20 6 9 17l-5-5" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body,
-        )}
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </AppButton>
+          <AppButton
+            type="button"
+            variant="default"
+            size="icon-sm"
+            onClick={saveHyperoptCommentModal}
+            title="Save"
+            aria-label="Save"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+          </AppButton>
+        </div>
+      </AppDialog>
       {/* Add Best result manually (stage-dependent) */}
-      {showAddBestResultModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
-          onClick={() => {
+      <AppDialog
+        open={showAddBestResultModal}
+        onOpenChange={(next) => {
+          if (!next) {
             setShowAddBestResultModal(false);
             setManualBestResultSelectionKey("");
-          }}
-        >
-          <div
-            className={cx(
-              ui.radius,
-              "bg-[#141414] border border-[#303030] max-w-[520px] w-full max-h-[90vh] overflow-hidden flex flex-col shadow-xl",
-            )}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#303030]">
-              <span className="text-[14px] font-medium text-[#d9d9d9]">
-                Add Best result ({stageCopy.stageTag})
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowAddBestResultModal(false);
-                  setManualBestResultSelectionKey("");
-                }}
-                className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="overflow-auto p-4 space-y-4">
-              <div className={cx(ui.radius, ui.panelMuted, "p-3 space-y-3")}>
-                <div className="text-[12px] font-medium text-[#d9d9d9]">Select normalization result</div>
-                <p className={cx("text-[11px]", ui.textMuted)}>
-                  Choose a normalization result (full or trunc data). Metrics will be taken from the selected row and the
-                  current Signal indicators will be captured as a snapshot.
-                </p>
-                <select
-                  value={manualBestResultSelectionKey}
-                  onChange={(e) => setManualBestResultSelectionKey(e.target.value)}
-                  className={cx(ui.input, "h-9 text-[12px] w-full")}
-                >
-                  <option value="">Select normalization result…</option>
-                  {hyperoptResultsRows.flatMap((row) =>
-                    (row.children || []).flatMap((sub) => {
-                      const entries = [
-                        {
-                          id: `${row.id}|${sub.id}|full`,
-                          label: "Full data",
-                          scores: {
-                            min: sub.minScore,
-                            avg: sub.avgScore,
-                            max: sub.maxScore,
-                          },
-                        },
-                        sub.truncScores && {
-                          id: `${row.id}|${sub.id}|trunc`,
-                          label: "Trunc data",
-                          scores: sub.truncScores,
-                        },
-                      ].filter(Boolean);
-                      return entries.map((detail) => (
-                        <option key={detail.id} value={detail.id}>
-                          {row.pairs || pairs} · {row.timeFrame} · {sub.date} · {detail.label} · score{" "}
-                          {detail.scores?.avg ?? detail.scores?.max ?? "-"}
-                        </option>
-                      ));
-                    }),
-                  )}
-                </select>
-              </div>
-            </div>
-            <div className="px-4 py-3 border-t border-[#303030] flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowAddBestResultModal(false);
-                  setManualBestResultSelectionKey("");
-                }}
-                className={cx(ui.btn, "h-8 px-3 text-[11px]")}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!manualBestResultSelectionKey) return;
-                  const [rowId, subId, detailKey] = manualBestResultSelectionKey.split("|");
-                  let foundRow = null;
-                  let foundSub = null;
-                  let detail = null;
-                  for (const row of hyperoptResultsRows) {
-                    if (row.id !== rowId) continue;
-                    for (const sub of row.children || []) {
-                      if (sub.id !== subId) continue;
-                      foundRow = row;
-                      foundSub = sub;
-                      if (detailKey === "full") {
-                        detail = {
-                          id: `${sub.id}-full`,
-                          label: "Full data",
-                          scores: {
-                            min: sub.minScore,
-                            avg: sub.avgScore,
-                            max: sub.maxScore,
-                          },
-                        };
-                      } else if (detailKey === "trunc" && sub.truncScores) {
-                        detail = {
-                          id: `${sub.id}-trunc`,
-                          label: "Trunc data",
-                          scores: sub.truncScores,
-                        };
-                      }
-                      break;
-                    }
-                    if (foundRow) break;
-                  }
-                  if (foundRow && foundSub && detail) {
-                    handleSaveBestResultFromDetail({
-                      row: foundRow,
-                      sub: foundSub,
-                      detail,
-                      source: "manual",
-                    });
-                    setShowAddBestResultModal(false);
-                    setManualBestResultSelectionKey("");
-                  }
-                }}
-                className={cx(ui.btnPrimary, "h-8 px-3 text-[11px]")}
-              >
-                Save Best result
-              </button>
-            </div>
+          }
+        }}
+        title={`Add Best result (${stageCopy.stageTag})`}
+        className="max-w-[520px] max-h-[90vh] overflow-hidden flex flex-col"
+      >
+        <div className="space-y-4">
+          <div className={cx(ui.radius, ui.panelMuted, "p-3 space-y-3")}>
+            <div className="text-[12px] font-medium text-[#d9d9d9]">Select normalization result</div>
+            <p className={cx("text-[11px]", ui.textMuted)}>
+              Choose a normalization result (full or trunc data). Metrics will be taken from the selected row and the
+              current Signal indicators will be captured as a snapshot.
+            </p>
+            <select
+              value={manualBestResultSelectionKey}
+              onChange={(e) => setManualBestResultSelectionKey(e.target.value)}
+              className={cx(ui.input, "h-9 text-[12px] w-full")}
+            >
+              <option value="">Select normalization result…</option>
+              {hyperoptResultsRows.flatMap((row) =>
+                (row.children || []).flatMap((sub) => {
+                  const entries = [
+                    {
+                      id: `${row.id}|${sub.id}|full`,
+                      label: "Full data",
+                      scores: {
+                        min: sub.minScore,
+                        avg: sub.avgScore,
+                        max: sub.maxScore,
+                      },
+                    },
+                    sub.truncScores && {
+                      id: `${row.id}|${sub.id}|trunc`,
+                      label: "Trunc data",
+                      scores: sub.truncScores,
+                    },
+                  ].filter(Boolean);
+                  return entries.map((detail) => (
+                    <option key={detail.id} value={detail.id}>
+                      {row.pairs || pairs} · {row.timeFrame} · {sub.date} · {detail.label} · score{" "}
+                      {detail.scores?.avg ?? detail.scores?.max ?? "-"}
+                    </option>
+                  ));
+                }),
+              )}
+            </select>
           </div>
         </div>
-      )}
+        <div className="flex justify-end gap-2 pt-2">
+          <AppButton
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setShowAddBestResultModal(false);
+              setManualBestResultSelectionKey("");
+            }}
+          >
+            Cancel
+          </AppButton>
+          <AppButton
+            type="button"
+            variant="default"
+            size="sm"
+            onClick={() => {
+              if (!manualBestResultSelectionKey) return;
+              const [rowId, subId, detailKey] = manualBestResultSelectionKey.split("|");
+              let foundRow = null;
+              let foundSub = null;
+              let detail = null;
+              for (const row of hyperoptResultsRows) {
+                if (row.id !== rowId) continue;
+                for (const sub of row.children || []) {
+                  if (sub.id !== subId) continue;
+                  foundRow = row;
+                  foundSub = sub;
+                  if (detailKey === "full") {
+                    detail = {
+                      id: `${sub.id}-full`,
+                      label: "Full data",
+                      scores: {
+                        min: sub.minScore,
+                        avg: sub.avgScore,
+                        max: sub.maxScore,
+                      },
+                    };
+                  } else if (detailKey === "trunc" && sub.truncScores) {
+                    detail = {
+                      id: `${sub.id}-trunc`,
+                      label: "Trunc data",
+                      scores: sub.truncScores,
+                    };
+                  }
+                  break;
+                }
+                if (foundRow) break;
+              }
+              if (foundRow && foundSub && detail) {
+                handleSaveBestResultFromDetail({
+                  row: foundRow,
+                  sub: foundSub,
+                  detail,
+                  source: "manual",
+                });
+                setShowAddBestResultModal(false);
+                setManualBestResultSelectionKey("");
+              }
+            }}
+          >
+            Save Best result
+          </AppButton>
+        </div>
+      </AppDialog>
       {heatmapItemFiltersModalItem && (
         <HeatmapFiltersReadOnlyModal item={heatmapItemFiltersModalItem} onClose={() => setHeatmapItemFiltersModalItem(null)} />
       )}
       {/* Formulas info modal (read-only) — opens when Details ⓘ is clicked */}
-      {showHyperoptDetailsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={() => setShowHyperoptDetailsModal(false)}>
-          <div className={cx(ui.radius, "bg-[#141414] border border-[#303030] max-w-[720px] w-full max-h-[90vh] overflow-hidden flex flex-col shadow-xl")} onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#303030]">
-              <span className="text-[14px] font-medium text-[#d9d9d9]">
-                {hyperoptDetailsModalType === "hyperopt"
-                  ? "Indicators snapshot (read-only)"
-                  : "Normalization formulas (read-only)"}
-              </span>
-              <button type="button" onClick={() => setShowHyperoptDetailsModal(false)} className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1">✕</button>
-            </div>
-            <div className="overflow-auto p-4">
+      <AppDialog
+        open={showHyperoptDetailsModal}
+        onOpenChange={(next) => {
+          if (!next) setShowHyperoptDetailsModal(false);
+        }}
+        title={
+          hyperoptDetailsModalType === "hyperopt"
+            ? "Indicators snapshot (read-only)"
+            : "Normalization formulas (read-only)"
+        }
+        className="max-w-[720px] max-h-[90vh] overflow-hidden flex flex-col"
+      >
+            <div className="overflow-auto min-h-0 flex-1">
               {hyperoptDetailsModalType !== "hyperopt" && (
               <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
                 <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">Normalization formulas</div>
@@ -5212,66 +5071,52 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
               </div>
               )}
             </div>
-            <div className="px-4 py-3 border-t border-[#303030] flex justify-end">
+            <div className="flex justify-end pt-2">
               {hyperoptDetailsModalType === "hyperopt" ? (
-                <button
+                <AppButton
                   type="button"
+                  variant="default"
+                  size="sm"
                   onClick={() => setShowHyperoptDetailsModal(false)}
-                  className={cx(ui.btnPrimary, "h-8 px-3 text-[11px]")}
                 >
                   Apply ranges to strategy
-                </button>
+                </AppButton>
               ) : (
-                <button
+                <AppButton
                   type="button"
+                  variant="outline"
+                  size="sm"
                   onClick={() => setShowHyperoptDetailsModal(false)}
-                  className={cx(ui.btn, "h-8 px-3 text-[11px]")}
                 >
                   Close
-                </button>
+                </AppButton>
               )}
             </div>
-          </div>
-        </div>
-      )}
+      </AppDialog>
       {/* Best result details modal */}
-      {showBestResultDetailsModal && selectedBestResult && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
-          onClick={() => {
+      <AppDialog
+        open={Boolean(showBestResultDetailsModal && selectedBestResult)}
+        onOpenChange={(next) => {
+          if (!next) {
             setShowBestResultDetailsModal(false);
             setSelectedBestResult(null);
-          }}
-        >
-          <div
-            className={cx(
-              ui.radius,
-              "bg-[#141414] border border-[#303030] max-w-[720px] w-full max-h-[90vh] overflow-hidden flex flex-col shadow-xl",
-            )}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#303030]">
-              <div className="flex flex-col">
-                <span className="text-[14px] font-medium text-[#d9d9d9]">
-                  Best result — {selectedBestResult.label || "Signal configuration"}
-                </span>
-                <span className={cx("text-[11px]", ui.textMuted)}>
-                  {selectedBestResult.pairs || pairs || "-"} · {selectedBestResult.timeRange || timeRange || "-"} ·{" "}
-                  {selectedBestResult.hyperoptType || signalHyperoptType}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowBestResultDetailsModal(false);
-                  setSelectedBestResult(null);
-                }}
-                className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="overflow-auto p-4 space-y-4">
+          }
+        }}
+        title={
+          selectedBestResult
+            ? `Best result — ${selectedBestResult.label || "Signal configuration"}`
+            : "Best result"
+        }
+        description={
+          selectedBestResult
+            ? `${selectedBestResult.pairs || pairs || "-"} · ${selectedBestResult.timeRange || timeRange || "-"} · ${selectedBestResult.hyperoptType || signalHyperoptType}`
+            : undefined
+        }
+        className="max-w-[720px] max-h-[90vh] overflow-hidden flex flex-col"
+      >
+        {selectedBestResult ? (
+          <>
+            <div className="overflow-auto space-y-4 min-h-0 flex-1">
               <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
                 <div className="text-[12px] font-medium text-[#d9d9d9] mb-2">Metrics</div>
                 <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-[11px]">
@@ -5343,123 +5188,111 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                 )}
               </div>
             </div>
-            <div className="px-4 py-3 border-t border-[#303030] flex justify-end gap-2">
-              <button
+            <div className="flex justify-end gap-2 pt-2">
+              <AppButton
                 type="button"
+                variant="default"
+                size="sm"
                 onClick={() => {
                   setShowBestResultDetailsModal(false);
                   setSelectedBestResult(null);
                 }}
-                className={cx(ui.btnPrimary, "h-8 px-3 text-[11px]")}
               >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* HeatMap configurator modal — opens when Configure HeatMap is clicked */}
-      {heatMapConfigModalId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={() => setHeatMapConfigModalId(null)}>
-          <div className={cx(ui.radius, "bg-[#141414] border border-[#303030] w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col shadow-xl")} onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#303030]">
-              <span className="text-[14px] font-medium text-[#d9d9d9]">Configure HeatMap</span>
-              <button type="button" onClick={() => setHeatMapConfigModalId(null)} className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1">✕</button>
-            </div>
-            <div className="overflow-auto p-4">
-              <HeatMapConfigurator
-                variant={isRiskStage ? "risk" : "indicators"}
-                indicators={indicators}
-                riskStoplossRanges={riskStoplossRanges}
-                riskHyperoptParams={riskHyperoptParams}
-                onGenerate={(config) => handleGenerateHeatMap(config, heatMapConfigModalId)}
-              />
-            </div>
-          </div>
-        </div>
-      )}
-      {/* HeatMap view modal — opens when Show heatmap is clicked */}
-      {heatMapViewModalId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70" onClick={() => setHeatMapViewModalId(null)}>
-          <div
-            className={cx(
-              ui.radius,
-              "bg-[#120a20] border border-[rgba(60,40,80,0.35)] w-full max-w-[min(1320px,calc(100vw-2rem))] max-h-[92vh] overflow-hidden flex flex-col shadow-[0_24px_60px_rgba(6,3,20,0.55)] shrink-0",
-            )}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[rgba(60,40,80,0.35)]">
-              <span className="text-[15px] font-medium text-[#faf7fd]">Heatmap</span>
-              <div className="flex items-center gap-2">
-                {generatedHeatMap && generatedHeatMap.runId === heatMapViewModalId && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setGeneratedHeatMap(null);
-                      setHeatMapViewModalId(null);
-                    }}
-                    className={cx(ui.btn, "h-7 px-2 text-[10px]")}
-                  >
-                    Clear HeatMap
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setHeatMapViewModalId(null)}
-                  className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1 text-lg leading-none"
-                  aria-label="Close"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-            <div className="overflow-y-auto overflow-x-hidden p-4 flex-1 min-h-0">
-              {generatedHeatMap && generatedHeatMap.runId === heatMapViewModalId ? (
-                <HeatMapView
-                  heatMapData={currentHeatMapData}
-                  config={generatedHeatMap.config}
-                  isRiskHeatmap={isRiskStage}
-                  onCellClick={(cell) => handleHeatMapCellClick(cell, heatMapViewModalId)}
-                  onZoomOut={() => handleHeatMapZoomOut(heatMapViewModalId)}
-                  onResetZoom={() => handleHeatMapResetZoom(heatMapViewModalId)}
-                  canZoomOut={generatedHeatMap.zoomStack.length > 0}
-                  canReset={generatedHeatMap.zoomStack.length > 0}
-                  zoomLevel={generatedHeatMap.zoomStack.length}
-                  onSaveBest={
-                    bestCandidates.length > 0
-                      ? handleSaveBestCandidates
-                      : handleSaveBestResultFromHeatMap
-                  }
-                  saveBestLabel="Save selection"
-                  bestCandidates={bestCandidates}
-                  onRemoveCandidate={handleRemoveBestCandidate}
-                  onClearAllCandidates={handleClearBestCandidates}
-                  onApplyFilters={handleApplyHeatMapFilters}
-                />
-              ) : (
-                <div className="py-8 text-center text-[#8c8c8c] text-[13px]">
-                  <p className="mb-3">No heatmap generated for this run.</p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setHeatMapViewModalId(null);
-                      setHeatMapConfigModalId(heatMapViewModalId);
-                    }}
-                    className={cx(ui.btnPrimary, "h-8 px-3 text-[12px]")}
-                  >
-                    Configure &amp; Generate HeatMap
-                  </button>
-                </div>
-              )}
-            </div>
-            <div className="flex justify-end border-t border-[rgba(60,40,80,0.35)] px-4 py-3">
-              <AppButton type="button" variant="outline" size="sm" onClick={() => setHeatMapViewModalId(null)}>
                 Close
               </AppButton>
             </div>
-          </div>
+          </>
+        ) : null}
+      </AppDialog>
+      {/* HeatMap configurator modal — opens when Configure HeatMap is clicked */}
+      <AppDialog
+        open={Boolean(heatMapConfigModalId)}
+        onOpenChange={(next) => {
+          if (!next) setHeatMapConfigModalId(null);
+        }}
+        title="Configure HeatMap"
+        className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col"
+      >
+        <div className="overflow-auto min-h-0 flex-1">
+          <HeatMapConfigurator
+            variant={isRiskStage ? "risk" : "indicators"}
+            indicators={indicators}
+            riskStoplossRanges={riskStoplossRanges}
+            riskHyperoptParams={riskHyperoptParams}
+            onGenerate={(config) => handleGenerateHeatMap(config, heatMapConfigModalId)}
+          />
         </div>
-      )}
+      </AppDialog>
+      {/* HeatMap view modal — opens when Show heatmap is clicked */}
+      <AppDialog
+        open={Boolean(heatMapViewModalId)}
+        onOpenChange={(next) => {
+          if (!next) setHeatMapViewModalId(null);
+        }}
+        title="Heatmap"
+        className="max-w-[min(1320px,calc(100vw-2rem))] max-h-[92vh] overflow-hidden flex flex-col bg-[#120a20] border-[rgba(60,40,80,0.35)] shadow-[0_24px_60px_rgba(6,3,20,0.55)]"
+      >
+        {generatedHeatMap && generatedHeatMap.runId === heatMapViewModalId ? (
+          <div className="flex justify-end -mt-1">
+            <AppButton
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setGeneratedHeatMap(null);
+                setHeatMapViewModalId(null);
+              }}
+            >
+              Clear HeatMap
+            </AppButton>
+          </div>
+        ) : null}
+        <div className="overflow-y-auto overflow-x-hidden flex-1 min-h-0">
+          {generatedHeatMap && generatedHeatMap.runId === heatMapViewModalId ? (
+            <HeatMapView
+              heatMapData={currentHeatMapData}
+              config={generatedHeatMap.config}
+              isRiskHeatmap={isRiskStage}
+              onCellClick={(cell) => handleHeatMapCellClick(cell, heatMapViewModalId)}
+              onZoomOut={() => handleHeatMapZoomOut(heatMapViewModalId)}
+              onResetZoom={() => handleHeatMapResetZoom(heatMapViewModalId)}
+              canZoomOut={generatedHeatMap.zoomStack.length > 0}
+              canReset={generatedHeatMap.zoomStack.length > 0}
+              zoomLevel={generatedHeatMap.zoomStack.length}
+              onSaveBest={
+                bestCandidates.length > 0
+                  ? handleSaveBestCandidates
+                  : handleSaveBestResultFromHeatMap
+              }
+              saveBestLabel="Save selection"
+              bestCandidates={bestCandidates}
+              onRemoveCandidate={handleRemoveBestCandidate}
+              onClearAllCandidates={handleClearBestCandidates}
+              onApplyFilters={handleApplyHeatMapFilters}
+            />
+          ) : (
+            <div className="py-8 text-center text-[#8c8c8c] text-[13px]">
+              <p className="mb-3">No heatmap generated for this run.</p>
+              <AppButton
+                type="button"
+                variant="default"
+                size="sm"
+                onClick={() => {
+                  setHeatMapViewModalId(null);
+                  setHeatMapConfigModalId(heatMapViewModalId);
+                }}
+              >
+                Configure &amp; Generate HeatMap
+              </AppButton>
+            </div>
+          )}
+        </div>
+        <div className="flex justify-end pt-2">
+          <AppButton type="button" variant="outline" size="sm" onClick={() => setHeatMapViewModalId(null)}>
+            Close
+          </AppButton>
+        </div>
+      </AppDialog>
       {editingIndicator && (
         <EditIndicatorModal
           indicator={editingIndicator}

@@ -13,6 +13,7 @@ import {
   breakRelation,
   deleteTagGlobally,
 } from "../../features/tags/utils/tagStore";
+import { AppInput, AppSelect } from "../common";
 import { DeleteTagModal } from "./DeleteTagModal";
 import { BreakRelationModal } from "./BreakRelationModal";
 
@@ -192,26 +193,25 @@ export const TagsPage = memo(function TagsPage({
             ui.divider,
           )}
         >
-          <input
+          <AppInput
               value={filterName}
               onChange={(e) => setFilterName(e.target.value)}
-              className={cx(ui.input, "!w-32 h-8 shrink-0 text-[12px]")}
+              wrapperClassName="!w-32 shrink-0"
+              className="h-8 text-[12px]"
               placeholder="Search..."
               aria-label="Search tags by name"
             />
-            <select
+            <AppSelect
               value={filterOwner}
-              onChange={(e) => setFilterOwner(e.target.value)}
-              className={cx(ui.select, "h-8 w-[120px] shrink-0 text-[12px]")}
+              onValueChange={setFilterOwner}
+              options={[
+                { value: "All", label: "All owners" },
+                ...ownerOptions.map((owner) => ({ value: owner, label: owner })),
+              ]}
+              className="w-[120px] shrink-0"
+              triggerClassName="h-8 text-[12px]"
               aria-label="Filter tags by owner"
-            >
-              <option value="All">All owners</option>
-              {ownerOptions.map((owner) => (
-                <option key={owner} value={owner}>
-                  {owner}
-                </option>
-              ))}
-            </select>
+            />
         </div>
 
         {visibleTags.length === 0 ? (

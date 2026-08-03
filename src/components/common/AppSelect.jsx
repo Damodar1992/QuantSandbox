@@ -1,4 +1,4 @@
-import React, { memo } from "react";
+import React, { memo, useMemo } from "react";
 import {
   Select,
   SelectContent,
@@ -8,6 +8,19 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+
+/** Radix Select.Item forbids empty string; map "" ↔ sentinel at the bridge. */
+const EMPTY_SENTINEL = "__qs_empty__";
+
+function toItemValue(value) {
+  if (value === "") return EMPTY_SENTINEL;
+  return String(value);
+}
+
+function fromItemValue(value) {
+  if (value === EMPTY_SENTINEL) return "";
+  return value;
+}
 
 export const AppSelect = memo(function AppSelect({
   label,
@@ -19,16 +32,37 @@ export const AppSelect = memo(function AppSelect({
   triggerClassName,
   size = "sm",
   disabled = false,
+  "aria-label": ariaLabel,
 }) {
+  const items = useMemo(
+    () =>
+      options.map((opt) => ({
+        value: toItemValue(opt.value),
+        label: opt.label,
+      })),
+    [options],
+  );
+
+  const selectValue =
+    value === undefined || value === null ? undefined : toItemValue(value);
+
   return (
     <div className={cn("space-y-1", className)}>
       {label ? <Label className="text-xs text-muted-foreground">{label}</Label> : null}
-      <Select value={value} onValueChange={onValueChange} disabled={disabled}>
-        <SelectTrigger size={size} className={cn("w-full", triggerClassName)}>
+      <Select
+        value={selectValue}
+        onValueChange={(v) => onValueChange?.(fromItemValue(v))}
+        disabled={disabled}
+      >
+        <SelectTrigger
+          size={size}
+          className={cn("w-full", triggerClassName)}
+          aria-label={ariaLabel}
+        >
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>
-          {options.map((opt) => (
+          {items.map((opt) => (
             <SelectItem key={opt.value} value={opt.value}>
               {opt.label}
             </SelectItem>

@@ -7,3 +7,6 @@ export { AppInput } from "./AppInput";
 export { AppSelect } from "./AppSelect";
 export { AppDialog } from "./AppDialog";
 export { AppBadge } from "./AppBadge";
+export { CheckboxMultiSelect } from "./CheckboxMultiSelect";
+export { TagMultiSelect } from "./TagMultiSelect";
+export { DateRangePicker, DEFAULT_DATASET_RANGE } from "./DateRangePicker";

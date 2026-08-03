@@ -1,6 +1,6 @@
 import React, { memo } from "react";
+import { Progress } from "@/components/ui/progress";
 import { cx } from "@/constants/ui";
-import { crmAccent } from "@/constants/crmAccent";
 
 function clampPct(value) {
   const n = Number(value);
@@ -31,19 +31,16 @@ export const EtaProgress = memo(function EtaProgress({
     <span className={cx("inline-flex items-center gap-1.5 min-w-0", className)}>
       {pct != null ? (
         <>
-          <span
-            className="h-1.5 w-14 shrink-0 rounded-full bg-[#0f0f0f] border border-[rgba(60,40,80,0.35)] overflow-hidden"
-            role="progressbar"
-            aria-valuenow={pct}
-            aria-valuemin={0}
-            aria-valuemax={100}
+          <Progress
+            value={pct}
             aria-label={`Progress ${pct}%`}
-          >
-            <span
-              className={cx("block h-full rounded-full transition-[width] duration-300 ease-out", crmAccent.progress)}
-              style={{ width: `${pct}%` }}
-            />
-          </span>
+            className={cx(
+              "h-1.5 w-14 shrink-0 rounded-full bg-[#0f0f0f] border border-[rgba(60,40,80,0.35)]",
+              /* crmAccent.progress → bg-violet-600 on indicator (static for Tailwind JIT) */
+              "[&_[data-slot=progress-indicator]]:bg-violet-600",
+              "[&_[data-slot=progress-indicator]]:transition-[transform] [&_[data-slot=progress-indicator]]:duration-300 [&_[data-slot=progress-indicator]]:ease-out",
+            )}
+          />
           <span className="text-[10px] text-[#8c8c8c] tabular-nums whitespace-nowrap">{pct}%</span>
         </>
       ) : null}

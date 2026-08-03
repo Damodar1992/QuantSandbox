@@ -1,5 +1,6 @@
 import React, { memo, useMemo } from "react";
-import { cx, ui } from "../../constants/ui";
+import { AppButton } from "../common/AppButton";
+import { AppDialog } from "../common/AppDialog";
 import { FILTER_PRESET_BUILTIN } from "./heatmapFilterPresets";
 import { HeatmapFiltersReadOnlyPanel } from "./HeatmapFiltersReadOnlyPanel";
 
@@ -31,31 +32,23 @@ export const HeatmapFiltersReadOnlyModal = memo(function HeatmapFiltersReadOnlyM
   }, [item?.id]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={onClose}>
-      <div
-        className={cx(ui.radius, "bg-[#141414] border border-[#303030] w-full max-w-2xl max-h-[90vh] overflow-auto shadow-xl")}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[#303030]">
-          <div>
-            <div className="text-[14px] font-medium text-[#d9d9d9]">Filters</div>
-            <div className={cx("text-[11px] mt-0.5", ui.textMuted)}>
-              {item?.type ?? "—"} · {item?.date ?? "—"} · read-only preview
-            </div>
-          </div>
-          <button type="button" onClick={onClose} className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1" aria-label="Close">
-            ✕
-          </button>
-        </div>
-        <div className="p-4 space-y-4">
-          <HeatmapFiltersReadOnlyPanel snapshot={snapshot} filterPreset="Super filter" />
-          <div className="flex justify-end">
-            <button type="button" onClick={onClose} className={cx(ui.btn, "h-8 px-3 text-[11px]")}>
-              Close
-            </button>
-          </div>
+    <AppDialog
+      open={!!item}
+      onOpenChange={(next) => {
+        if (!next) onClose?.();
+      }}
+      title="Filters"
+      description={`${item?.type ?? "—"} · ${item?.date ?? "—"} · read-only preview`}
+      className="max-w-2xl max-h-[90vh] overflow-auto"
+    >
+      <div className="space-y-4">
+        <HeatmapFiltersReadOnlyPanel snapshot={snapshot} filterPreset="Super filter" />
+        <div className="flex justify-end">
+          <AppButton type="button" variant="outline" size="sm" onClick={onClose}>
+            Close
+          </AppButton>
         </div>
       </div>
-    </div>
+    </AppDialog>
   );
 });

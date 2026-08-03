@@ -1,5 +1,6 @@
 export { Badge, badgeVariants } from "./badge";
 export { Button, buttonVariants } from "./button";
+export { Calendar, CalendarDayButton } from "./calendar";
 export {
   Command,
   CommandDialog,
@@ -88,3 +89,38 @@ export {
   TooltipProvider,
   TooltipTrigger,
 } from "./tooltip";
+export { Textarea } from "./textarea";
+export { Checkbox } from "./checkbox";
+export { Switch } from "./switch";
+export { Progress } from "./progress";
+export { Slider } from "./slider";
+export {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+  tabsListVariants,
+} from "./tabs";
+export {
+  Accordion,
+  AccordionItem,
+  AccordionTrigger,
+  AccordionContent,
+} from "./accordion";
+export {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "./collapsible";
+export {
+  Sheet,
+  SheetTrigger,
+  SheetClose,
+  SheetContent,
+  SheetHeader,
+  SheetFooter,
+  SheetTitle,
+  SheetDescription,
+  SheetOverlay,
+  SheetPortal,
+} from "./sheet";

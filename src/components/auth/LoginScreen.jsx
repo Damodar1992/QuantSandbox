@@ -1,6 +1,6 @@
 import React, { memo, useEffect, useState } from "react";
 import { cx, ui } from "../../constants/ui";
-import { Logo } from "../common";
+import { Logo, AppInput, AppButton } from "../common";
 
 export const LoginScreen = memo(({ onLogin, onForgotPassword }) => {
   const [isReady, setIsReady] = useState(false);
@@ -35,24 +35,18 @@ export const LoginScreen = memo(({ onLogin, onForgotPassword }) => {
           )}
         >
           <div className="space-y-4">
+            <AppInput
+              label="Login"
+              labelClassName={cx("text-xs", ui.textMuted)}
+              className="transition-all duration-200 ease-out hover:border-[#3a3a3a] focus:scale-[1.01] motion-reduce:transform-none"
+              placeholder="email or username"
+            />
             <div>
-              <label className={cx("block mb-1 text-xs", ui.textMuted)}>Login</label>
-              <input
-                className={cx(
-                  ui.input,
-                  "transition-all duration-200 ease-out hover:border-[#3a3a3a] focus:scale-[1.01] motion-reduce:transform-none"
-                )}
-                placeholder="email or username"
-              />
-            </div>
-            <div>
-              <label className={cx("block mb-1 text-xs", ui.textMuted)}>Password</label>
-              <input
+              <AppInput
+                label="Password"
                 type="password"
-                className={cx(
-                  ui.input,
-                  "transition-all duration-200 ease-out hover:border-[#3a3a3a] focus:scale-[1.01] motion-reduce:transform-none"
-                )}
+                labelClassName={cx("text-xs", ui.textMuted)}
+                className="transition-all duration-200 ease-out hover:border-[#3a3a3a] focus:scale-[1.01] motion-reduce:transform-none"
                 placeholder="••••••••"
               />
               <div className="mt-2 flex justify-end">
@@ -65,16 +59,15 @@ export const LoginScreen = memo(({ onLogin, onForgotPassword }) => {
                 </button>
               </div>
             </div>
-            <button
+            <AppButton
               type="button"
+              variant="default"
+              size="lg"
               onClick={onLogin}
-              className={cx(
-                "mt-2 w-full h-9 transition-all duration-200 ease-out hover:scale-[1.01] active:scale-[0.99] motion-reduce:transform-none",
-                ui.btnPrimary
-              )}
+              className="mt-2 w-full transition-all duration-200 ease-out hover:scale-[1.01] active:scale-[0.99] motion-reduce:transform-none"
             >
               Sign In
-            </button>
+            </AppButton>
           </div>
         </div>
 

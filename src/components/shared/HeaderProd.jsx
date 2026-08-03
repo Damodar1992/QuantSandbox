@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
+import React, { memo, useCallback, useMemo } from "react";
 import { cx, ui } from "../../constants/ui";
 import { useOutsideClose } from "../../hooks/useOutsideClose";
 import { Logo, MenuIcon } from "../common";
@@ -7,6 +7,7 @@ import { QueueIcon, ReleaseNotesIcon } from "./Icons";
 import { FeatureFlagsDropdown } from "./FeatureFlagsDropdown";
 import { StorageUsageBarCompact } from "../storage/StorageUsageBar";
 import { QueuePanel } from "./QueuePanel";
+import { AppSelect } from "../common/AppSelect";
 
 export const HeaderProd = memo(function HeaderProd({
   onLogout,
@@ -35,15 +36,6 @@ export const HeaderProd = memo(function HeaderProd({
   onOpenStorage,
 }) {
   const queueRef = useOutsideClose(queueOpen, onQueueClose);
-  const [panelEnter, setPanelEnter] = useState(false);
-
-  useEffect(() => {
-    if (queueOpen) {
-      setPanelEnter(false);
-      const t = setTimeout(() => setPanelEnter(true), 20);
-      return () => clearTimeout(t);
-    }
-  }, [queueOpen]);
 
   const navItems = useMemo(() => {
     const items = [];
@@ -128,15 +120,16 @@ export const HeaderProd = memo(function HeaderProd({
         </nav>
 
         <div ref={queueRef} className="relative flex items-center gap-2 justify-self-end">
-          <select
+          <AppSelect
             value={hyperoptRun}
-            onChange={(e) => onHyperoptRunChange?.(e.target.value)}
-            className={cx(ui.input, "h-10 text-[12px] w-[140px]")}
-            title="Hyperopt run"
-          >
-            <option value="Pipeline">Quant</option>
-            <option value="Admin run">Admin</option>
-          </select>
+            onValueChange={(v) => onHyperoptRunChange?.(v)}
+            options={[
+              { value: "Pipeline", label: "Quant" },
+              { value: "Admin run", label: "Admin" },
+            ]}
+            className="w-[140px]"
+            triggerClassName="h-10 text-[12px]"
+          />
           <FeatureFlagsDropdown flags={featureFlags} onFlagChange={onFeatureFlagChange} />
           {storageTotals && onOpenStorage && (
             <StorageUsageBarCompact
@@ -166,16 +159,13 @@ export const HeaderProd = memo(function HeaderProd({
           <ProdButton variant="headerControl" size="lg" onClick={onQueueToggle} title="Queue" aria-label="Open queue">
             <QueueIcon />
           </ProdButton>
-          {queueOpen && (
-            <QueuePanel
-              open={queueOpen}
-              onClose={onQueueClose}
-              panelEnter={panelEnter}
-              itemsByTab={queueItemsByTab}
-              onReorder={onQueueReorder}
-              onRemove={onQueueRemove}
-            />
-          )}
+          <QueuePanel
+            open={queueOpen}
+            onClose={onQueueClose}
+            itemsByTab={queueItemsByTab}
+            onReorder={onQueueReorder}
+            onRemove={onQueueRemove}
+          />
           <ProdButton variant="ghost" size="lg" onClick={onLogout}>
             Logout
           </ProdButton>

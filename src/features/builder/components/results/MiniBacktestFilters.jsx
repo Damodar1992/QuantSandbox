@@ -1,13 +1,11 @@
-import React, { memo, useState } from "react";
-import { cx, ui } from "../../../../constants/ui";
-import { useOutsideClose } from "../../../../hooks/useOutsideClose";
+import React, { memo, useMemo } from "react";
+import { TagMultiSelect } from "@/components/common/TagMultiSelect";
+import { AppSelect } from "@/components/common/AppSelect";
 import { EMPTY_MINI_BACKTEST_FILTERS } from "../../utils/miniBacktestFilters";
-
-const selectClass = cx(ui.input, "h-8 min-w-[120px] text-[11px] px-2");
 
 function FilterField({ label, children, className }) {
   return (
-    <label className={cx("flex flex-col gap-1 min-w-0", className)}>
+    <label className={`flex flex-col gap-1 min-w-0 ${className ?? ""}`}>
       <span className="text-[10px] text-[#8c8c8c] whitespace-nowrap">{label}</span>
       {children}
     </label>
@@ -19,20 +17,38 @@ export const MiniBacktestFilters = memo(function MiniBacktestFilters({
   onFiltersChange,
   options,
 }) {
-  const [tagsOpen, setTagsOpen] = useState(false);
-  const tagsRef = useOutsideClose(tagsOpen, () => setTagsOpen(false));
-
   const setFilter = (key, value) => {
     onFiltersChange?.({ ...filters, [key]: value });
   };
 
-  const tagsLabel =
-    filters.tags.length === 0
-      ? "All tags"
-      : options.tags
-          .filter((tag) => filters.tags.includes(tag.id))
-          .map((tag) => tag.name)
-          .join(", ");
+  const tagOptions = useMemo(
+    () => (options.tags ?? []).map((tag) => ({ value: tag.id, label: tag.name })),
+    [options.tags],
+  );
+
+  const stageOptions = useMemo(
+    () => [
+      { value: "", label: "All stages" },
+      ...(options.stages ?? []).map((stage) => ({ value: stage.value, label: stage.label })),
+    ],
+    [options.stages],
+  );
+
+  const versionOptions = useMemo(
+    () => [
+      { value: "", label: "All versions" },
+      ...(options.versions ?? []).map((version) => ({ value: version.value, label: version.label })),
+    ],
+    [options.versions],
+  );
+
+  const statusOptions = useMemo(
+    () => [
+      { value: "", label: "All statuses" },
+      ...(options.statuses ?? []).map((status) => ({ value: status, label: status })),
+    ],
+    [options.statuses],
+  );
 
   const hasActiveFilters =
     filters.stage ||
@@ -43,97 +59,44 @@ export const MiniBacktestFilters = memo(function MiniBacktestFilters({
   return (
     <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
       <FilterField label="Stage">
-        <select
+        <AppSelect
           value={filters.stage}
-          onChange={(e) => setFilter("stage", e.target.value)}
-          className={selectClass}
-        >
-          <option value="">All stages</option>
-          {options.stages.map((stage) => (
-            <option key={stage.value} value={stage.value}>
-              {stage.label}
-            </option>
-          ))}
-        </select>
+          onValueChange={(v) => setFilter("stage", v)}
+          options={stageOptions}
+          triggerClassName="h-8 min-w-[120px] text-[11px] px-2"
+        />
       </FilterField>
 
       <FilterField label="Stage version">
-        <select
+        <AppSelect
           value={filters.version}
-          onChange={(e) => setFilter("version", e.target.value)}
-          className={selectClass}
-        >
-          <option value="">All versions</option>
-          {options.versions.map((version) => (
-            <option key={version.value} value={version.value}>
-              {version.label}
-            </option>
-          ))}
-        </select>
+          onValueChange={(v) => setFilter("version", v)}
+          options={versionOptions}
+          triggerClassName="h-8 min-w-[120px] text-[11px] px-2"
+        />
       </FilterField>
 
       <FilterField label="Status">
-        <select
+        <AppSelect
           value={filters.status}
-          onChange={(e) => setFilter("status", e.target.value)}
-          className={selectClass}
-        >
-          <option value="">All statuses</option>
-          {options.statuses.map((status) => (
-            <option key={status} value={status}>
-              {status}
-            </option>
-          ))}
-        </select>
+          onValueChange={(v) => setFilter("status", v)}
+          options={statusOptions}
+          triggerClassName="h-8 min-w-[120px] text-[11px] px-2"
+        />
       </FilterField>
 
       <FilterField label="Tags" className="min-w-[160px]">
-        <div className="relative" ref={tagsRef}>
-          <button
-            type="button"
-            onClick={() => setTagsOpen((open) => !open)}
-            className={cx(selectClass, "w-full min-w-[160px] inline-flex items-center justify-between gap-2")}
-            aria-expanded={tagsOpen}
-          >
-            <span className="truncate text-left">{tagsLabel}</span>
-            <span className="text-[#8c8c8c] shrink-0">{tagsOpen ? "▲" : "▼"}</span>
-          </button>
-          {tagsOpen ? (
-            <div className="absolute left-0 z-30 mt-1 w-[220px] max-h-[200px] overflow-y-auto rounded-md border border-[#303030] bg-[#0f0f0f] shadow-lg p-1.5 space-y-1">
-              <button
-                type="button"
-                onClick={() => setFilter("tags", [])}
-                className="w-full h-7 px-2 rounded text-left text-[10px] text-[#d9d9d9] hover:bg-[#1a1a1a]"
-              >
-                All tags
-              </button>
-              {options.tags.map((tag) => {
-                const checked = filters.tags.includes(tag.id);
-                return (
-                  <label
-                    key={tag.id}
-                    className="flex items-center gap-2 h-7 px-2 rounded text-[10px] text-[#d9d9d9] hover:bg-[#1a1a1a] cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() =>
-                        setFilter(
-                          "tags",
-                          checked
-                            ? filters.tags.filter((id) => id !== tag.id)
-                            : [...filters.tags, tag.id],
-                        )
-                      }
-                      className="h-3 w-3 accent-violet-500"
-                    />
-                    <span className="truncate">{tag.name}</span>
-                  </label>
-                );
-              })}
-            </div>
-          ) : null}
-        </div>
+        <TagMultiSelect
+          options={tagOptions}
+          value={filters.tags}
+          onChange={(next) => setFilter("tags", next)}
+          align="start"
+          clearLabel="All tags"
+          emptySummary="All tags"
+          summaryPrefix="Tags"
+          triggerClassName="h-8 min-w-[160px] w-full text-[11px] px-2"
+          contentClassName="w-[220px]"
+        />
       </FilterField>
 
       {hasActiveFilters ? (

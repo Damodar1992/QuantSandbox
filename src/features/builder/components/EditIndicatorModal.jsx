@@ -1,5 +1,7 @@
 import React, { memo, useState } from "react";
 import { cx, ui } from "../../../constants/ui";
+import { AppButton } from "../../../components/common/AppButton";
+import { AppDialog } from "../../../components/common/AppDialog";
 import { SOURCE_OPTIONS } from "../../../constants/indicators";
 import { getDefaultDisplayName } from "../utils/indicatorHelpers";
 
@@ -40,22 +42,23 @@ export const EditIndicatorModal = memo(({ indicator, onClose, onSave, rangesOnly
     onClose();
   };
 
+  const title = rangesOnly
+    ? `Parameter ranges: ${indicator.displayName || indicator.name}`
+    : `Edit Indicator: ${indicator.displayName || indicator.name}`;
+
   return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/70 px-4">
-      <div className={cx("w-full max-w-2xl", ui.radius, ui.panel, ui.shadow, "p-6 space-y-4")}>
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-[#f5f5f5]">
-            {rangesOnly ? "Parameter ranges" : "Edit Indicator"}: {indicator.displayName || indicator.name}
-          </h2>
-          <button className={cx(ui.btn, "px-2 py-1")} onClick={onClose}>
-            ✕
-          </button>
-        </div>
-        {rangesOnly && (
-          <p className={cx("text-[11px]", ui.textMuted)}>
-            {indicator.name} · {indicator.type}
-          </p>
-        )}
+    <AppDialog
+      open
+      onOpenChange={(next) => {
+        if (!next) onClose?.();
+      }}
+      title={title}
+      description={
+        rangesOnly ? `${indicator.name} · ${indicator.type}` : undefined
+      }
+      className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col"
+    >
+      <div className="space-y-4 overflow-auto max-h-[min(70vh,560px)]">
         {!rangesOnly && (
           <>
             <div>
@@ -159,15 +162,15 @@ export const EditIndicatorModal = memo(({ indicator, onClose, onSave, rangesOnly
             ))}
           </div>
         )}
-        <div className="flex justify-end gap-2 pt-2">
-          <button onClick={onClose} className={ui.btn}>
-            Cancel
-          </button>
-          <button onClick={handleSave} className={ui.btnPrimary}>
-            {rangesOnly ? "Save ranges" : "Save Changes"}
-          </button>
-        </div>
       </div>
-    </div>
+      <div className="flex justify-end gap-2 pt-2">
+        <AppButton type="button" variant="outline" size="sm" onClick={onClose}>
+          Cancel
+        </AppButton>
+        <AppButton type="button" variant="default" size="sm" onClick={handleSave}>
+          {rangesOnly ? "Save ranges" : "Save Changes"}
+        </AppButton>
+      </div>
+    </AppDialog>
   );
 });

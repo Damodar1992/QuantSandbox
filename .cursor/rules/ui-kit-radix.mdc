@@ -1,0 +1,17 @@
+---
+description: Новый UI только через Radix / shadcn (src/components/ui)
+alwaysApply: true
+---
+
+# UI kit: Radix + shadcn
+
+При добавлении или расширении UI:
+
+1. **Примитивы** — только из `src/components/ui/` (shadcn поверх Radix).
+2. Нет нужного примитива — добавить через `npm run ui:add -- <name>`, не писать свой button/dialog/select/dropdown с нуля.
+3. **Bridge для приложения** — `AppButton`, `AppInput`, `AppSelect`, `AppDialog`, `AppBadge` в `src/components/common/`; в фичах предпочитать bridge, а не сырой `ui/*`, если bridge уже есть.
+4. **Нельзя**: самописные модалки/меню/тоглзы на `div`+`useState`, другие UI-kit’ы (MUI, Ant, Chakra и т.п.), новые зависимости UI без явного запроса.
+5. Стили — существующие токены (`ui`, `crmAccent`, Tailwind); не ломать dual-theme (legacy/prod).
+6. Новые доменные компоненты — в `src/components/<домен>/` или `src/features/builder/`; примитивы — только в `src/components/ui/`.
+
+Цепочка: `Radix → shadcn (components/ui) → App* bridge (common) → features`.

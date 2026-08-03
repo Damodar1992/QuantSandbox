@@ -8,9 +8,10 @@
  * current selection summary, expanding into a checkbox list on click.
  */
 
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { cx } from "../../constants/ui";
-import { useOutsideClose } from "../../hooks/useOutsideClose";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { CheckboxMultiSelect } from "@/components/common/CheckboxMultiSelect";
 import {
   STAGE_TYPE_OPTIONS,
   collectOwners,
@@ -28,32 +29,36 @@ function ChevronIcon() {
 }
 
 function FilterPill({ label, active, children }) {
-  const [open, setOpen] = useState(false);
-  const ref = useOutsideClose(open, () => setOpen(false));
-
   return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={cx(
-          "inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-[11px] transition-colors",
-          active
-            ? "border-violet-500/60 bg-violet-500/10 text-violet-300"
-            : "border-border bg-background/60 text-muted-foreground hover:bg-accent/30",
-        )}
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={cx(
+            "inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-[11px] transition-colors",
+            active
+              ? "border-violet-500/60 bg-violet-500/10 text-violet-300"
+              : "border-border bg-background/60 text-muted-foreground hover:bg-accent/30",
+          )}
+        >
+          {label}
+          {active && <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />}
+          <ChevronIcon />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="min-w-[200px] w-auto p-3"
+        onInteractOutside={(e) => {
+          // Nested popovers (e.g. Hyperopt → Timeframe) portal outside this node.
+          if (e.target?.closest?.('[data-slot="popover-content"]')) {
+            e.preventDefault();
+          }
+        }}
       >
-        {label}
-        {active && <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />}
-        <ChevronIcon />
-      </button>
-
-      {open && (
-        <div className="absolute left-0 top-full z-30 mt-1 min-w-[200px] rounded-lg border border-border bg-card p-3 shadow-xl">
-          {children}
-        </div>
-      )}
-    </div>
+        {children}
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -72,100 +77,43 @@ function TextInput({ label, value, onChange, placeholder }) {
   );
 }
 
-/**
- * Self-contained multi-select dropdown: trigger button showing a selection
- * summary, expanding into a checkbox list panel on click. Used for every
- * filter that previously rendered as a bare checkbox list.
- */
-function MultiSelectDropdown({ label, values, onChange, options, panelClassName }) {
-  const [open, setOpen] = useState(false);
-  const ref = useOutsideClose(open, () => setOpen(false));
-
-  const toggle = useCallback(
-    (value) => {
-      const next = values.includes(value) ? values.filter((v) => v !== value) : [...values, value];
-      onChange(next);
-    },
-    [values, onChange],
+function StorageMultiSelect({ label, values, onChange, options, contentClassName }) {
+  const normalized = useMemo(
+    () =>
+      options.map((o) =>
+        typeof o === "object" && o != null && "value" in o
+          ? { value: o.value, label: o.label ?? String(o.value) }
+          : { value: o, label: String(o) },
+      ),
+    [options],
   );
 
   const active = values.length > 0;
 
-  const summary = useMemo(() => {
-    if (values.length === 0) return "All";
-    if (values.length === 1) {
-      const opt = options.find((o) => (o.value ?? o) === values[0]);
-      return opt?.label ?? opt ?? values[0];
-    }
-    return `${values.length} selected`;
-  }, [values, options]);
-
   return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={cx(
-          "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[11px] transition-colors max-w-[180px]",
-          active
-            ? "border-violet-500/60 bg-violet-500/10 text-violet-300"
-            : "border-border bg-background/60 text-muted-foreground hover:bg-accent/30",
-        )}
-      >
-        <span className={cx(!active && "text-muted-foreground")}>{label}:</span>
-        <span className={cx("truncate", active ? "font-medium text-violet-200" : "text-muted-foreground")}>
-          {summary}
-        </span>
-        <ChevronIcon />
-      </button>
-
-      {open && (
-        <div
-          className={cx(
-            "absolute left-0 top-full z-40 mt-1 min-w-[180px] rounded-lg border border-border bg-card p-2 shadow-xl",
-            panelClassName,
-          )}
-        >
-          <div className="flex flex-col gap-0.5 max-h-52 overflow-y-auto">
-            {options.length === 0 && (
-              <div className="px-1.5 py-1 text-[11px] text-muted-foreground">No options</div>
-            )}
-            {options.map((o) => {
-              const value = o.value ?? o;
-              const optionLabel = o.label ?? o;
-              const checked = values.includes(value);
-              return (
-                <label
-                  key={value}
-                  className={cx(
-                    "flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-[11px] transition-colors",
-                    checked ? "bg-violet-500/10 text-violet-200" : "text-muted-foreground hover:bg-accent/30",
-                  )}
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggle(value)}
-                    className="h-3 w-3 rounded border-border accent-violet-500"
-                  />
-                  <span className="truncate">{optionLabel}</span>
-                </label>
-              );
-            })}
-          </div>
-
-          {active && (
-            <button
-              type="button"
-              onClick={() => onChange([])}
-              className="mt-1.5 text-[10px] text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
-            >
-              Clear
-            </button>
-          )}
-        </div>
+    <CheckboxMultiSelect
+      options={normalized}
+      value={values}
+      onChange={onChange}
+      formatSummary={(vals, opts) => {
+        if (vals.length === 0) return `${label}: All`;
+        if (vals.length === 1) {
+          const opt = opts.find((o) => o.value === vals[0]);
+          return `${label}: ${opt?.label ?? vals[0]}`;
+        }
+        return `${label}: ${vals.length} selected`;
+      }}
+      clearLabel="Clear"
+      showClear={active}
+      triggerClassName={cx(
+        "max-w-[180px] px-2.5 py-1.5 text-[11px]",
+        active
+          ? "border-violet-500/60 bg-violet-500/10 text-violet-300"
+          : "border-border bg-background/60 text-muted-foreground hover:bg-accent/30",
       )}
-    </div>
+      contentClassName={cx("min-w-[180px]", contentClassName)}
+      optionClassName="text-[11px]"
+    />
   );
 }
 
@@ -202,7 +150,7 @@ export function StorageFilters({ filters, updateFilter, clearFilters, strategies
         />
       </FilterPill>
 
-      <MultiSelectDropdown
+      <StorageMultiSelect
         label="Stage"
         values={filters.stageTypes ?? []}
         onChange={(v) => updateFilter("stageTypes", v)}
@@ -212,26 +160,26 @@ export function StorageFilters({ filters, updateFilter, clearFilters, strategies
       <FilterPill label="Hyperopt" active={hasHyperoptFilter}>
         <div className="space-y-3 w-56">
           <div className="flex flex-wrap items-center gap-1.5">
-            <MultiSelectDropdown
+            <StorageMultiSelect
               label="Timeframe"
               values={filters.timeframes ?? []}
               onChange={(v) => updateFilter("timeframes", v)}
               options={timeframes}
-              panelClassName="w-40"
+              contentClassName="w-40"
             />
-            <MultiSelectDropdown
+            <StorageMultiSelect
               label="Status"
               values={filters.statuses ?? []}
               onChange={(v) => updateFilter("statuses", v)}
               options={statuses}
-              panelClassName="w-40"
+              contentClassName="w-40"
             />
-            <MultiSelectDropdown
+            <StorageMultiSelect
               label="Tags"
               values={filters.tagIds ?? []}
               onChange={(v) => updateFilter("tagIds", v)}
               options={tagOptions}
-              panelClassName="w-40"
+              contentClassName="w-40"
             />
           </div>
 
@@ -260,7 +208,7 @@ export function StorageFilters({ filters, updateFilter, clearFilters, strategies
         </div>
       </FilterPill>
 
-      <MultiSelectDropdown
+      <StorageMultiSelect
         label="User"
         values={filters.ownerLogins ?? []}
         onChange={(v) => updateFilter("ownerLogins", v)}

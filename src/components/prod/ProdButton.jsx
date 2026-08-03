@@ -1,6 +1,8 @@
 import React, { memo } from "react";
-import { cx } from "@/constants/ui";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
+/** Prod visual overrides layered on kit Button variants. */
 const variants = {
   ghost:
     "border-transparent bg-transparent text-[#b8aecc] hover:bg-[#1e1333] hover:text-[#faf7fd]",
@@ -11,10 +13,25 @@ const variants = {
     "border-[rgba(60,40,80,0.5)] bg-[#170f29] text-[#b8aecc] hover:bg-[#1e1333]",
 };
 
-const sizes = {
-  sm: "h-6 px-2 text-[11px]",
-  md: "h-8 px-3 text-[12px]",
-  lg: "h-10 px-4 text-[14px]",
+/** Map Prod sizes → kit sizes; keep exact prod dimensions via className. */
+const sizeMap = {
+  sm: "xs",
+  md: "default",
+  lg: "lg",
+};
+
+const sizeClasses = {
+  sm: "h-6 gap-2 px-2 text-[11px]",
+  md: "h-8 gap-2 px-3 text-[12px]",
+  lg: "h-10 gap-2 px-4 text-[14px]",
+};
+
+/** Kit variant closest to each Prod variant (visuals fully overridden anyway). */
+const kitVariantMap = {
+  ghost: "ghost",
+  outline: "outline",
+  solid: "default",
+  headerControl: "outline",
 };
 
 export const ProdButton = memo(function ProdButton({
@@ -24,18 +41,23 @@ export const ProdButton = memo(function ProdButton({
   children,
   ...props
 }) {
+  const prodVariant = variants[variant] ? variant : "ghost";
+  const prodSize = sizeClasses[size] ? size : "md";
+
   return (
-    <button
+    <Button
       type="button"
-      className={cx(
-        "inline-flex items-center justify-center gap-2 rounded-md border font-medium transition-colors",
-        variants[variant] ?? variants.ghost,
-        sizes[size] ?? sizes.md,
+      variant={kitVariantMap[prodVariant]}
+      size={sizeMap[prodSize]}
+      className={cn(
+        "gap-2 rounded-md border font-medium transition-colors",
+        variants[prodVariant],
+        sizeClasses[prodSize],
         className,
       )}
       {...props}
     >
       {children}
-    </button>
+    </Button>
   );
 });

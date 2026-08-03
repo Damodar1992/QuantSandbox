@@ -1,12 +1,13 @@
 import React, { memo, useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import { CircleHelp } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { cx, ui } from "../../../../constants/ui";
+import { cx } from "../../../../constants/ui";
 import {
   computeCombinationsFromConfigRows,
   computeReductionStats,
 } from "../../utils/rangeNarrowingMock";
+import { AppButton } from "../../../../components/common/AppButton";
+import { AppDialog } from "../../../../components/common/AppDialog";
 
 const TOOLTIPS = {
   importanceCurve:
@@ -189,7 +190,20 @@ export const RangeNarrowingResultsModal = memo(function RangeNarrowingResultsMod
     [activeConfigTab, marginWiden],
   );
 
-  if (!open || !item || !results) return null;
+  if (!item || !results) {
+    return (
+      <AppDialog
+        open={!!open}
+        onOpenChange={(next) => {
+          if (!next) onClose?.();
+        }}
+        title="Parameter Importance & Range Narrowing — results"
+        className="max-w-[820px]"
+      >
+        <div className="text-[11px] text-[#8c8c8c]">No results available.</div>
+      </AppDialog>
+    );
+  }
 
   const { targetMetric = "final_score" } = results;
   const remainingOfBroad = formatPercent(
@@ -214,30 +228,17 @@ export const RangeNarrowingResultsModal = memo(function RangeNarrowingResultsMod
     onClose?.();
   };
 
-  return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={onClose}>
-      <div
-        className={cx(
-          ui.radius,
-          "bg-[#141414] border border-[#303030] max-w-[820px] w-full max-h-[90vh] overflow-hidden flex flex-col shadow-xl",
-        )}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-3 px-4 py-3 border-b border-[#303030]">
-          <div className="min-w-0 space-y-1">
-            <div className="text-[15px] font-semibold text-[#d9d9d9]">
-              Parameter Importance &amp; Range Narrowing — results
-            </div>
-            <div className="text-[11px] text-[#8c8c8c]">
-              Target metric: {formatTargetMetric(targetMetric)}
-            </div>
-          </div>
-          <button type="button" onClick={onClose} className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1 shrink-0">
-            ✕
-          </button>
-        </div>
-
-        <div className="overflow-auto p-4 flex-1 min-h-0 space-y-4">
+  return (
+    <AppDialog
+      open={!!open}
+      onOpenChange={(next) => {
+        if (!next) onClose?.();
+      }}
+      title="Parameter Importance & Range Narrowing — results"
+      description={`Target metric: ${formatTargetMetric(targetMetric)}`}
+      className="max-w-[820px] max-h-[90vh] overflow-hidden flex flex-col"
+    >
+        <div className="overflow-auto flex-1 min-h-0 space-y-4">
           <div className="flex gap-2">
             <button
               type="button"
@@ -413,19 +414,17 @@ export const RangeNarrowingResultsModal = memo(function RangeNarrowingResultsMod
           </div>
         </div>
 
-        <div className="px-4 py-3 border-t border-[#303030] flex justify-end gap-2">
-          <button type="button" onClick={onClose} className={cx(ui.btn, "h-8 px-3 text-[11px]")}>
+        <div className="flex justify-end gap-2 pt-2">
+          <AppButton type="button" variant="outline" size="sm" onClick={onClose}>
             Close
-          </button>
-          <button type="button" onClick={handleRunHyperopt} className={cx(ui.btn, "h-8 px-3 text-[11px]")}>
+          </AppButton>
+          <AppButton type="button" variant="outline" size="sm" onClick={handleRunHyperopt}>
             Run hyperoptimization
-          </button>
-          <button type="button" onClick={handleApply} className={cx(ui.btnPrimary, "h-8 px-3 text-[11px]")}>
+          </AppButton>
+          <AppButton type="button" variant="default" size="sm" onClick={handleApply}>
             Apply ranges to strategy
-          </button>
+          </AppButton>
         </div>
-      </div>
-    </div>,
-    document.body,
+    </AppDialog>
   );
 });

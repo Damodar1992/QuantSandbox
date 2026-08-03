@@ -1,5 +1,6 @@
 import React, { memo } from "react";
-import { cx } from "@/constants/ui";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 
 export const PillTabs = memo(function PillTabs({
   items,
@@ -10,40 +11,45 @@ export const PillTabs = memo(function PillTabs({
   className,
 }) {
   return (
-    <div
-      className={cx(
-        "inline-flex items-center gap-1 rounded-full p-1",
-        "bg-[var(--crm-nav-pill)]",
+    <Tabs
+      value={activeId}
+      onValueChange={(id) => onChange?.(id)}
+      orientation="horizontal"
+      className={cn(
+        "inline-flex gap-0 data-horizontal:flex-row",
         className,
       )}
-      role="tablist"
     >
-      {items.map((item) => {
-        const disabled = disabledIds.has(item.id);
-        const active = !disabled && activeId === item.id;
-        return (
-          <button
-            key={item.id}
-            type="button"
-            role="tab"
-            aria-selected={active}
-            disabled={disabled}
-            onClick={() => !disabled && onChange?.(item.id)}
-            className={cx(
-              "inline-flex items-center gap-2 rounded-full px-3 py-2 text-[13px] transition",
-              active
-                ? "bg-[rgba(168,96,240,0.16)] text-[#ddd6fe]"
-                : disabled
-                ? "text-[#6e6682] cursor-not-allowed opacity-70"
-                : "text-[#b8aecc] hover:text-[#faf7fd]",
-            )}
-          >
-            {item.icon}
-            <span className="whitespace-nowrap">{item.label}</span>
-            {renderBadge?.(item)}
-          </button>
-        );
-      })}
-    </div>
+      <TabsList
+        className={cn(
+          "inline-flex h-auto w-auto items-center gap-1 rounded-full p-1",
+          "bg-[var(--crm-nav-pill)]",
+          "group-data-horizontal/tabs:h-auto",
+        )}
+      >
+        {items.map((item) => {
+          const disabled = disabledIds.has(item.id);
+          return (
+            <TabsTrigger
+              key={item.id}
+              value={item.id}
+              disabled={disabled}
+              className={cn(
+                "inline-flex h-auto flex-none items-center gap-2 rounded-full border-transparent px-3 py-2 text-[13px] font-normal shadow-none transition",
+                "text-[#b8aecc] hover:text-[#faf7fd]",
+                "data-active:bg-[rgba(168,96,240,0.16)] data-active:text-[#ddd6fe] data-active:shadow-none",
+                "dark:data-active:border-transparent dark:data-active:bg-[rgba(168,96,240,0.16)] dark:data-active:text-[#ddd6fe]",
+                "disabled:cursor-not-allowed disabled:opacity-70 disabled:text-[#6e6682] disabled:pointer-events-none",
+                "after:hidden",
+              )}
+            >
+              {item.icon}
+              <span className="whitespace-nowrap">{item.label}</span>
+              {renderBadge?.(item)}
+            </TabsTrigger>
+          );
+        })}
+      </TabsList>
+    </Tabs>
   );
 });

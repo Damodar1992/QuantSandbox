@@ -1,6 +1,5 @@
 import React, { memo, useState } from "react";
-import { cx, ui } from "../../constants/ui";
-import { ModalShell } from "../common";
+import { ModalShell, AppInput, AppButton } from "../common";
 
 export const ChangePasswordModal = memo(function ChangePasswordModal({ user, onClose }) {
   const [password, setPassword] = useState("");
@@ -8,30 +7,27 @@ export const ChangePasswordModal = memo(function ChangePasswordModal({ user, onC
   return (
     <ModalShell title={`Change password — ${user.username}`} onClose={onClose}>
       <div className="space-y-4">
-        <div>
-          <label className={cx("block mb-1 text-xs", ui.textMuted)}>New password</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className={ui.input}
-            placeholder="Enter new password"
-          />
-        </div>
+        <AppInput
+          label="New password"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Enter new password"
+        />
         <div className="flex justify-end gap-2 pt-2">
-          <button onClick={onClose} className={ui.btn}>
+          <AppButton onClick={onClose} variant="outline">
             Cancel
-          </button>
-          <button
+          </AppButton>
+          <AppButton
             onClick={() => {
               alert(`Password changed for ${user.login} (mock)`);
               onClose();
             }}
-            className={ui.btnPrimary}
+            variant="default"
             disabled={!password.trim()}
           >
             Change password
-          </button>
+          </AppButton>
         </div>
       </div>
     </ModalShell>

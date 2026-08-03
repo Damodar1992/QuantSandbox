@@ -1,7 +1,14 @@
 import React, { memo, useCallback, useEffect, useState } from "react";
-import { cx, ui } from "../../constants/ui";
 import { EtaProgress } from "../common/EtaProgress";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "../ui/sheet";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { DragHandleIcon, TrashIcon } from "./Icons";
+import { cx } from "../../constants/ui";
 
 export const QUEUE_TABS = [
   { id: "hyperopt", label: "Hyperopt" },
@@ -31,10 +38,70 @@ function QueueStatusBadge({ status }) {
   );
 }
 
+function QueueList({
+  items,
+  tabId,
+  draggedIndex,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
+  onRemove,
+}) {
+  if (items.length === 0) {
+    return <div className="p-4 text-[11px] text-muted-foreground">No jobs in this queue.</div>;
+  }
+
+  return (
+    <ul className="divide-y divide-[rgba(60,40,80,0.35)]">
+      {items.map((item, index) => (
+        <li
+          key={item.id}
+          draggable
+          onDragStart={(e) => onDragStart(e, index)}
+          onDragOver={onDragOver}
+          onDrop={(e) => onDrop(e, index)}
+          onDragEnd={onDragEnd}
+          className={cx(
+            "flex items-start gap-2 px-2 py-2.5 cursor-grab active:cursor-grabbing",
+            draggedIndex === index && "opacity-50",
+          )}
+        >
+          <span className="mt-0.5 shrink-0 text-muted-foreground">
+            <DragHandleIcon />
+          </span>
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <div className="truncate text-[11px] font-medium text-violet-300">
+              {item.strategyName} {item.version}
+              <span className="text-muted-foreground font-normal">
+                {" · "}
+                {item.stageName || "—"}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+              <QueueStatusBadge status={item.status || "Queued"} />
+              {isQueueInProgress(item.status) ? (
+                <EtaProgress eta={item.estimationTime} progress={item.progress} />
+              ) : null}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => onRemove?.(tabId, item.id)}
+            aria-label="Remove from queue"
+            className="shrink-0 mt-0.5 text-muted-foreground hover:text-foreground"
+          >
+            <TrashIcon />
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export const QueuePanel = memo(function QueuePanel({
   open,
   onClose,
-  panelEnter,
   itemsByTab = { hyperopt: [], postProcessing: [] },
   onReorder,
   onRemove,
@@ -79,95 +146,69 @@ export const QueuePanel = memo(function QueuePanel({
 
   const handleDragEnd = useCallback(() => setDraggedIndex(null), []);
 
+  const listProps = {
+    draggedIndex,
+    onDragStart: handleDragStart,
+    onDragOver: handleDragOver,
+    onDrop: handleDrop,
+    onDragEnd: handleDragEnd,
+    onRemove,
+  };
+
   return (
-    <>
-      <div className="fixed inset-0 z-20 bg-black/50" onClick={onClose} aria-hidden />
-      <div
-        className={cx(
-          "fixed right-0 top-0 bottom-0 z-30 w-[320px] flex flex-col overflow-hidden border-l bg-card shadow-[-8px_0_24px_rgba(0,0,0,0.4)] transition-transform duration-300",
-          ui.divider,
-          panelEnter ? "translate-x-0" : "translate-x-full",
-        )}
+    <Sheet
+      open={!!open}
+      onOpenChange={(next) => {
+        if (!next) onClose?.();
+      }}
+    >
+      <SheetContent
+        side="right"
+        showCloseButton
+        className="w-[320px] sm:max-w-[320px] p-0 gap-0 flex flex-col"
       >
-        <div className={cx("shrink-0 p-3 border-b text-[12px] font-medium", ui.divider)}>Queue</div>
+        <SheetHeader className="shrink-0 border-b border-border p-3 space-y-0">
+          <SheetTitle className="text-[12px] font-medium">Queue</SheetTitle>
+        </SheetHeader>
 
-        <div className={cx("shrink-0 flex gap-1 p-2 border-b", ui.divider)} role="tablist">
-          {QUEUE_TABS.map((tab) => {
-            const count = (itemsByTab[tab.id] || []).length;
-            const active = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setActiveTab(tab.id)}
-                className={cx(
-                  "flex-1 rounded-md px-2 py-1.5 text-[11px] font-medium transition",
-                  active
-                    ? "bg-[rgba(168,96,240,0.16)] text-[#ddd6fe]"
-                    : "text-muted-foreground hover:text-foreground hover:bg-white/5",
-                )}
-              >
-                {tab.label}
-                {count > 0 ? (
-                  <span className="ml-1 tabular-nums text-[10px] opacity-70">{count}</span>
-                ) : null}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="flex-1 overflow-auto min-h-0">
-          {items.length === 0 ? (
-            <div className="p-4 text-[11px] text-muted-foreground">No jobs in this queue.</div>
-          ) : (
-            <ul className="divide-y divide-[rgba(60,40,80,0.35)]">
-              {items.map((item, index) => (
-                <li
-                  key={item.id}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, index)}
-                  onDragOver={handleDragOver}
-                  onDrop={(e) => handleDrop(e, index)}
-                  onDragEnd={handleDragEnd}
-                  className={cx(
-                    "flex items-start gap-2 px-2 py-2.5 cursor-grab active:cursor-grabbing",
-                    draggedIndex === index && "opacity-50",
-                  )}
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="flex flex-1 flex-col min-h-0 gap-0 data-horizontal:flex-col"
+        >
+          <TabsList className="w-full shrink-0 rounded-none border-b border-border bg-transparent p-2 h-auto gap-1">
+            {QUEUE_TABS.map((tab) => {
+              const count = (itemsByTab[tab.id] || []).length;
+              return (
+                <TabsTrigger
+                  key={tab.id}
+                  value={tab.id}
+                  className="flex-1 rounded-md px-2 py-1.5 text-[11px] data-active:bg-[rgba(168,96,240,0.16)] data-active:text-[#ddd6fe]"
                 >
-                  <span className="mt-0.5 shrink-0 text-muted-foreground">
-                    <DragHandleIcon />
-                  </span>
-                  <div className="min-w-0 flex-1 space-y-1.5">
-                    <div className="truncate text-[11px] font-medium text-violet-300">
-                      {item.strategyName} {item.version}
-                      <span className="text-muted-foreground font-normal">
-                        {" · "}
-                        {item.stageName || "—"}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-                      <QueueStatusBadge status={item.status || "Queued"} />
-                      {isQueueInProgress(item.status) ? (
-                        <EtaProgress eta={item.estimationTime} progress={item.progress} />
-                      ) : null}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => onRemove?.(activeTab, item.id)}
-                    aria-label="Remove from queue"
-                    className="shrink-0 mt-0.5 text-muted-foreground hover:text-foreground"
-                  >
-                    <TrashIcon />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
-    </>
+                  {tab.label}
+                  {count > 0 ? (
+                    <span className="ml-1 tabular-nums text-[10px] opacity-70">{count}</span>
+                  ) : null}
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+
+          {QUEUE_TABS.map((tab) => (
+            <TabsContent
+              key={tab.id}
+              value={tab.id}
+              className="flex-1 overflow-auto min-h-0 mt-0"
+            >
+              <QueueList
+                items={itemsByTab[tab.id] || []}
+                tabId={tab.id}
+                {...listProps}
+              />
+            </TabsContent>
+          ))}
+        </Tabs>
+      </SheetContent>
+    </Sheet>
   );
 });

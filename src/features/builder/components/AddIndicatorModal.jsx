@@ -1,5 +1,7 @@
 import React, { memo, useEffect, useState } from "react";
 import { cx, ui } from "../../../constants/ui";
+import { AppButton } from "../../../components/common/AppButton";
+import { AppDialog } from "../../../components/common/AppDialog";
 import { BASE_INDICATORS, SOURCE_OPTIONS } from "../../../constants/indicators";
 import { getDefaultDisplayName } from "../utils/indicatorHelpers";
 
@@ -51,22 +53,15 @@ export const AddIndicatorModal = memo(({ onClose, onAdd, initialType = "RSI" }) 
   };
 
   return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/70 px-4">
-      <div
-        className={cx(
-          "w-full max-w-3xl max-h-[90vh] overflow-auto",
-          ui.radius,
-          ui.panel,
-          ui.shadow,
-          "p-6 space-y-4"
-        )}
-      >
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-[#f5f5f5]">Add Indicator</h2>
-          <button className={cx(ui.btn, "px-2 py-1")} onClick={onClose}>
-            ✕
-          </button>
-        </div>
+    <AppDialog
+      open
+      onOpenChange={(next) => {
+        if (!next) onClose?.();
+      }}
+      title="Add Indicator"
+      className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col"
+    >
+      <div className="space-y-4 overflow-auto max-h-[min(70vh,640px)]">
         <div>
           <label className={cx("block mb-1 text-xs font-medium text-[#d9d9d9]")}>Display Name</label>
           <input
@@ -184,15 +179,15 @@ export const AddIndicatorModal = memo(({ onClose, onAdd, initialType = "RSI" }) 
             )}
           </div>
         </details>
-        <div className="flex justify-end gap-2 pt-2">
-          <button onClick={onClose} className={ui.btn}>
-            Cancel
-          </button>
-          <button onClick={handleAdd} className={ui.btnPrimary}>
-            Add Indicator
-          </button>
-        </div>
       </div>
-    </div>
+      <div className="flex justify-end gap-2 pt-2">
+        <AppButton type="button" variant="outline" size="sm" onClick={onClose}>
+          Cancel
+        </AppButton>
+        <AppButton type="button" variant="default" size="sm" onClick={handleAdd}>
+          Add Indicator
+        </AppButton>
+      </div>
+    </AppDialog>
   );
 });

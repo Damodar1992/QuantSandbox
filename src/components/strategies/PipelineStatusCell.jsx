@@ -1,6 +1,7 @@
 import React, { memo, useMemo } from "react";
 import { cx } from "../../constants/ui";
-import { crmAccent, crmSurface } from "../../constants/crmAccent";
+import { crmAccent } from "../../constants/crmAccent";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const STATUS_STYLES = {
   Completed: `${crmAccent.bg} ${crmAccent.textStrong} ${crmAccent.border}`,
@@ -38,26 +39,18 @@ export const PipelineStatusCell = memo(function PipelineStatusCell({ pipeline })
     return <span className="text-[12px] text-muted-foreground">—</span>;
   }
 
-  const hasTooltip = Boolean(tooltip);
+  const badge = <StatusBadge status={pipeline.status} />;
+
+  if (!tooltip) return badge;
 
   return (
-    <span className={cx("relative inline-flex", hasTooltip && "group cursor-default")}>
-      <StatusBadge status={pipeline.status} />
-      {hasTooltip && (
-        <span
-          role="tooltip"
-          className={cx(
-            "pointer-events-none absolute left-0 bottom-full z-[100] mb-1.5 min-w-[10rem]",
-            "rounded-md border px-2.5 py-2 text-[11px] leading-relaxed shadow-lg",
-            crmSurface.border,
-            "bg-secondary text-foreground",
-            "whitespace-pre-line opacity-0 transition-opacity duration-150",
-            "group-hover:opacity-100",
-          )}
-        >
-          {tooltip}
-        </span>
-      )}
-    </span>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex cursor-default">{badge}</span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="whitespace-pre-line">
+        {tooltip}
+      </TooltipContent>
+    </Tooltip>
   );
 });

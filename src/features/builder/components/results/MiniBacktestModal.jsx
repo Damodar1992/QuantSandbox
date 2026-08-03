@@ -1,7 +1,5 @@
 import React, { memo, useState, useCallback, useEffect, useMemo } from "react";
-import { createPortal } from "react-dom";
 import { cx, ui } from "../../../../constants/ui";
-import { crmSurface } from "../../../../constants/crmAccent";
 import {
   MINI_BACKTEST_DEFAULTS,
   MINI_BACKTEST_LABELS,
@@ -15,6 +13,7 @@ import { runMiniBacktest, hashParams } from "../../utils/miniBacktestEngine";
 import { getStageLabel } from "../../utils/stageSelect";
 import { buildMiniBacktestLaunchContext } from "../../utils/miniBacktestDisplay";
 import { AppButton } from "../../../../components/common/AppButton";
+import { AppDialog } from "../../../../components/common/AppDialog";
 
 const INPUT_CLS = cx(ui.input, "h-8 px-2.5 text-[12px] w-full min-w-0");
 const LABEL_CLS = "text-[10px] text-[#8c8c8c] leading-snug mb-1 block";
@@ -260,208 +259,186 @@ export const MiniBacktestModal = memo(function MiniBacktestModal({
     resolvedMarketType,
   ]);
 
-  if (!open) return null;
-
-  return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-
-      <div
-        className={cx(
-          "relative z-10 w-full max-w-lg rounded-lg border shadow-xl max-h-[90vh] flex flex-col",
-          crmSurface.border,
-          crmSurface.input,
-        )}
-      >
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#303030] shrink-0 bg-[#13131f]">
-          <div>
-            <div className="text-[13px] font-semibold text-[#f5f5f5]">
-              MiniBacktest for epoch #{epochNumber ?? "—"}
-            </div>
-            <div className="text-[10px] text-[#8c8c8c] mt-0.5">Configure trading conditions for this epoch</div>
+  return (
+    <AppDialog
+      open={!!open}
+      onOpenChange={(next) => {
+        if (!next) onClose?.();
+      }}
+      title={`MiniBacktest for epoch #${epochNumber ?? "—"}`}
+      description="Configure trading conditions for this epoch"
+      className="max-w-lg max-h-[90vh] overflow-hidden flex flex-col"
+    >
+      <div className="space-y-3 overflow-y-auto flex-1 min-h-0">
+        <SectionCard title="Account & Reserve">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label={MINI_BACKTEST_LABELS.initialBalance} unit={MINI_BACKTEST_UNITS.initialBalance}>
+              <NumberInput
+                value={params.initialBalance}
+                onChange={(v) => updateParam("initialBalance", v)}
+                min={1}
+                placeholder="e.g. 100000"
+              />
+            </Field>
+            <Field label={MINI_BACKTEST_LABELS.reservedPct} unit={MINI_BACKTEST_UNITS.reservedPct}>
+              <NumberInput
+                value={params.reservedPct}
+                onChange={(v) => updateParam("reservedPct", v)}
+                min={0}
+                placeholder="e.g. 10"
+              />
+            </Field>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-[#8c8c8c] hover:text-[#d9d9d9] text-[18px] leading-none p-1"
-            aria-label="Close"
-          >
-            ✕
-          </button>
-        </div>
+        </SectionCard>
 
-        <div className="p-3 space-y-3 overflow-y-auto flex-1 min-h-0">
-          <SectionCard title="Account & Reserve">
+        <SectionCard title="Position Sizing">
+          <Field label={MINI_BACKTEST_LABELS.stakeMode}>
+            <SegmentedControl
+              name="stakeMode"
+              options={MINI_BACKTEST_STAKE_MODES}
+              value={params.stakeMode}
+              onChange={(v) => updateParam("stakeMode", v)}
+            />
+          </Field>
+          {params.stakeMode === "fixed" ? (
+            <Field label={MINI_BACKTEST_LABELS.fixedStakeAmount} unit={MINI_BACKTEST_UNITS.fixedStakeAmount}>
+              <NumberInput
+                value={params.fixedStakeAmount}
+                onChange={(v) => updateParam("fixedStakeAmount", v)}
+                min={1}
+                placeholder="e.g. 5000"
+              />
+            </Field>
+          ) : (
+            <Field label={MINI_BACKTEST_LABELS.relativeStakeAmount} unit={MINI_BACKTEST_UNITS.relativeStakeAmount}>
+              <NumberInput
+                value={params.relativeStakeAmount}
+                onChange={(v) => updateParam("relativeStakeAmount", v)}
+                min={0.1}
+                step={0.5}
+                placeholder="e.g. 10"
+              />
+            </Field>
+          )}
+        </SectionCard>
+
+        <SectionCard title="Fee Type">
+          <Field label={MINI_BACKTEST_LABELS.orderType}>
+            <SegmentedControl
+              name="orderType"
+              options={MINI_BACKTEST_ORDER_TYPES}
+              value={params.orderType}
+              onChange={(v) => updateParam("orderType", v)}
+            />
+          </Field>
+          {params.orderType === "taker" ? (
             <div className="grid grid-cols-2 gap-3">
-              <Field label={MINI_BACKTEST_LABELS.initialBalance} unit={MINI_BACKTEST_UNITS.initialBalance}>
+              <Field label={MINI_BACKTEST_LABELS.feeTaker} unit="% / side">
                 <NumberInput
-                  value={params.initialBalance}
-                  onChange={(v) => updateParam("initialBalance", v)}
-                  min={1}
-                  placeholder="e.g. 100000"
-                />
-              </Field>
-              <Field label={MINI_BACKTEST_LABELS.reservedPct} unit={MINI_BACKTEST_UNITS.reservedPct}>
-                <NumberInput
-                  value={params.reservedPct}
-                  onChange={(v) => updateParam("reservedPct", v)}
-                  min={0}
-                  placeholder="e.g. 10"
-                />
-              </Field>
-            </div>
-          </SectionCard>
-
-          <SectionCard title="Position Sizing">
-            <Field label={MINI_BACKTEST_LABELS.stakeMode}>
-              <SegmentedControl
-                name="stakeMode"
-                options={MINI_BACKTEST_STAKE_MODES}
-                value={params.stakeMode}
-                onChange={(v) => updateParam("stakeMode", v)}
-              />
-            </Field>
-            {params.stakeMode === "fixed" ? (
-              <Field label={MINI_BACKTEST_LABELS.fixedStakeAmount} unit={MINI_BACKTEST_UNITS.fixedStakeAmount}>
-                <NumberInput
-                  value={params.fixedStakeAmount}
-                  onChange={(v) => updateParam("fixedStakeAmount", v)}
-                  min={1}
-                  placeholder="e.g. 5000"
-                />
-              </Field>
-            ) : (
-              <Field label={MINI_BACKTEST_LABELS.relativeStakeAmount} unit={MINI_BACKTEST_UNITS.relativeStakeAmount}>
-                <NumberInput
-                  value={params.relativeStakeAmount}
-                  onChange={(v) => updateParam("relativeStakeAmount", v)}
-                  min={0.1}
-                  step={0.5}
-                  placeholder="e.g. 10"
-                />
-              </Field>
-            )}
-          </SectionCard>
-
-          <SectionCard title="Fee Type">
-            <Field label={MINI_BACKTEST_LABELS.orderType}>
-              <SegmentedControl
-                name="orderType"
-                options={MINI_BACKTEST_ORDER_TYPES}
-                value={params.orderType}
-                onChange={(v) => updateParam("orderType", v)}
-              />
-            </Field>
-            {params.orderType === "taker" ? (
-              <div className="grid grid-cols-2 gap-3">
-                <Field label={MINI_BACKTEST_LABELS.feeTaker} unit="% / side">
-                  <NumberInput
-                    value={params.feeTaker}
-                    onChange={(v) => updateParam("feeTaker", v)}
-                    min={0}
-                    step={0.01}
-                    placeholder="0.10"
-                  />
-                </Field>
-                <Field label={MINI_BACKTEST_LABELS.slippage} unit="% / side">
-                  <NumberInput
-                    value={params.slippage}
-                    onChange={(v) => updateParam("slippage", v)}
-                    min={0}
-                    step={0.01}
-                    placeholder="0.05"
-                  />
-                </Field>
-              </div>
-            ) : (
-              <Field label={MINI_BACKTEST_LABELS.feeMaker} unit="% / side" hint="Maker: no slippage">
-                <NumberInput
-                  value={params.feeMaker}
-                  onChange={(v) => updateParam("feeMaker", v)}
+                  value={params.feeTaker}
+                  onChange={(v) => updateParam("feeTaker", v)}
                   min={0}
                   step={0.01}
-                  placeholder="0.02"
+                  placeholder="0.10"
                 />
               </Field>
-            )}
-          </SectionCard>
-
-          <SectionCard title="Risk Control">
-            <Field label={MINI_BACKTEST_LABELS.stopoutMode}>
-              <SegmentedControl
-                name="stopoutMode"
-                options={MINI_BACKTEST_STOPOUT_MODES}
-                value={params.stopoutMode}
-                onChange={(v) => updateParam("stopoutMode", v)}
-              />
-            </Field>
-            <Field
-              label="Stopout floor"
-              unit={params.stopoutMode === "amount" ? "USDT · empty = off" : "% of start · empty = off"}
-            >
+              <Field label={MINI_BACKTEST_LABELS.slippage} unit="% / side">
+                <NumberInput
+                  value={params.slippage}
+                  onChange={(v) => updateParam("slippage", v)}
+                  min={0}
+                  step={0.01}
+                  placeholder="0.05"
+                />
+              </Field>
+            </div>
+          ) : (
+            <Field label={MINI_BACKTEST_LABELS.feeMaker} unit="% / side" hint="Maker: no slippage">
               <NumberInput
-                value={params.stopout}
-                onChange={(v) => updateParam("stopout", v)}
+                value={params.feeMaker}
+                onChange={(v) => updateParam("feeMaker", v)}
                 min={0}
-                placeholder="empty = off"
+                step={0.01}
+                placeholder="0.02"
               />
             </Field>
+          )}
+        </SectionCard>
+
+        <SectionCard title="Risk Control">
+          <Field label={MINI_BACKTEST_LABELS.stopoutMode}>
+            <SegmentedControl
+              name="stopoutMode"
+              options={MINI_BACKTEST_STOPOUT_MODES}
+              value={params.stopoutMode}
+              onChange={(v) => updateParam("stopoutMode", v)}
+            />
+          </Field>
+          <Field
+            label="Stopout floor"
+            unit={params.stopoutMode === "amount" ? "USDT · empty = off" : "% of start · empty = off"}
+          >
+            <NumberInput
+              value={params.stopout}
+              onChange={(v) => updateParam("stopout", v)}
+              min={0}
+              placeholder="empty = off"
+            />
+          </Field>
+        </SectionCard>
+
+        {resolvedMarketType === "futures" ? (
+          <SectionCard title="Futures conditions">
+            <div className="grid grid-cols-3 gap-3">
+              <Field
+                inputAlign
+                label={MINI_BACKTEST_LABELS.leverage}
+                unit={MINI_BACKTEST_UNITS.leverage}
+              >
+                <NumberInput
+                  value={params.leverage}
+                  onChange={(v) => updateParam("leverage", v)}
+                  min={1}
+                  step={1}
+                  placeholder="e.g. 5"
+                />
+              </Field>
+              <Field
+                inputAlign
+                label={MINI_BACKTEST_LABELS.maintMargin}
+                unit={MINI_BACKTEST_UNITS.maintMargin}
+              >
+                <NumberInput
+                  value={params.maintMargin}
+                  onChange={(v) => updateParam("maintMargin", v)}
+                  min={0}
+                  step={0.01}
+                  placeholder="e.g. 0.5"
+                />
+              </Field>
+              <Field
+                inputAlign
+                label="Funding"
+                unit="% / 8h, signed"
+                hint="Negative = receive funding"
+              >
+                <NumberInput
+                  value={params.fundRate}
+                  onChange={(v) => updateParam("fundRate", v)}
+                  step={0.001}
+                  placeholder="e.g. 0.01"
+                />
+              </Field>
+            </div>
           </SectionCard>
-
-          {resolvedMarketType === "futures" ? (
-            <SectionCard title="Futures conditions">
-              <div className="grid grid-cols-3 gap-3">
-                <Field
-                  inputAlign
-                  label={MINI_BACKTEST_LABELS.leverage}
-                  unit={MINI_BACKTEST_UNITS.leverage}
-                >
-                  <NumberInput
-                    value={params.leverage}
-                    onChange={(v) => updateParam("leverage", v)}
-                    min={1}
-                    step={1}
-                    placeholder="e.g. 5"
-                  />
-                </Field>
-                <Field
-                  inputAlign
-                  label={MINI_BACKTEST_LABELS.maintMargin}
-                  unit={MINI_BACKTEST_UNITS.maintMargin}
-                >
-                  <NumberInput
-                    value={params.maintMargin}
-                    onChange={(v) => updateParam("maintMargin", v)}
-                    min={0}
-                    step={0.01}
-                    placeholder="e.g. 0.5"
-                  />
-                </Field>
-                <Field
-                  inputAlign
-                  label="Funding"
-                  unit="% / 8h, signed"
-                  hint="Negative = receive funding"
-                >
-                  <NumberInput
-                    value={params.fundRate}
-                    onChange={(v) => updateParam("fundRate", v)}
-                    step={0.001}
-                    placeholder="e.g. 0.01"
-                  />
-                </Field>
-              </div>
-            </SectionCard>
-          ) : null}
-        </div>
-
-        <div className="flex justify-end px-4 py-3 border-t border-[#303030]/50 shrink-0 bg-[#13131f]">
-          <AppButton type="button" variant="default" size="sm" onClick={handleRun} disabled={running}>
-            {running ? "Running..." : "Run Mini Backtest"}
-          </AppButton>
-        </div>
+        ) : null}
       </div>
-    </div>,
-    document.body,
+
+      <div className="flex justify-end pt-2">
+        <AppButton type="button" variant="default" size="sm" onClick={handleRun} disabled={running}>
+          {running ? "Running..." : "Run Mini Backtest"}
+        </AppButton>
+      </div>
+    </AppDialog>
   );
 });

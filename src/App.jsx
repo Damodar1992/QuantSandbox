@@ -11,7 +11,9 @@ import {
   INITIAL_HYPEROPT_RESULTS_ROWS,
   MOCK_CURRENT_USER,
 } from "./constants/tags";
-import { Logo, Badge, MoreIcon, EyeIcon, MenuIcon, ModalShell } from "./components/common";
+import { Logo, Badge, MoreIcon, EyeIcon, MenuIcon, ModalShell, AppInput, AppSelect } from "./components/common";
+import { AppDialog } from "./components/common/AppDialog";
+import { AppButton } from "./components/common/AppButton";
 import { LoginScreen, ForgotPasswordModal } from "./components/auth";
 import { BuilderStepsSidebar } from "./components/prod";
 import { CreateStrategyModal, EditDescriptionModal, StrategyRow } from "./components/strategies";
@@ -19,7 +21,13 @@ import { UserActionsMenu, CreateUserModal, EditUserModal, ChangePasswordModal, R
 import { IndicatorActionsMenu, AddIndicatorPageModal } from "./components/indicators";
 import { MiniBacktestGlobalPage, MiniBacktestPage } from "./features/builder/components";
 import { FormulaActionsMenu } from "./components/formulas";
-import { useOutsideClose } from "./hooks/useOutsideClose";
+import { TagMultiSelect } from "./components/common/TagMultiSelect";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { BASE_INDICATORS } from "./constants/indicators";
 const MiniBacktestModal = lazy(() =>
   import("./features/builder/components/results/MiniBacktestModal").then((m) => ({
@@ -160,8 +168,6 @@ export default function App() {
     },
   ]);
   const [showAddIndicatorPage, setShowAddIndicatorPage] = useState(false);
-  // Detail view
-  const [actionsDropdownOpen, setActionsDropdownOpen] = useState(false);
 
   // Strategy detail tabs
   const [activeStrategyTab, setActiveStrategyTab] = useState("builder");
@@ -192,13 +198,9 @@ export default function App() {
   const [miniBacktestTagsModalEntryId, setMiniBacktestTagsModalEntryId] = useState(null);
   const [miniBacktestTagsDraft, setMiniBacktestTagsDraft] = useState({ tagIds: [], tagInput: "" });
   const [strategyTagFilter, setStrategyTagFilter] = useState([]);
-  const [strategyTagFilterOpen, setStrategyTagFilterOpen] = useState(false);
-  const strategyTagFilterRef = useOutsideClose(strategyTagFilterOpen, () => setStrategyTagFilterOpen(false));
   const [strategyTagsModalId, setStrategyTagsModalId] = useState(null);
   const [strategyTagsDraft, setStrategyTagsDraft] = useState({ tagIds: [], tagInput: "" });
   const [indicatorTagFilter, setIndicatorTagFilter] = useState([]);
-  const [indicatorTagFilterOpen, setIndicatorTagFilterOpen] = useState(false);
-  const indicatorTagFilterRef = useOutsideClose(indicatorTagFilterOpen, () => setIndicatorTagFilterOpen(false));
   const [indicatorTagsModalKey, setIndicatorTagsModalKey] = useState(null);
   const [indicatorTagsDraft, setIndicatorTagsDraft] = useState({ tagIds: [], tagInput: "" });
 
@@ -880,9 +882,13 @@ export default function App() {
     () => getAvailableTagIdsForFilter(strategies, tagsRegistry, currentUserRole, MOCK_CURRENT_USER.id),
     [strategies, tagsRegistry, currentUserRole],
   );
-  const activeStrategyTagNames = useMemo(
-    () => resolveTagNames(strategyTagFilter, tagsRegistry),
-    [strategyTagFilter, tagsRegistry],
+  const strategyTagFilterOptions = useMemo(
+    () =>
+      strategyAvailableTagIds.map((tagId) => ({
+        value: tagId,
+        label: tagsRegistry.find((tag) => tag.id === tagId)?.name || tagId,
+      })),
+    [strategyAvailableTagIds, tagsRegistry],
   );
 
   const filteredPageIndicators = useMemo(() => {
@@ -896,9 +902,13 @@ export default function App() {
     () => getAvailableTagIdsForFilter(pageIndicators, tagsRegistry, currentUserRole, MOCK_CURRENT_USER.id),
     [pageIndicators, tagsRegistry, currentUserRole],
   );
-  const activeIndicatorTagNames = useMemo(
-    () => resolveTagNames(indicatorTagFilter, tagsRegistry),
-    [indicatorTagFilter, tagsRegistry],
+  const indicatorTagFilterOptions = useMemo(
+    () =>
+      indicatorAvailableTagIds.map((tagId) => ({
+        value: tagId,
+        label: tagsRegistry.find((tag) => tag.id === tagId)?.name || tagId,
+      })),
+    [indicatorAvailableTagIds, tagsRegistry],
   );
 
   const indicatorTagIdsByKey = useMemo(
@@ -1219,30 +1229,30 @@ export default function App() {
           </div>
 
           {activeSection === "Strategies" && !selectedStrategy && (
-            <button onClick={() => setShowCreate(true)} className={ui.btnPrimary}>
+            <AppButton onClick={() => setShowCreate(true)} variant="default">
               + Add strategy
-            </button>
+            </AppButton>
           )}
 
           {activeSection === "Users" && (
-            <button onClick={handleOpenCreateUser} className={ui.btnPrimary}>
+            <AppButton onClick={handleOpenCreateUser} variant="default">
               + Create user
-            </button>
+            </AppButton>
           )}
           {activeSection === "Settings" && settingsSubSection === "indicators" && (
-            <button onClick={() => setShowAddIndicatorPage(true)} className={ui.btnPrimary}>
+            <AppButton onClick={() => setShowAddIndicatorPage(true)} variant="default">
               Add indicator
-            </button>
+            </AppButton>
           )}
           {formulasEnabled && activeSection === "Settings" && settingsSubSection === "formulas" && (
-            <button onClick={handleOpenAddFormula} className={ui.btnPrimary}>
+            <AppButton onClick={handleOpenAddFormula} variant="default">
               Add Formula
-            </button>
+            </AppButton>
           )}
           {activeSection === "ReleaseNotes" && (
-            <button onClick={handleOpenAddReleaseNote} className={ui.btnPrimary}>
+            <AppButton onClick={handleOpenAddReleaseNote} variant="default">
               Add notes
-            </button>
+            </AppButton>
           )}
         </div>
         )}
@@ -1256,85 +1266,49 @@ export default function App() {
               </div>
 
               <div className="ml-auto flex items-center gap-3">
-                <input
+                <AppInput
                   value={filterName}
                   onChange={(e) => setFilterName(e.target.value)}
-                  className={cx(ui.input, "h-8 w-64 text-[12px]")}
+                  wrapperClassName="w-64"
+                  className="h-8 text-[12px]"
                   placeholder="Search strategy..."
                 />
 
-                <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className={ui.select}>
-                  <option value="All">All statuses</option>
-                  <option value="Draft">Draft</option>
-                  <option value="Not Verified">Not Verified</option>
-                  <option value="Published">Published</option>
-                  <option value="Deactivated">Deactivated</option>
-                </select>
+                <AppSelect
+                  value={filterStatus}
+                  onValueChange={setFilterStatus}
+                  options={[
+                    { value: "All", label: "All statuses" },
+                    { value: "Draft", label: "Draft" },
+                    { value: "Not Verified", label: "Not Verified" },
+                    { value: "Published", label: "Published" },
+                    { value: "Deactivated", label: "Deactivated" },
+                  ]}
+                  className="w-[140px]"
+                  triggerClassName="h-8 text-[12px]"
+                  aria-label="Filter by status"
+                />
 
                 {currentUserRole === "Admin" && (
-                  <select value={filterOwner} onChange={(e) => setFilterOwner(e.target.value)} className={ui.select}>
-                    <option value="All">All owners</option>
-                    {owners.map((o) => (
-                      <option key={o} value={o}>
-                        {o}
-                      </option>
-                    ))}
-                  </select>
+                  <AppSelect
+                    value={filterOwner}
+                    onValueChange={setFilterOwner}
+                    options={[
+                      { value: "All", label: "All owners" },
+                      ...owners.map((o) => ({ value: o, label: o })),
+                    ]}
+                    className="w-[140px]"
+                    triggerClassName="h-8 text-[12px]"
+                    aria-label="Filter by owner"
+                  />
                 )}
 
-                <div className="relative" ref={strategyTagFilterRef}>
-                  <button
-                    type="button"
-                    onClick={() => setStrategyTagFilterOpen((prev) => !prev)}
-                    className={cx(
-                      ui.input,
-                      "h-8 min-w-[160px] px-2.5 text-[12px] inline-flex items-center justify-between gap-2",
-                    )}
-                    aria-expanded={strategyTagFilterOpen}
-                  >
-                    <span className="truncate text-left">
-                      {activeStrategyTagNames.length === 0
-                        ? "Tags: All"
-                        : `Tags: ${activeStrategyTagNames.join(", ")}`}
-                    </span>
-                    <span className="text-[#8c8c8c]">{strategyTagFilterOpen ? "▲" : "▼"}</span>
-                  </button>
-                  {strategyTagFilterOpen && (
-                    <div className="absolute right-0 z-30 mt-1 w-[220px] rounded-md border border-[#303030] bg-[#0f0f0f] shadow-lg p-1.5 space-y-1">
-                      <button
-                        type="button"
-                        onClick={() => setStrategyTagFilter([])}
-                        className="w-full h-7 px-2 rounded text-left text-[11px] text-[#d9d9d9] hover:bg-[#1a1a1a]"
-                      >
-                        All
-                      </button>
-                      {strategyAvailableTagIds.map((tagId) => {
-                        const tagName = tagsRegistry.find((tag) => tag.id === tagId)?.name || tagId;
-                        const checked = strategyTagFilter.includes(tagId);
-                        return (
-                          <label
-                            key={tagId}
-                            className="flex items-center gap-2 h-7 px-2 rounded text-[11px] text-[#d9d9d9] hover:bg-[#1a1a1a] cursor-pointer"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() =>
-                                setStrategyTagFilter((prev) =>
-                                  prev.includes(tagId)
-                                    ? prev.filter((item) => item !== tagId)
-                                    : [...prev, tagId],
-                                )
-                              }
-                              className="h-3 w-3 accent-emerald-500"
-                            />
-                            <span className="truncate">{tagName}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+                <TagMultiSelect
+                  options={strategyTagFilterOptions}
+                  value={strategyTagFilter}
+                  onChange={setStrategyTagFilter}
+                  align="end"
+                />
               </div>
             </div>
 
@@ -1414,37 +1388,27 @@ export default function App() {
                 </div>
               </div>
 
-              <div
-                className="relative"
-                onMouseEnter={() => setActionsDropdownOpen(true)}
-                onMouseLeave={() => setActionsDropdownOpen(false)}
-              >
-                <button type="button" className={ui.btnPrimary} aria-haspopup="true" aria-expanded={actionsDropdownOpen}>
-                  Actions
-                </button>
-                {actionsDropdownOpen && (
-                  <div
-                    className={cx(
-                      "absolute right-0 top-full z-50 mt-1 min-w-[180px] rounded-md border py-1 shadow-lg border-[rgba(60,40,80,0.5)] bg-[#170f29]",
-                    )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button type="button" className={ui.btnPrimary} aria-haspopup="true">
+                    Actions
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[180px]">
+                  <DropdownMenuItem
+                    className="text-[12px]"
+                    onClick={() => alert("Create new version (mock)")}
                   >
-                    <button
-                      type="button"
-                      onClick={() => { alert("Create new version (mock)"); setActionsDropdownOpen(false); }}
-                      className="block w-full px-3 py-2 text-left text-[12px] text-[#d9d9d9] hover:bg-secondary"
-                    >
-                      Create new version
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { alert("Duplicate strategy (mock)"); setActionsDropdownOpen(false); }}
-                      className="block w-full px-3 py-2 text-left text-[12px] text-[#d9d9d9] hover:bg-secondary"
-                    >
-                      Duplicate strategy
-                    </button>
-                  </div>
-                )}
-              </div>
+                    Create new version
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="text-[12px]"
+                    onClick={() => alert("Duplicate strategy (mock)")}
+                  >
+                    Duplicate strategy
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
 
             {/* Strategy tabs */}
@@ -1673,59 +1637,12 @@ export default function App() {
                 <div className={cx("text-[11px]", ui.textMuted)}>Indicator library (mock).</div>
               </div>
               <div className="flex items-center gap-3">
-                <div className="relative" ref={indicatorTagFilterRef}>
-                  <button
-                    type="button"
-                    onClick={() => setIndicatorTagFilterOpen((prev) => !prev)}
-                    className={cx(
-                      ui.input,
-                      "h-8 min-w-[160px] px-2.5 text-[12px] inline-flex items-center justify-between gap-2",
-                    )}
-                    aria-expanded={indicatorTagFilterOpen}
-                  >
-                    <span className="truncate text-left">
-                      {activeIndicatorTagNames.length === 0
-                        ? "Tags: All"
-                        : `Tags: ${activeIndicatorTagNames.join(", ")}`}
-                    </span>
-                    <span className="text-[#8c8c8c]">{indicatorTagFilterOpen ? "▲" : "▼"}</span>
-                  </button>
-                  {indicatorTagFilterOpen && (
-                    <div className="absolute right-0 z-30 mt-1 w-[220px] rounded-md border border-[#303030] bg-[#0f0f0f] shadow-lg p-1.5 space-y-1">
-                      <button
-                        type="button"
-                        onClick={() => setIndicatorTagFilter([])}
-                        className="w-full h-7 px-2 rounded text-left text-[11px] text-[#d9d9d9] hover:bg-[#1a1a1a]"
-                      >
-                        All
-                      </button>
-                      {indicatorAvailableTagIds.map((tagId) => {
-                        const tagName = tagsRegistry.find((tag) => tag.id === tagId)?.name || tagId;
-                        const checked = indicatorTagFilter.includes(tagId);
-                        return (
-                          <label
-                            key={tagId}
-                            className="flex items-center gap-2 h-7 px-2 rounded text-[11px] text-[#d9d9d9] hover:bg-[#1a1a1a] cursor-pointer"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() =>
-                                setIndicatorTagFilter((prev) =>
-                                  prev.includes(tagId)
-                                    ? prev.filter((item) => item !== tagId)
-                                    : [...prev, tagId],
-                                )
-                              }
-                              className="h-3 w-3 accent-emerald-500"
-                            />
-                            <span className="truncate">{tagName}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+                <TagMultiSelect
+                  options={indicatorTagFilterOptions}
+                  value={indicatorTagFilter}
+                  onChange={setIndicatorTagFilter}
+                  align="end"
+                />
                 <span className="rounded-md border border-[#303030] bg-[#0f0f0f] px-2 py-0.5 text-[10px] text-[#8c8c8c]">
                   {filteredPageIndicators.length} indicators
                 </span>
@@ -1939,14 +1856,15 @@ export default function App() {
         />
       )}
 
-      {showFormulaModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={() => setShowFormulaModal(false)}>
-          <div className={cx(ui.radius, "bg-[#141414] border border-[#303030] max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col shadow-xl")} onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#303030]">
-              <span className="text-[14px] font-medium text-[#d9d9d9]">{formulaEditingId != null ? "Edit Formula" : "Add Formula"}</span>
-              <button type="button" onClick={() => setShowFormulaModal(false)} className="text-[#8c8c8c] hover:text-[#d9d9d9] p-1">✕</button>
-            </div>
-            <div className="overflow-auto p-4 space-y-4">
+      <AppDialog
+        open={showFormulaModal}
+        onOpenChange={(next) => {
+          if (!next) setShowFormulaModal(false);
+        }}
+        title={formulaEditingId != null ? "Edit Formula" : "Add Formula"}
+        className="max-w-lg max-h-[90vh] overflow-hidden flex flex-col"
+      >
+            <div className="overflow-auto space-y-4 max-h-[min(70vh,560px)]">
               <div>
                 <label className={cx("block mb-1 text-xs", ui.textMuted)}>Name</label>
                 <input type="text" value={formulaDraft.name ?? ""} onChange={(e) => setFormulaDraft((d) => ({ ...d, name: e.target.value }))} placeholder="Formula name" className={cx(ui.input, "h-9 text-[12px] w-full")} />
@@ -2060,13 +1978,11 @@ export default function App() {
                 </div>
               </div>
             </div>
-            <div className="px-4 py-3 border-t border-[#303030] flex justify-end gap-2">
-              <button type="button" onClick={() => setShowFormulaModal(false)} className={cx(ui.btn, "h-8 px-3 text-[11px]")}>Cancel</button>
-              <button type="button" onClick={handleSaveFormula} className={cx(ui.btnPrimary, "h-8 px-3 text-[11px]")}>Save</button>
+            <div className="flex justify-end gap-2 pt-2">
+              <AppButton type="button" variant="outline" size="sm" onClick={() => setShowFormulaModal(false)}>Cancel</AppButton>
+              <AppButton type="button" variant="default" size="sm" onClick={handleSaveFormula}>Save</AppButton>
             </div>
-          </div>
-        </div>
-      )}
+      </AppDialog>
 
       {/* Mini Backtest Modal (lazy-loaded) */}
       {miniBacktestModalOpen && miniBacktestModalEpoch && (

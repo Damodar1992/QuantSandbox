@@ -1,6 +1,7 @@
-import React, { memo, useState } from "react";
+import React, { memo } from "react";
 import { cx, ui } from "../../constants/ui";
-import { useOutsideClose } from "../../hooks/useOutsideClose";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Switch } from "@/components/ui/switch";
 import { setFeatureFlag } from "../../constants/featureFlags";
 
 const FEATURES = [
@@ -12,70 +13,46 @@ export const FeatureFlagsDropdown = memo(function FeatureFlagsDropdown({
   flags = {},
   onFlagChange,
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useOutsideClose(open, () => setOpen(false));
-
-  const handleToggle = (key) => {
-    const newValue = !flags[key];
-    setFeatureFlag(key, newValue);
-    onFlagChange?.(key, newValue);
+  const handleToggle = (key, next) => {
+    setFeatureFlag(key, next);
+    onFlagChange?.(key, next);
   };
 
   return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={cx(
-          ui.input,
-          "h-10 px-2.5 text-[12px] flex items-center gap-1.5 min-w-[80px]",
-          open && "ring-1 ring-border"
-        )}
-        title="Feature flags"
-        aria-label="Feature flags"
-        aria-expanded={open}
-      >
-        <span className="text-[13px]">⚙</span>
-        <span>Features</span>
-      </button>
-
-      {open && (
-        <div
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
           className={cx(
-            "absolute right-0 top-full mt-1 z-50 w-56 rounded-md border bg-popover p-1 shadow-md",
-            ui.border,
+            ui.input,
+            "h-10 px-2.5 text-[12px] flex items-center gap-1.5 min-w-[80px] w-auto",
           )}
-          role="menu"
+          title="Feature flags"
+          aria-label="Feature flags"
         >
-          {FEATURES.map((feature) => {
-            const checked = Boolean(flags[feature.key]);
-            return (
-              <div
-                key={feature.key}
-                role="menuitemcheckbox"
-                aria-checked={checked}
-                className="flex items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-[12px] hover:bg-accent cursor-pointer"
-                onClick={() => handleToggle(feature.key)}
-              >
-                <span className="text-foreground">{feature.label}</span>
-                <span
-                  className={cx(
-                    "relative inline-flex h-4 w-7 items-center rounded-full transition-colors",
-                    checked ? "bg-emerald-500" : "bg-[#303030]"
-                  )}
-                >
-                  <span
-                    className={cx(
-                      "inline-block h-3 w-3 rounded-full bg-white transition-transform",
-                      checked ? "translate-x-3.5" : "translate-x-0.5"
-                    )}
-                  />
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
+          <span className="text-[13px]">⚙</span>
+          <span>Features</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-56 gap-0 p-1">
+        {FEATURES.map((feature) => {
+          const checked = Boolean(flags[feature.key]);
+          return (
+            <div
+              key={feature.key}
+              className="flex items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-[12px] hover:bg-accent"
+            >
+              <span className="text-foreground">{feature.label}</span>
+              <Switch
+                size="sm"
+                checked={checked}
+                onCheckedChange={(next) => handleToggle(feature.key, next)}
+                aria-label={feature.label}
+              />
+            </div>
+          );
+        })}
+      </PopoverContent>
+    </Popover>
   );
 });
