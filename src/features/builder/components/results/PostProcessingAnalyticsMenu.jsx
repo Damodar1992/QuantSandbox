@@ -16,8 +16,10 @@ export const PostProcessingAnalyticsMenu = memo(function PostProcessingAnalytics
   onGenerateTopKReport,
   onAddTruncate,
   onRangeNarrowing,
+  onComparisonWidget,
   showAddTruncate = true,
   showRangeNarrowing = true,
+  showComparisonWidget = true,
   className,
 }) {
   return (
@@ -47,6 +49,11 @@ export const PostProcessingAnalyticsMenu = memo(function PostProcessingAnalytics
             </DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
+        {showComparisonWidget ? (
+          <DropdownMenuItem className="text-xs" onClick={() => onComparisonWidget?.()}>
+            Comparison widget
+          </DropdownMenuItem>
+        ) : null}
         {showRangeNarrowing ? (
           <DropdownMenuItem className="text-xs" onClick={() => onRangeNarrowing?.()}>
             Range narrowing

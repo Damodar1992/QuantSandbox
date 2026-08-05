@@ -1,6 +1,8 @@
 /** @typedef {{ indicator: string, indicatorType?: string, parameter: string, importance: number, status: "active" | "fixed", fixedValue?: number }} ImportanceRow */
 /** @typedef {{ indicator: string, indicatorType?: string, parameter: string, min?: number, max?: number, step?: number, count?: number, fixedValue?: number, status?: "active" | "fixed" }} ConfigRow */
 
+import { RANGE_NARROWING_ITEM_TYPE } from "./analyticsItems";
+
 const REFERENCE_IMPORTANCE = [
   { indicator: "bb", indicatorType: "BBANDS", parameter: "timeperiod", importance: 53.7, status: "active" },
   { indicator: "bb", indicatorType: "BBANDS", parameter: "nbdevup", importance: 4.1, status: "active" },
@@ -117,7 +119,7 @@ export function createRangeNarrowingAnalyticsItem({ subId, runConfig, date }) {
   return {
     id,
     date: date || new Date().toISOString().slice(0, 10),
-    type: "Range Narrowing",
+    type: RANGE_NARROWING_ITEM_TYPE,
     status: "Finished",
     runConfig,
     results: buildReferenceRangeNarrowingResults(runConfig, subId),
@@ -138,15 +140,10 @@ export function buildDefaultRangeNarrowingSeedItem(subId, date = "2024-01-15") {
   return {
     id: `${subId}-rn1`,
     date,
-    type: "Range Narrowing",
+    type: RANGE_NARROWING_ITEM_TYPE,
     status: "Finished",
     runConfig: { ...DEFAULT_RUN_CONFIG },
     results: buildReferenceRangeNarrowingResults(DEFAULT_RUN_CONFIG, subId),
   };
 }
 
-export function filterAnalyticsItemsForStage(items, isRiskStage) {
-  const list = Array.isArray(items) ? items : [];
-  if (!isRiskStage) return list;
-  return list.filter((item) => item.type !== "Range Narrowing");
-}

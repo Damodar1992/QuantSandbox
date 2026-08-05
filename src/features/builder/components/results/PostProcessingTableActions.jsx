@@ -12,10 +12,12 @@ export const PostProcessingTableActions = memo(function PostProcessingTableActio
   onRunMiniBacktest,
   onAddTruncate,
   onRangeNarrowing,
+  onComparisonWidget,
   miniBacktestEnabled = false,
   showEpochs = true,
   showAddTruncate = true,
   showRangeNarrowing = true,
+  showComparisonWidget = true,
   className,
 }) {
   return (
@@ -36,11 +38,13 @@ export const PostProcessingTableActions = memo(function PostProcessingTableActio
       <PostProcessingAnalyticsMenu
         showAddTruncate={showAddTruncate}
         showRangeNarrowing={showRangeNarrowing}
+        showComparisonWidget={showComparisonWidget}
         onConfigureHeatMap={onConfigureHeatMap}
         onGenerateFullReport={onGenerateFullReport}
         onGenerateTopKReport={onGenerateTopKReport}
         onAddTruncate={onAddTruncate}
         onRangeNarrowing={onRangeNarrowing}
+        onComparisonWidget={onComparisonWidget}
       />
     </div>
   );

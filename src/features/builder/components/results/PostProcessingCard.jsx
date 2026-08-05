@@ -5,7 +5,7 @@ import { HyperoptDetailsTooltip } from "../../../../components/heatmap";
 import { AppButton } from "../../../../components/common/AppButton";
 import { HeatMapIcon, FileTextIcon } from "../../../../components/shared";
 import { AnalyticsItemActions } from "./AnalyticsItemActions";
-import { filterAnalyticsItemsForStage } from "../../utils/rangeNarrowingMock";
+import { filterAnalyticsItemsForStage } from "../../utils/analyticsItems";
 import { RunStatusBadge } from "./RunStatusBadge";
 import { PostProcessingEpochMenu } from "./PostProcessingEpochMenu";
 
@@ -21,6 +21,8 @@ function AnalyticsPanel({
   onShowItemFilters,
   onShowRangeNarrowingInfo,
   onShowRangeNarrowingResults,
+  onShowComparisonWidget,
+  onShowComparisonWidgetInfo,
   showRangeNarrowing = true,
   className,
 }) {
@@ -69,6 +71,8 @@ function AnalyticsPanel({
                 onShowItemFilters={onShowItemFilters}
                 onShowRangeNarrowingInfo={onShowRangeNarrowingInfo}
                 onShowRangeNarrowingResults={onShowRangeNarrowingResults}
+                onShowComparisonWidget={onShowComparisonWidget}
+                onShowComparisonWidgetInfo={onShowComparisonWidgetInfo}
               />
             </li>
           ))}
@@ -97,14 +101,17 @@ export const PostProcessingCard = memo(function PostProcessingCard({
   onShowItemFilters,
   onShowRangeNarrowingInfo,
   onShowRangeNarrowingResults,
-  isRiskStage = false,
+  onShowComparisonWidget,
+  onShowComparisonWidgetInfo,
+  activeStage,
   rawDataDeleted = false,
 }) {
   const heatMapId = `hyperopt-${rowId}-${sub.id}`;
-  const items = filterAnalyticsItemsForStage(sub.heatmapsAndReports, isRiskStage);
+  const items = filterAnalyticsItemsForStage(sub.heatmapsAndReports, activeStage);
   const hasTrunc = !!sub.truncScores;
   const showEpochs = !rawDataDeleted;
   const showAddTruncate = !rawDataDeleted;
+  const showComparisonWidget = (item) => onShowComparisonWidget?.(sub, item);
   const [collapsed, setCollapsed] = useState(false);
   const [truncCollapsed, setTruncCollapsed] = useState(false);
 
@@ -164,6 +171,8 @@ export const PostProcessingCard = memo(function PostProcessingCard({
             onShowItemFilters={onShowItemFilters}
             onShowRangeNarrowingInfo={onShowRangeNarrowingInfo}
             onShowRangeNarrowingResults={onShowRangeNarrowingResults}
+            onShowComparisonWidget={showComparisonWidget}
+            onShowComparisonWidgetInfo={onShowComparisonWidgetInfo}
           />
 
           {showAddTruncate ? (
@@ -224,6 +233,8 @@ export const PostProcessingCard = memo(function PostProcessingCard({
                     onShowItemFilters={onShowItemFilters}
                     onShowRangeNarrowingInfo={onShowRangeNarrowingInfo}
                     onShowRangeNarrowingResults={onShowRangeNarrowingResults}
+                    onShowComparisonWidget={showComparisonWidget}
+                    onShowComparisonWidgetInfo={onShowComparisonWidgetInfo}
                     className="mx-2.5 mb-2"
                   />
                 </>

@@ -114,8 +114,12 @@ import {
   AddRangeNarrowingModal,
   RangeNarrowingReadOnlyModal,
   RangeNarrowingResultsModal,
+  ComparativeWidgetModal,
+  AddComparisonWidgetModal,
+  ComparisonWidgetReadOnlyModal,
 } from './components';
-import { applyConfigRowsToIndicators, createRangeNarrowingAnalyticsItem, filterAnalyticsItemsForStage } from './utils/rangeNarrowingMock';
+import { applyConfigRowsToIndicators, createRangeNarrowingAnalyticsItem } from './utils/rangeNarrowingMock';
+import { createComparisonWidgetAnalyticsItem, filterAnalyticsItemsForStage } from './utils/analyticsItems';
 import { getDefaultDisplayName, formatIndicatorSnapshot } from './utils/indicatorHelpers';
 import { formatHyperoptDateTime, normalizeHyperoptRunStatus, isHyperoptRawDataDeleted } from './utils/hyperoptFormatters';
 import { buildEpochFromHyperoptContext } from './utils/hyperoptEpoch';
@@ -884,6 +888,9 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
   const [rangeNarrowingContext, setRangeNarrowingContext] = useState(null);
   const [rangeNarrowingInfoItem, setRangeNarrowingInfoItem] = useState(null);
   const [rangeNarrowingResultsItem, setRangeNarrowingResultsItem] = useState(null);
+  const [comparativeWidgetContext, setComparativeWidgetContext] = useState(null);
+  const [comparisonWidgetFormContext, setComparisonWidgetFormContext] = useState(null);
+  const [comparisonWidgetInfoItem, setComparisonWidgetInfoItem] = useState(null);
   // Range Narrowing tab state
   const [normActiveTab, setNormActiveTab] = useState("stability"); // "stability" | "score" | "narrowing"
   const [rnEnabled, setRnEnabled] = useState(false);
@@ -1582,15 +1589,92 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
     setShowAddRangeNarrowingModal(true);
   }, [isRiskStage]);
 
-  const handleRunRangeNarrowing = useCallback(
-    (runConfig) => {
-      if (isRiskStage || !rangeNarrowingContext || !setHyperoptResultsRows) return;
-      const { rowId, subId } = rangeNarrowingContext;
-      const item = createRangeNarrowingAnalyticsItem({
-        subId,
-        runConfig,
-        date: new Date().toISOString().slice(0, 10),
+  /** Comparison widget: the Analytics menu only configures filters, the entry runs it later. */
+  const openComparisonWidgetForm = useCallback(
+    (rowId, subId) => {
+      if (activeStage < 2) return;
+      setComparisonWidgetFormContext({ rowId, subId });
+    },
+    [activeStage],
+  );
+
+  /** Comparison widget: current Stage comes from the Post-processing result context. */
+  const openComparativeWidget = useCallback(
+    (row, sub, item) => {
+      if (activeStage < 2) return;
+      setComparativeWidgetContext({
+        runId: `${row.id}::${sub.id}`,
+        rowId: row.id,
+        subId: sub.id,
+        itemId: item?.id ?? null,
+        strategyName,
+        timeframe: row.timeFrame ?? timeRange,
+        period: row.knowRange ?? "",
+        currentStage: activeStage,
+        createdAt: item?.date ?? "",
+        filters: item?.runConfig?.filters ?? null,
+        filterPreset: item?.runConfig?.filterPreset ?? "",
       });
+    },
+    [activeStage, strategyName, timeRange],
+  );
+
+  /** Persist live filter edits from the widget back onto the Analytics entry. */
+  const handleComparativeWidgetFiltersChange = useCallback(
+    ({ filters, filterPreset }) => {
+      setComparativeWidgetContext((prev) =>
+        prev
+          ? {
+              ...prev,
+              filters,
+              filterPreset: filterPreset || "",
+            }
+          : prev,
+      );
+
+      const rowId = comparativeWidgetContext?.rowId;
+      const subId = comparativeWidgetContext?.subId;
+      const itemId = comparativeWidgetContext?.itemId;
+      if (!setHyperoptResultsRows || !rowId || !subId || !itemId) return;
+
+      setHyperoptResultsRows((prev) =>
+        prev.map((row) => {
+          if (row.id !== rowId) return row;
+          return {
+            ...row,
+            children: (row.children || []).map((sub) => {
+              if (sub.id !== subId) return sub;
+              return {
+                ...sub,
+                heatmapsAndReports: (sub.heatmapsAndReports || []).map((item) => {
+                  if (item.id !== itemId) return item;
+                  return {
+                    ...item,
+                    runConfig: {
+                      ...(item.runConfig || {}),
+                      filters,
+                      filterPreset: filterPreset || "",
+                    },
+                  };
+                }),
+              };
+            }),
+          };
+        }),
+      );
+    },
+    [
+      comparativeWidgetContext?.itemId,
+      comparativeWidgetContext?.rowId,
+      comparativeWidgetContext?.subId,
+      setHyperoptResultsRows,
+    ],
+  );
+
+  /** Append an Analytics (level 3) entry to a single Post-processing result. */
+  const appendAnalyticsItem = useCallback(
+    (rowId, subId, item) => {
+      if (!setHyperoptResultsRows) return;
       setHyperoptResultsRows((prev) =>
         prev.map((row) => {
           if (row.id !== rowId) return row;
@@ -1606,9 +1690,40 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
           };
         }),
       );
+    },
+    [setHyperoptResultsRows],
+  );
+
+  const handleRunRangeNarrowing = useCallback(
+    (runConfig) => {
+      if (isRiskStage || !rangeNarrowingContext) return;
+      const { rowId, subId } = rangeNarrowingContext;
+      appendAnalyticsItem(
+        rowId,
+        subId,
+        createRangeNarrowingAnalyticsItem({
+          subId,
+          runConfig,
+          date: new Date().toISOString().slice(0, 10),
+        }),
+      );
       setRangeNarrowingContext(null);
     },
-    [isRiskStage, rangeNarrowingContext, setHyperoptResultsRows],
+    [appendAnalyticsItem, isRiskStage, rangeNarrowingContext],
+  );
+
+  const handleCreateComparisonWidget = useCallback(
+    ({ filters, filterPreset }) => {
+      if (!comparisonWidgetFormContext) return;
+      const { rowId, subId } = comparisonWidgetFormContext;
+      appendAnalyticsItem(
+        rowId,
+        subId,
+        createComparisonWidgetAnalyticsItem({ subId, filters, filterPreset }),
+      );
+      setComparisonWidgetFormContext(null);
+    },
+    [appendAnalyticsItem, comparisonWidgetFormContext],
   );
 
   const handleApplyRangeNarrowingRanges = useCallback(
@@ -3540,7 +3655,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                         <tbody>
                                           {row.children.map((sub) => {
                                             const heatMapId = `hyperopt-${row.id}-${sub.id}`;
-                                            const level3Items = filterAnalyticsItemsForStage(sub.heatmapsAndReports, isRiskStage);
+                                            const level3Items = filterAnalyticsItemsForStage(sub.heatmapsAndReports, activeStage);
                                             const hasTruncData = !!sub.truncScores;
                                             const normKey = `${row.id}::${sub.id}`;
                                             const isDetailsExpanded = normalizationDetailsExpanded.has(normKey);
@@ -3574,6 +3689,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                       showEpochs={showMutatingPostActions}
                                                       showAddTruncate={showMutatingPostActions}
                                                       showRangeNarrowing={showMutatingPostActions && !isRiskStage}
+                                                      showComparisonWidget={!isSignalStage}
                                                       miniBacktestEnabled={miniBacktestEnabled}
                                                       onShowDetails={() => {
                                                         setHyperoptDetailsModalType("post-processing");
@@ -3585,6 +3701,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                       onBestEpochs={() => openBestEpochsModal(row, sub, heatMapId)}
                                                       onRunMiniBacktest={() => openMiniBacktestEpochModal(row, sub, heatMapId)}
                                                       onRangeNarrowing={() => openRangeNarrowingModalForSub(row.id, sub.id)}
+                                                      onComparisonWidget={() => openComparisonWidgetForm(row.id, sub.id)}
                                                       onAddTruncate={() => {
                                                         setSelectedNormalizationRow(sub);
                                                         setShowTruncateModal(true);
@@ -3635,6 +3752,8 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                                       onShowItemFilters={() => setHeatmapItemFiltersModalItem(item)}
                                                                       onShowRangeNarrowingInfo={() => setRangeNarrowingInfoItem(item)}
                                                                       onShowRangeNarrowingResults={() => setRangeNarrowingResultsItem(item)}
+                                                                      onShowComparisonWidget={() => openComparativeWidget(row, sub, item)}
+                                                                      onShowComparisonWidgetInfo={() => setComparisonWidgetInfoItem(item)}
                                                                     />
                                                                   </td>
                                                                 </tr>
@@ -3702,6 +3821,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                                           showEpochs={showMutatingPostActions}
                                                                           showAddTruncate={false}
                                                                           showRangeNarrowing={showMutatingPostActions && !isRiskStage}
+                                                                          showComparisonWidget={!isSignalStage}
                                                                           miniBacktestEnabled={miniBacktestEnabled}
                                                                           onShowDetails={() => {
                                                                             setHyperoptDetailsModalType("post-processing");
@@ -3713,6 +3833,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                                           onBestEpochs={() => openBestEpochsModal(row, sub, heatMapId)}
                                                                           onRunMiniBacktest={() => openMiniBacktestEpochModal(row, sub, heatMapId)}
                                                                           onRangeNarrowing={() => openRangeNarrowingModalForSub(row.id, sub.id)}
+                                                                          onComparisonWidget={() => openComparisonWidgetForm(row.id, sub.id)}
                                                                         />
                                                                       </td>
                                                                       </tr>
@@ -3751,6 +3872,8 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                                                           onShowItemFilters={() => setHeatmapItemFiltersModalItem(item)}
                                                                                           onShowRangeNarrowingInfo={() => setRangeNarrowingInfoItem(item)}
                                                                                           onShowRangeNarrowingResults={() => setRangeNarrowingResultsItem(item)}
+                                                                                          onShowComparisonWidget={() => openComparativeWidget(row, sub, item)}
+                                                                                          onShowComparisonWidgetInfo={() => setComparisonWidgetInfoItem(item)}
                                                                                         />
                                                                                       </td>
                                                                                     </tr>
@@ -3862,6 +3985,9 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                 onShowHeatmap={(heatMapId) => setHeatMapViewModalId(heatMapId)}
                                 onDownloadReport={() => setShowReportModal(true)}
                                 onShowItemFilters={(item) => setHeatmapItemFiltersModalItem(item)}
+                                onShowComparisonWidget={(sub, item) => openComparativeWidget(openRun, sub, item)}
+                                onShowComparisonWidgetInfo={(item) => setComparisonWidgetInfoItem(item)}
+                                activeStage={activeStage}
                               />
                             ) : (
                               <div className={cx(ui.radius, ui.panelMuted, "p-6 text-center text-[11px]", ui.textMuted)}>
@@ -4669,6 +4795,23 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
         onClose={() => setRangeNarrowingResultsItem(null)}
         onApplyRanges={handleApplyRangeNarrowingRanges}
         onRunHyperopt={handleRunHyperoptFromRangeNarrowing}
+      />
+      <AddComparisonWidgetModal
+        open={Boolean(comparisonWidgetFormContext)}
+        currentStage={activeStage}
+        onClose={() => setComparisonWidgetFormContext(null)}
+        onRun={handleCreateComparisonWidget}
+      />
+      <ComparisonWidgetReadOnlyModal
+        open={Boolean(comparisonWidgetInfoItem)}
+        item={comparisonWidgetInfoItem}
+        onClose={() => setComparisonWidgetInfoItem(null)}
+      />
+      <ComparativeWidgetModal
+        open={Boolean(comparativeWidgetContext)}
+        context={comparativeWidgetContext}
+        onClose={() => setComparativeWidgetContext(null)}
+        onFiltersChange={handleComparativeWidgetFiltersChange}
       />
       {/* Add truncate modal */}
       <AppDialog

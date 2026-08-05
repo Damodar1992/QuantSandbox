@@ -29,6 +29,9 @@ export const HyperoptRunDetail = memo(function HyperoptRunDetail({
   onShowHeatmap,
   onDownloadReport,
   onShowItemFilters,
+  onShowComparisonWidget,
+  onShowComparisonWidgetInfo,
+  activeStage,
   tagsRegistry = [],
 }) {
   if (!run) return null;
@@ -155,6 +158,9 @@ export const HyperoptRunDetail = memo(function HyperoptRunDetail({
               onShowHeatmap={onShowHeatmap}
               onDownloadReport={onDownloadReport}
               onShowItemFilters={onShowItemFilters}
+              onShowComparisonWidget={onShowComparisonWidget}
+              onShowComparisonWidgetInfo={onShowComparisonWidgetInfo}
+              activeStage={activeStage}
             />
           ))}
         </div>
