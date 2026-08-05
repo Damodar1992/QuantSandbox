@@ -3741,7 +3741,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                                   <td className="px-3 py-2 text-[#a6a6a6]">{item.date}</td>
                                                                   <td className="px-3 py-2">{item.type}</td>
                                                                   <td className="px-3 py-2">
-                                                                    <RunStatusBadge status={item.status || "Finished"} />
+                                                                    <RunStatusBadge status={item.status || "Completed"} />
                                                                   </td>
                                                                   <td className="px-3 py-2">
                                                                     <AnalyticsItemActions
@@ -3861,7 +3861,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                                                                       <td className="px-3 py-2 text-[#a6a6a6]">{item.date}</td>
                                                                                       <td className="px-3 py-2">{item.type}</td>
                                                                                       <td className="px-3 py-2">
-                                                                                        <RunStatusBadge status={item.status || "Finished"} />
+                                                                                        <RunStatusBadge status={item.status || "Completed"} />
                                                                                       </td>
                                                                                       <td className="px-3 py-2">
                                                                                         <AnalyticsItemActions

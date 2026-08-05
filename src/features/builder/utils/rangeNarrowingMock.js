@@ -120,7 +120,7 @@ export function createRangeNarrowingAnalyticsItem({ subId, runConfig, date }) {
     id,
     date: date || new Date().toISOString().slice(0, 10),
     type: RANGE_NARROWING_ITEM_TYPE,
-    status: "Finished",
+    status: "Completed",
     runConfig,
     results: buildReferenceRangeNarrowingResults(runConfig, subId),
   };
@@ -141,7 +141,7 @@ export function buildDefaultRangeNarrowingSeedItem(subId, date = "2024-01-15") {
     id: `${subId}-rn1`,
     date,
     type: RANGE_NARROWING_ITEM_TYPE,
-    status: "Finished",
+    status: "Completed",
     runConfig: { ...DEFAULT_RUN_CONFIG },
     results: buildReferenceRangeNarrowingResults(DEFAULT_RUN_CONFIG, subId),
   };

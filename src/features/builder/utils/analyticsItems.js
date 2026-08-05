@@ -51,7 +51,7 @@ export function createComparisonWidgetAnalyticsItem({ subId, filters, filterPres
     id: `${subId}-cw-${Date.now()}`,
     date: date || new Date().toISOString().slice(0, 10),
     type: COMPARISON_WIDGET_ITEM_TYPE,
-    status: "Finished",
+    status: "Completed",
     runConfig: {
       filters: filters ?? { logic: "and", groups: [] },
       filterPreset: filterPreset || "",
@@ -80,7 +80,7 @@ export function buildDefaultComparisonWidgetSeedItem(subId, date = "2024-01-15")
     id: `${subId}-cw1`,
     date,
     type: COMPARISON_WIDGET_ITEM_TYPE,
-    status: "Finished",
+    status: "Completed",
     runConfig: {
       filters: SEED_FILTERS,
       filterPreset: "",

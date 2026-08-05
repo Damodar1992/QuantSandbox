@@ -61,7 +61,7 @@ function AnalyticsPanel({
                 <span className="rounded border border-[#303030] bg-[#141414] px-1.5 py-0.5 text-[9px] text-[#d9d9d9]">
                   {item.type}
                 </span>
-                <RunStatusBadge status={item.status || "Finished"} />
+                <RunStatusBadge status={item.status || "Completed"} />
               </div>
               <AnalyticsItemActions
                 item={item}

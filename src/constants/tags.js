@@ -152,7 +152,7 @@ export const INITIAL_HYPEROPT_RESULTS_ROWS = [
         foldSize: "24",
         truncScores: { min: "-0.14", avg: "-0.45", max: "0.84" },
         heatmapsAndReports: [
-          { id: "hr1-1-h1", date: "2024-01-15", type: "Heatmap", status: "Finished" },
+          { id: "hr1-1-h1", date: "2024-01-15", type: "Heatmap", status: "Completed" },
           { id: "hr1-1-r1", date: "2024-01-15", type: "Report", status: "Completed" },
           buildDefaultRangeNarrowingSeedItem("hr1-1", "2024-01-15"),
           buildDefaultComparisonWidgetSeedItem("hr1-1", "2024-01-15"),
@@ -169,7 +169,7 @@ export const INITIAL_HYPEROPT_RESULTS_ROWS = [
         avgScore: "0.52",
         maxScore: "0.87",
         heatmapsAndReports: [
-          { id: "hr1-2-h1", date: "2024-01-16", type: "Heatmap", status: "Finished" },
+          { id: "hr1-2-h1", date: "2024-01-16", type: "Heatmap", status: "Completed" },
           buildDefaultRangeNarrowingSeedItem("hr1-2", "2024-01-16"),
           buildDefaultComparisonWidgetSeedItem("hr1-2", "2024-01-16"),
         ],
@@ -199,7 +199,7 @@ export const INITIAL_HYPEROPT_RESULTS_ROWS = [
         avgScore: "0.58",
         maxScore: "0.91",
         heatmapsAndReports: [
-          { id: "hr2-1-h1", date: "2024-01-14", type: "Heatmap", status: "Finished" },
+          { id: "hr2-1-h1", date: "2024-01-14", type: "Heatmap", status: "Completed" },
           { id: "hr2-1-r1", date: "2024-01-14", type: "Report", status: "Completed" },
           buildDefaultRangeNarrowingSeedItem("hr2-1", "2024-01-14"),
           buildDefaultComparisonWidgetSeedItem("hr2-1", "2024-01-14"),
@@ -228,7 +228,7 @@ export const INITIAL_HYPEROPT_RESULTS_ROWS = [
         avgScore: "0.51",
         maxScore: "0.88",
         heatmapsAndReports: [
-          { id: "hr3-1-h1", date: "2024-01-10", type: "Heatmap", status: "Finished" },
+          { id: "hr3-1-h1", date: "2024-01-10", type: "Heatmap", status: "Completed" },
           { id: "hr3-1-r1", date: "2024-01-10", type: "Report", status: "Completed" },
           buildDefaultComparisonWidgetSeedItem("hr3-1", "2024-01-10"),
         ],

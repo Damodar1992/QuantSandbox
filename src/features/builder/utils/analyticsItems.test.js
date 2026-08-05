@@ -72,7 +72,7 @@ describe('createComparisonWidgetAnalyticsItem', () => {
     });
 
     expect(item.type).toBe(COMPARISON_WIDGET_ITEM_TYPE);
-    expect(item.status).toBe('Finished');
+    expect(item.status).toBe('Completed');
     expect(item.date).toBe('2024-02-01');
     expect(item.id).toContain('hr1-1-cw-');
     expect(item.runConfig.filters).toEqual(filters);
@@ -94,7 +94,7 @@ describe('buildDefaultComparisonWidgetSeedItem', () => {
       id: 'hr1-1-cw1',
       date: '2024-01-15',
       type: COMPARISON_WIDGET_ITEM_TYPE,
-      status: 'Finished',
+      status: 'Completed',
     });
     expect(countFilterConditions(item.runConfig.filters)).toBe(3);
   });
