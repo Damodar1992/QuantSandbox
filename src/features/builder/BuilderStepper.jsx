@@ -38,7 +38,16 @@ import {
   FORMULA_TYPES,
   FORMULA_SUBTYPES,
 } from '../../constants/formulas';
-import { DEFAULT_RISK_STOPLOSS_RANGES, DEFAULT_RISK_HYPEROPT_PARAMS, RISK_STOPLOSS_LABELS, RISK_LOSS_STREAK_LABELS, buildDefaultRiskHeatmapConfig } from '../../constants/risk';
+import {
+  DEFAULT_RISK_STOPLOSS_RANGES,
+  DEFAULT_RISK_HYPEROPT_PARAMS,
+  RISK_STOPLOSS_LABELS,
+  RISK_LOSS_STREAK_LABELS,
+  buildDefaultRiskHeatmapConfig,
+  riskStoplossMidpoints,
+  riskLossStreakMidpoints,
+} from '../../constants/risk';
+import { riskParamsFromHeatmap } from '../backtesting/utils/resolveEpochStageConfig';
 import { TIME_RANGES } from '../../constants/app';
 import {
   STAGE_ID_TO_TYPE,
@@ -57,9 +66,12 @@ import {
   createDefaultBbIndicator,
   createDefaultEntryFavoriteEpoch,
   createDefaultExitFavoriteEpoch,
+  createDefaultRiskFavoriteEpoch,
   createDefaultSignalFavoriteEpoch,
   DEFAULT_BB_INDICATOR_IDS,
+  DEFAULT_FAVORITE_EPOCH_IDS,
 } from './utils/defaultBbSetup';
+import { BacktestingStagePanel } from '../backtesting';
 import { getParamValuesFromDef, getParamDefForCompositeKey, getParamLabel, getReportParamLabel, getIndicatorTemplate } from '../../utils/indicators';
 import { generatePythonCode } from '../../utils/pythonCode';
 import { generateMockResults } from '../../utils/mockResults';
@@ -68,7 +80,9 @@ import { Logo, Badge, MoreIcon, EyeIcon, MenuIcon, ModalShell } from '../../comp
 import { TagMultiSelect } from '../../components/common/TagMultiSelect';
 import { AppButton } from '../../components/common/AppButton';
 import { AppDialog } from '../../components/common/AppDialog';
+import { AppInput } from '../../components/common/AppInput';
 import { AppSelect } from '../../components/common/AppSelect';
+import { Textarea } from '@/components/ui/textarea';
 import { DateRangePicker } from '../../components/common/DateRangePicker';
 import { BuilderSectionShell } from './layout/BuilderSectionShell';
 import { BuilderStepsSidebar } from '../../components/prod';
@@ -193,6 +207,7 @@ export const BuilderStepper = memo(function BuilderStepper({
   saveHyperoptTagsModal,
   indicatorTagIdsByKey = {},
   onAddIndicatorTag,
+  backtestingEnabled = true,
 }) {
   // Indicators state (separate for Signal and Entry)
   const [signalIndicators, setSignalIndicators] = useState(() => [
@@ -292,15 +307,16 @@ export const BuilderStepper = memo(function BuilderStepper({
   const [signalBestCandidates, setSignalBestCandidates] = useState([]);
   const [entryBestCandidates, setEntryBestCandidates] = useState([]);
   const [exitBestCandidates, setExitBestCandidates] = useState([]);
-  const [riskBestResults, setRiskBestResults] = useState([]);
+  // Seeded like stages 1-3: Stage 5 needs at least one promoted epoch to validate.
+  const [riskBestResults, setRiskBestResults] = useState(() => [createDefaultRiskFavoriteEpoch()]);
   const [riskBestCandidates, setRiskBestCandidates] = useState([]);
-  const [entryBestSourceId, setEntryBestSourceId] = useState("");
+  const [entryBestSourceId, setEntryBestSourceId] = useState(DEFAULT_FAVORITE_EPOCH_IDS.signal);
   const [entrySourceDropdownOpen, setEntrySourceDropdownOpen] = useState(false);
   const entrySourceDropdownRef = useOutsideClose(entrySourceDropdownOpen, () => setEntrySourceDropdownOpen(false));
-  const [exitBestSourceId, setExitBestSourceId] = useState("");
+  const [exitBestSourceId, setExitBestSourceId] = useState(DEFAULT_FAVORITE_EPOCH_IDS.entry);
   const [exitSourceDropdownOpen, setExitSourceDropdownOpen] = useState(false);
   const exitSourceDropdownRef = useOutsideClose(exitSourceDropdownOpen, () => setExitSourceDropdownOpen(false));
-  const [riskBestSourceId, setRiskBestSourceId] = useState("");
+  const [riskBestSourceId, setRiskBestSourceId] = useState(DEFAULT_FAVORITE_EPOCH_IDS.exit);
   const [riskSourceDropdownOpen, setRiskSourceDropdownOpen] = useState(false);
   const riskSourceDropdownRef = useOutsideClose(riskSourceDropdownOpen, () => setRiskSourceDropdownOpen(false));
   const bestResults = pickByStage(activeStage, {
@@ -1323,13 +1339,77 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
         timeRange,
         signalHyperoptType: hyperoptType,
       });
-      if (isRiskStage && best?.meta) {
-        best.meta.riskStoplossRanges = { ...riskStoplossRanges };
-        best.meta.riskHyperoptParams = { ...riskHyperoptParams };
+      if (isRiskStage && best) {
+        if (best.meta) {
+          best.meta.riskStoplossRanges = { ...riskStoplossRanges };
+          best.meta.riskHyperoptParams = { ...riskHyperoptParams };
+        }
+        const signalFav =
+          signalBestResults.find((b) => String(b.id) === String(entryBestSourceId)) ||
+          signalBestResults[0] ||
+          null;
+        const entryFav =
+          entryBestResults.find((b) => String(b.id) === String(exitBestSourceId)) ||
+          entryBestResults[0] ||
+          null;
+        const exitFav =
+          exitBestResults.find((b) => String(b.id) === String(riskBestSourceId)) ||
+          exitBestResults[0] ||
+          null;
+
+        const snapFromLive = (inds) =>
+          (inds || []).map((ind) => buildIndicatorSnapshot(ind));
+        const snapFromFavorite = (fav, liveInds) => {
+          if (fav?.indicators?.length) {
+            return {
+              label: fav.label || null,
+              indicators: fav.indicators.map((s) => ({
+                ...s,
+                paramsSnapshot: { ...(s.paramsSnapshot || {}) },
+              })),
+            };
+          }
+          return { label: fav?.label || null, indicators: snapFromLive(liveInds) };
+        };
+
+        best.lineage = {
+          signalId: signalFav?.id ?? (entryBestSourceId || null),
+          entryId: entryFav?.id ?? (exitBestSourceId || null),
+          exitId: exitFav?.id ?? (riskBestSourceId || null),
+        };
+        best.indicatorsByStage = {
+          signal: snapFromFavorite(signalFav, signalIndicators),
+          entry: snapFromFavorite(entryFav, entryIndicators),
+          exit: snapFromFavorite(exitFav, exitIndicators),
+        };
+
+        const fromHeatmap = riskParamsFromHeatmap(params?.meta?.heatmapParams || best.meta?.heatmapParams);
+        const fromMidpoints = {
+          ...riskStoplossMidpoints(riskStoplossRanges),
+          ...riskLossStreakMidpoints(riskHyperoptParams),
+        };
+        best.riskParams = fromHeatmap || (Object.keys(fromMidpoints).length ? fromMidpoints : null);
       }
       return best;
     },
-    [indicators, signalIndicators, isRiskStage, riskStoplossRanges, riskHyperoptParams, pairs, timeRange, hyperoptType],
+    [
+      indicators,
+      signalIndicators,
+      entryIndicators,
+      exitIndicators,
+      isRiskStage,
+      riskStoplossRanges,
+      riskHyperoptParams,
+      pairs,
+      timeRange,
+      hyperoptType,
+      signalBestResults,
+      entryBestResults,
+      exitBestResults,
+      entryBestSourceId,
+      exitBestSourceId,
+      riskBestSourceId,
+    ],
   );
 
   const handleSaveBestResultFromDetail = useCallback(
@@ -1800,17 +1880,20 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
       },
       {
         id: 5,
-        label: "Final",
-        title: "STAGE 5: FINAL VALIDATION",
-        locked: true,
+        label: "Backtesting",
+        title: "STAGE 5: BACKTESTING",
+        locked: !backtestingEnabled,
         icon: (
           <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-            <path d="M20 6L9 17l-5-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M3 4h18v5H3z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+            <path d="M6 13h15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            <path d="M6 18h15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            <path d="M3 13h0.01M3 18h0.01" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
         ),
       },
     ],
-    []
+    [backtestingEnabled]
   );
 
   const active = stages.find((s) => s.id === activeStage) ?? stages[0];
@@ -2300,31 +2383,32 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                     )}
                     <div className={cx(isSignalStage && "xl:col-span-2")}>
                       <label className={cx("block mb-1 text-xs", ui.textMuted)}>Time Frame</label>
-                      <select
+                      <AppSelect
                         value={timeRange}
-                        onChange={(e) => onTimeRangeChange(e.target.value)}
+                        onValueChange={onTimeRangeChange}
                         disabled={hasSourceBestScore && !selectedSourceId}
-                        className={cx(
-                          ui.input,
-                          "h-9 text-[12px] w-full",
+                        className="w-full space-y-0"
+                        triggerClassName={cx(
+                          "h-9 text-[12px]",
                           hasSourceBestScore && !selectedSourceId && "opacity-60 cursor-not-allowed",
                         )}
-                      >
-                        {(hasSourceBestScore ? entryAllowedTimeFrames : TIME_RANGES).map((v) => (
-                          <option key={v} value={v}>{v}</option>
-                        ))}
-                      </select>
+                        options={(hasSourceBestScore ? entryAllowedTimeFrames : TIME_RANGES).map((v) => ({
+                          value: v,
+                          label: v,
+                        }))}
+                      />
                     </div>
                     {(!hasSourceBestScore || selectedSourceId) && (
                       <>
                         {hasSourceBestScore && (
                           <div>
                             <label className={cx("block mb-1 text-xs", ui.textMuted)}>Pairs</label>
-                            <input
+                            <AppInput
                               type="text"
                               value={selectedStagePairs || "-"}
                               readOnly
-                              className={cx(ui.input, "h-9 text-[12px] w-full opacity-80 cursor-not-allowed")}
+                              className="h-9 text-[12px] w-full opacity-80 cursor-not-allowed"
+                              wrapperClassName="space-y-0"
                             />
                           </div>
                         )}
@@ -2345,13 +2429,14 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                           <div className={cx("space-y-1", isSignalStage && "xl:col-span-3")}>
                             <div className="space-y-1">
                               <label className={cx("block mb-1 text-xs", ui.textMuted)}>Fold size (candles)</label>
-                              <input
+                              <AppInput
                                 type="number"
                                 min={1}
                                 step={1}
                                 value={signalFoldSize}
                                 onChange={(e) => setSignalFoldSize(e.target.value)}
-                                className={cx(ui.input, "h-8 text-[11px] w-full")}
+                                className="h-8 text-[12px] w-full"
+                                wrapperClassName="space-y-0"
                                 placeholder="e.g. 100"
                               />
                               <div className={cx("text-[10px]", ui.textMuted)}>Total candles: {totalCandles}</div>
@@ -2408,23 +2493,21 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                           <div className="space-y-1.5">
                           <div className="text-[11px] font-medium text-[#d9d9d9]">Score formula</div>
                             <div className="flex flex-wrap items-center gap-3 gap-y-2">
-                              <select
+                              <AppSelect
                                 value={intermediateBlockScoreFormula}
-                                onChange={(e) => {
-                                  const next = e.target.value;
+                                onValueChange={(next) => {
                                   setIntermediateBlockScoreFormula(next);
                                   const code = INTERMEDIATE_SCORE_CODE_BY_TEMPLATE[next];
                                   if (code) setIntermediateBlockScoreFormulaCode(code);
                                 }}
                                 disabled={isEntryStage && signalHyperoptType === entryHyperoptType}
-                                className={cx(
-                                  ui.input,
-                                  "h-9 text-[12px] w-full max-w-[200px]",
+                                className="w-full max-w-[200px] space-y-0"
+                                triggerClassName={cx(
+                                  "h-9 text-[12px]",
                                   isEntryStage && signalHyperoptType === entryHyperoptType && "opacity-60 cursor-not-allowed",
                                 )}
-                              >
-                                {FINAL_SCORE_FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
-                              </select>
+                                options={FINAL_SCORE_FORMULA_OPTIONS.map((v) => ({ value: v, label: v }))}
+                              />
                               <div className="min-w-[200px] flex-1 max-w-[800px]">
                                   <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-9 overflow-hidden">
                                   <div data-formula-mirror className="absolute left-0 top-0 bottom-0 right-8 pl-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
@@ -2487,25 +2570,25 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                   <tr key={row.metric} className="border-b border-[#303030]">
                                     <td className="px-3 py-2 text-[#a6a6a6] align-top">{row.metric}</td>
                                     <td className="px-3 py-2 w-32 align-top">
-                                      <select
+                                      <AppSelect
                                         value={row.formula}
-                                        onChange={(e) => {
-                                          const next = e.target.value;
+                                        onValueChange={(next) => {
                                           row.setFormula(next);
                                           const byTemplate = INTERMEDIATE_METRIC_FORMULA_CODE_BY_TEMPLATE[row.metric];
                                           const code = byTemplate && byTemplate[next];
                                           if (code) row.setFormulaCode(code);
                                         }}
                                         disabled={isEntryStage && signalHyperoptType === entryHyperoptType}
-                                        className={cx(
-                                          ui.input,
-                                          "h-8 text-[11px] w-full min-w-0",
+                                        className="w-full min-w-0 space-y-0"
+                                        triggerClassName={cx(
+                                          "h-8 text-[12px]",
                                           isEntryStage && signalHyperoptType === entryHyperoptType && "opacity-60 cursor-not-allowed",
                                         )}
-                                      >
-                                        <option value="Formula 1">{row.metric}</option>
-                                        <option value="Formula 2">Fake formula</option>
-                                      </select>
+                                        options={[
+                                          { value: "Formula 1", label: row.metric },
+                                          { value: "Formula 2", label: "Fake formula" },
+                                        ]}
+                                      />
                                     </td>
                                     <td className="px-3 py-2 align-top min-w-[200px]">
                                       <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-8 overflow-hidden min-w-[200px]">
@@ -2617,18 +2700,14 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                           <div className="space-y-1.5 pt-3">
                             <div className="text-[11px] font-medium text-[#d9d9d9]">Stability formula</div>
                             <div className="flex flex-wrap items-center gap-3 gap-y-2">
-                              <select
+                              <AppSelect
                                 value={finStabilityBlockFormula}
-                                onChange={(e) => setFinStabilityBlockFormula(e.target.value)}
+                                onValueChange={setFinStabilityBlockFormula}
                                 disabled={isEntryStage && signalHyperoptType === entryHyperoptType}
-                                className={cx(ui.input, "h-9 text-[12px] w-full max-w-[200px]")}
-                              >
-                                {METRIC_FORMULA_OPTIONS.map((v) => (
-                                  <option key={v} value={v}>
-                                    {v}
-                                  </option>
-                                ))}
-                              </select>
+                                className="w-full max-w-[200px] space-y-0"
+                                triggerClassName="h-9 text-[12px]"
+                                options={METRIC_FORMULA_OPTIONS.map((v) => ({ value: v, label: v }))}
+                              />
                               <div className="min-w-[200px] flex-1 max-w-[800px]">
                                 <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-9 overflow-hidden">
                                   <div
@@ -2773,20 +2852,21 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                     <tr key={row.metric} className="border-b border-[#303030]">
                                       <td className="px-3 py-2 text-[#a6a6a6] align-top">{row.metric}</td>
                                       <td className="px-3 py-2 w-32 align-top">
-                                        <select
+                                        <AppSelect
                                           value={row.formula}
-                                          onChange={(e) => {
-                                            const next = e.target.value;
+                                          onValueChange={(next) => {
                                             row.setFormula(next);
                                             const byTemplate = STABILITY_NORM_DIFF_FORMULA_CODE_BY_TEMPLATE[row.metric];
                                             const code = byTemplate && byTemplate[next];
                                             if (code) row.setFormulaCode(code);
                                           }}
-                                          className={cx(ui.input, "h-8 text-[11px] w-full min-w-0")}
-                                        >
-                                          <option value="Formula 1">{row.metric}</option>
-                                          <option value="Formula 2">Fake formula</option>
-                                        </select>
+                                          className="w-full min-w-0 space-y-0"
+                                          triggerClassName="h-8 text-[12px]"
+                                          options={[
+                                            { value: "Formula 1", label: row.metric },
+                                            { value: "Formula 2", label: "Fake formula" },
+                                          ]}
+                                        />
                                       </td>
                                       <td className="px-3 py-2 align-top min-w-[200px]">
                                         <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-8 overflow-hidden min-w-[200px]">
@@ -2889,23 +2969,18 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                           <div className="space-y-1.5 pt-3">
                             <div className="text-[11px] font-medium text-[#d9d9d9]">Score formula</div>
                             <div className="flex flex-wrap items-center gap-3 gap-y-2">
-                              <select
+                              <AppSelect
                                 value={finalScoreFormula}
-                                onChange={(e) => {
-                                  const next = e.target.value;
+                                onValueChange={(next) => {
                                   setFinalScoreFormula(next);
                                   const code = FINAL_SCORE_CODE_BY_TEMPLATE[next];
                                   if (code) setFinFinalFormulaCode(code);
                                 }}
                                 disabled={isEntryStage && signalHyperoptType === entryHyperoptType}
-                                className={cx(ui.input, "h-9 text-[12px] w-full max-w-[200px]")}
-                              >
-                                {FINAL_SCORE_FORMULA_OPTIONS.map((v) => (
-                                  <option key={v} value={v}>
-                                    {v}
-                                  </option>
-                                ))}
-                              </select>
+                                className="w-full max-w-[200px] space-y-0"
+                                triggerClassName="h-9 text-[12px]"
+                                options={FINAL_SCORE_FORMULA_OPTIONS.map((v) => ({ value: v, label: v }))}
+                              />
                               <div className="min-w-[200px] flex-1 max-w-[800px]">
                                 <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-9 overflow-hidden">
                                   <div
@@ -3033,20 +3108,21 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                     <tr key={row.metric} className="border-b border-[#303030]">
                                       <td className="px-3 py-2 text-[#a6a6a6] align-top">{row.metric}</td>
                                       <td className="px-3 py-2 w-32 align-top">
-                                        <select
+                                        <AppSelect
                                           value={row.formula}
-                                          onChange={(e) => {
-                                            const next = e.target.value;
+                                          onValueChange={(next) => {
                                             row.setFormula(next);
                                             const byTemplate = METRIC_FORMULA_CODE_BY_TEMPLATE[row.metric];
                                             const code = byTemplate && byTemplate[next];
                                             if (code) row.setFormulaCode(code);
                                           }}
-                                          className={cx(ui.input, "h-8 text-[11px] w-full min-w-0")}
-                                        >
-                                          <option value="Formula 1">{row.metric}</option>
-                                          <option value="Formula 2">Fake formula</option>
-                                        </select>
+                                          className="w-full min-w-0 space-y-0"
+                                          triggerClassName="h-8 text-[12px]"
+                                          options={[
+                                            { value: "Formula 1", label: row.metric },
+                                            { value: "Formula 2", label: "Fake formula" },
+                                          ]}
+                                        />
                                       </td>
                                       <td className="px-3 py-2 align-top min-w-[200px]">
                                         <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-8 overflow-hidden min-w-[200px]">
@@ -3153,23 +3229,21 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                           <div className="space-y-1.5">
                           <div className="text-[11px] font-medium text-[#d9d9d9]">Score formula</div>
                             <div className="flex flex-wrap items-center gap-3 gap-y-2">
-                              <select
+                              <AppSelect
                                 value={intermediateBlockScoreFormula}
-                                onChange={(e) => {
-                                  const next = e.target.value;
+                                onValueChange={(next) => {
                                   setIntermediateBlockScoreFormula(next);
                                   const code = INTERMEDIATE_SCORE_CODE_BY_TEMPLATE[next];
                                   if (code) setIntermediateBlockScoreFormulaCode(code);
                                 }}
                                 disabled={isEntryStage && signalHyperoptType === entryHyperoptType}
-                                className={cx(
-                                  ui.input,
-                                  "h-9 text-[12px] w-full max-w-[200px]",
+                                className="w-full max-w-[200px] space-y-0"
+                                triggerClassName={cx(
+                                  "h-9 text-[12px]",
                                   isEntryStage && signalHyperoptType === entryHyperoptType && "opacity-60 cursor-not-allowed",
                                 )}
-                              >
-                                {FINAL_SCORE_FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
-                              </select>
+                                options={FINAL_SCORE_FORMULA_OPTIONS.map((v) => ({ value: v, label: v }))}
+                              />
                               <div className="min-w-[200px] flex-1 max-w-[800px]">
                                   <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-9 overflow-hidden">
                                   <div data-formula-mirror className="absolute left-0 top-0 bottom-0 right-8 pl-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
@@ -3232,25 +3306,25 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                   <tr key={row.metric} className="border-b border-[#303030]">
                                     <td className="px-3 py-2 text-[#a6a6a6] align-top">{row.metric}</td>
                                     <td className="px-3 py-2 w-32 align-top">
-                                      <select
+                                      <AppSelect
                                         value={row.formula}
-                                        onChange={(e) => {
-                                          const next = e.target.value;
+                                        onValueChange={(next) => {
                                           row.setFormula(next);
                                           const byTemplate = INTERMEDIATE_METRIC_FORMULA_CODE_BY_TEMPLATE[row.metric];
                                           const code = byTemplate && byTemplate[next];
                                           if (code) row.setFormulaCode(code);
                                         }}
                                         disabled={isEntryStage && signalHyperoptType === entryHyperoptType}
-                                        className={cx(
-                                          ui.input,
-                                          "h-8 text-[11px] w-full min-w-0",
+                                        className="w-full min-w-0 space-y-0"
+                                        triggerClassName={cx(
+                                          "h-8 text-[12px]",
                                           isEntryStage && signalHyperoptType === entryHyperoptType && "opacity-60 cursor-not-allowed",
                                         )}
-                                      >
-                                        <option value="Formula 1">{row.metric}</option>
-                                        <option value="Formula 2">Fake formula</option>
-                                      </select>
+                                        options={[
+                                          { value: "Formula 1", label: row.metric },
+                                          { value: "Formula 2", label: "Fake formula" },
+                                        ]}
+                                      />
                                     </td>
                                     <td className="px-3 py-2 align-top min-w-[200px]">
                                       <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-8 overflow-hidden min-w-[200px]">
@@ -4178,6 +4252,51 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
             </BuilderSectionShell>
 
           </div>
+        ) : active.id === 5 ? (
+          <BacktestingStagePanel
+            strategyName={strategyName}
+            favoriteEpochs={riskBestResults}
+            signalBestResults={signalBestResults}
+            entryBestResults={entryBestResults}
+            exitBestResults={exitBestResults}
+            entryBestSourceId={entryBestSourceId}
+            exitBestSourceId={exitBestSourceId}
+            riskBestSourceId={riskBestSourceId}
+            miniBacktestResults={miniBacktestResults}
+            currentUser={MOCK_CURRENT_USER.login}
+            onOpenMiniBacktest={
+              miniBacktestEnabled
+                ? (epoch) => {
+                    if (!epoch?.id) return;
+                    const stageType = STAGE_ID_TO_TYPE[activeStage];
+                    const version = getVersionById(
+                      stageVersions,
+                      selectedVersionByStage[stageType],
+                    );
+                    onOpenMiniBacktestModal?.(
+                      epoch,
+                      activeStage,
+                      version
+                        ? {
+                            id: version.id,
+                            label: version.label,
+                            lineageCode: version.lineageCode,
+                            localVersion: version.localVersion,
+                          }
+                        : null,
+                      buildMiniBacktestLaunchContext({
+                        tradingMode,
+                        exchange,
+                        pairs: epoch.pairs ?? pairs,
+                        timeframe: epoch.timeframe ?? epoch.timeRange ?? timeRange,
+                        timeFrameStart,
+                        timeFrameEnd,
+                      }),
+                    );
+                  }
+                : undefined
+            }
+          />
         ) : (
           <div className={cx(ui.radius, ui.panelMuted, "px-4 py-3 text-[12px]", ui.textSubtle)}>
             {active.title} — coming soon.
@@ -4258,41 +4377,36 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
             <div className="space-y-2">
               <div className="text-[11px] font-medium text-[#d9d9d9]">Variables</div>
               <div className="flex items-center gap-2">
-                <select
-                  className={cx(ui.input, "h-8 text-[11px] flex-1")}
-                  onChange={(e) => {
-                    if (!e.target.value) return;
-                    insertIntoFormulaEditor(e.target.value);
-                    e.target.selectedIndex = 0;
+                <AppSelect
+                  value=""
+                  className="flex-1 space-y-0"
+                  triggerClassName="h-8 text-[12px]"
+                  placeholder="Select variable…"
+                  onValueChange={(v) => {
+                    if (!v) return;
+                    insertIntoFormulaEditor(v);
                   }}
-                >
-                  <option value="">Select variable…</option>
-                  {FORMULA_EDITOR_VARIABLES.map((v) => (
-                    <option key={v} value={v}>
-                      {v}
-                    </option>
-                  ))}
-                </select>
+                  options={FORMULA_EDITOR_VARIABLES.map((v) => ({ value: v, label: v }))}
+                />
               </div>
             </div>
             <div className="space-y-2">
               <div className="text-[11px] font-medium text-[#d9d9d9]">Functions</div>
               <div className="flex items-center gap-2">
-                <select
-                  className={cx(ui.input, "h-8 text-[11px] flex-1")}
-                  onChange={(e) => {
-                    if (!e.target.value) return;
-                    insertIntoFormulaEditor(e.target.value);
-                    e.target.selectedIndex = 0;
+                <AppSelect
+                  value=""
+                  className="flex-1 space-y-0"
+                  triggerClassName="h-8 text-[12px]"
+                  placeholder="Select function…"
+                  onValueChange={(v) => {
+                    if (!v) return;
+                    insertIntoFormulaEditor(v);
                   }}
-                >
-                  <option value="">Select function…</option>
-                  {FORMULA_EDITOR_FUNCTIONS.map((fn) => (
-                    <option key={fn.label} value={fn.template}>
-                      {fn.label} — {fn.template}
-                    </option>
-                  ))}
-                </select>
+                  options={FORMULA_EDITOR_FUNCTIONS.map((fn) => ({
+                    value: fn.template,
+                    label: `${fn.label} — ${fn.template}`,
+                  }))}
+                />
               </div>
             </div>
           </div>
@@ -4367,9 +4481,13 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                         <div className="space-y-1.5">
                           <div className="text-[11px] font-medium text-[#d9d9d9]">Stability formula</div>
                     <div className="flex flex-wrap items-center gap-3 gap-y-2">
-                      <select value={finStabilityBlockFormula} onChange={(e) => setFinStabilityBlockFormula(e.target.value)} className={cx(ui.input, "h-9 text-[12px] w-full max-w-[200px]")}>
-                        {METRIC_FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
-                      </select>
+                      <AppSelect
+                        value={finStabilityBlockFormula}
+                        onValueChange={setFinStabilityBlockFormula}
+                        className="w-full max-w-[200px] space-y-0"
+                        triggerClassName="h-9 text-[12px]"
+                        options={METRIC_FORMULA_OPTIONS.map((v) => ({ value: v, label: v }))}
+                      />
                       <div className="min-w-[200px] flex-1 max-w-[800px]">
                         <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-9 overflow-hidden">
                           <div data-formula-mirror className="absolute left-0 top-0 bottom-0 right-8 pl-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
@@ -4409,20 +4527,21 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                             <tr key={row.metric} className="border-b border-[#303030]">
                               <td className="px-3 py-2 text-[#a6a6a6] align-top">{row.metric}</td>
                               <td className="px-3 py-2 w-32 align-top">
-                                <select
+                                <AppSelect
                                   value={row.formula}
-                                  onChange={(e) => {
-                                    const next = e.target.value;
+                                  onValueChange={(next) => {
                                     row.setFormula(next);
                                     const byTemplate = STABILITY_NORM_DIFF_FORMULA_CODE_BY_TEMPLATE[row.metric];
                                     const code = byTemplate && byTemplate[next];
                                     if (code) row.setFormulaCode(code);
                                   }}
-                                  className={cx(ui.input, "h-8 text-[11px] w-full min-w-0")}
-                                >
-                                  <option value="Formula 1">{row.metric}</option>
-                                  <option value="Formula 2">Fake formula</option>
-                                </select>
+                                  className="w-full min-w-0 space-y-0"
+                                  triggerClassName="h-8 text-[12px]"
+                                  options={[
+                                    { value: "Formula 1", label: row.metric },
+                                    { value: "Formula 2", label: "Fake formula" },
+                                  ]}
+                                />
                               </td>
                               <td className="px-3 py-2 align-top min-w-[200px]">
                                 <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-8 overflow-hidden min-w-[200px]">
@@ -4474,18 +4593,17 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                         <div className="space-y-1.5">
                           <div className="text-[11px] font-medium text-[#d9d9d9]">Final score formula</div>
                           <div className="flex flex-wrap items-center gap-3 gap-y-2">
-                            <select
+                            <AppSelect
                               value={finalScoreFormula}
-                        onChange={(e) => {
-                          const next = e.target.value;
-                          setFinalScoreFormula(next);
-                          const code = FINAL_SCORE_CODE_BY_TEMPLATE[next];
-                          if (code) setFinFinalFormulaCode(code);
-                        }}
-                        className={cx(ui.input, "h-9 text-[12px] w-full max-w-[200px]")}
-                      >
-                        {FINAL_SCORE_FORMULA_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
-                      </select>
+                              onValueChange={(next) => {
+                                setFinalScoreFormula(next);
+                                const code = FINAL_SCORE_CODE_BY_TEMPLATE[next];
+                                if (code) setFinFinalFormulaCode(code);
+                              }}
+                              className="w-full max-w-[200px] space-y-0"
+                              triggerClassName="h-9 text-[12px]"
+                              options={FINAL_SCORE_FORMULA_OPTIONS.map((v) => ({ value: v, label: v }))}
+                            />
                       <div className="min-w-[200px] flex-1 max-w-[800px]">
                         <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-9 overflow-hidden">
                           <div data-formula-mirror className="absolute left-0 top-0 bottom-0 right-8 pl-3 overflow-x-auto overflow-y-hidden whitespace-nowrap py-2 text-[11px] font-mono text-[#d9d9d9] pointer-events-none flex items-center [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }} aria-hidden>
@@ -4532,20 +4650,21 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                         <tr className="border-b border-[#303030]">
                           <td className="px-3 py-2 text-[#a6a6a6] align-top">normStability</td>
                           <td className="px-3 py-2 w-32 align-top">
-                            <select
+                            <AppSelect
                               value={finStabilityFormula}
-                              onChange={(e) => {
-                                const next = e.target.value;
+                              onValueChange={(next) => {
                                 setFinStabilityFormula(next);
                                 const byTemplate = METRIC_FORMULA_CODE_BY_TEMPLATE.normStability;
                                 const code = byTemplate && byTemplate[next];
                                 if (code) setFinStabilityFormulaCode(code);
                               }}
-                              className={cx(ui.input, "h-8 text-[11px] w-full min-w-0")}
-                            >
-                              <option value="Formula 1">normStability</option>
-                              <option value="Formula 2">Fake formula</option>
-                            </select>
+                              className="w-full min-w-0 space-y-0"
+                              triggerClassName="h-8 text-[12px]"
+                              options={[
+                                { value: "Formula 1", label: "normStability" },
+                                { value: "Formula 2", label: "Fake formula" },
+                              ]}
+                            />
                           </td>
                           <td className="px-3 py-2 align-top min-w-[200px]">
                             <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-8 overflow-hidden min-w-[200px]">
@@ -4576,20 +4695,21 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                           <tr key={row.metric} className="border-b border-[#303030]">
                             <td className="px-3 py-2 text-[#a6a6a6] align-top">{row.metric}</td>
                             <td className="px-3 py-2 w-32 align-top">
-                              <select
+                              <AppSelect
                                 value={row.formula}
-                                onChange={(e) => {
-                                  const next = e.target.value;
+                                onValueChange={(next) => {
                                   row.setFormula(next);
                                   const byTemplate = METRIC_FORMULA_CODE_BY_TEMPLATE[row.metric];
                                   const code = byTemplate && byTemplate[next];
                                   if (code) row.setFormulaCode(code);
                                 }}
-                                className={cx(ui.input, "h-8 text-[11px] w-full min-w-0")}
-                              >
-                                <option value="Formula 1">{row.metric}</option>
-                                <option value="Formula 2">Fake formula</option>
-                              </select>
+                                className="w-full min-w-0 space-y-0"
+                                triggerClassName="h-8 text-[12px]"
+                                options={[
+                                  { value: "Formula 1", label: row.metric },
+                                  { value: "Formula 2", label: "Fake formula" },
+                                ]}
+                              />
                             </td>
                             <td className="px-3 py-2 align-top min-w-[200px]">
                               <div className="relative rounded-md border border-[#303030] bg-[#0f0f0f] h-8 overflow-hidden min-w-[200px]">
@@ -4707,22 +4827,24 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1.5">
                         <label className="text-[11px] font-medium text-[#d9d9d9]">Max combinations</label>
-                        <input
+                        <AppInput
                           type="number"
                           min={1}
                           value={rnMaxCombinations}
                           onChange={(e) => setRnMaxCombinations(Number(e.target.value))}
-                          className={cx(ui.input, "h-9 text-[12px] w-full")}
+                          className="h-9 text-[12px] w-full"
+                          wrapperClassName="space-y-0"
                         />
                       </div>
                       <div className="space-y-1.5">
                         <label className="text-[11px] font-medium text-[#d9d9d9]">Min. epochs per value</label>
-                        <input
+                        <AppInput
                           type="number"
                           min={1}
                           value={rnMinEpochsPerValue}
                           onChange={(e) => setRnMinEpochsPerValue(Number(e.target.value))}
-                          className={cx(ui.input, "h-9 text-[12px] w-full")}
+                          className="h-9 text-[12px] w-full"
+                          wrapperClassName="space-y-0"
                         />
                         <div className="text-[10px] text-[#8c8c8c] leading-snug">Values tested on fewer epochs than this are dropped from the curve/range (min_rows_per_value).</div>
                       </div>
@@ -4755,12 +4877,13 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                     {rnMarginEnabled && (
                       <div className="flex flex-col gap-1.5">
                         <label className="block text-[11px] font-medium text-[#d9d9d9]">Margin widen (steps, for the &ldquo;margin&rdquo; config)</label>
-                        <input
+                        <AppInput
                           type="number"
                           min={0}
                           value={rnMarginWiden}
                           onChange={(e) => setRnMarginWiden(Number(e.target.value))}
-                          className={cx(ui.input, "h-9 text-[12px] w-full max-w-[240px]")}
+                          className="h-9 text-[12px] w-full max-w-[240px]"
+                          wrapperClassName="space-y-0"
                         />
                       </div>
                     )}
@@ -4836,7 +4959,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
             <div className="space-y-1.5">
               <label className="block text-[11px] font-medium text-[#d9d9d9]">
                 Fold size
-                <input
+                <AppInput
                   type="number"
                   min={1}
                   step={1}
@@ -4847,7 +4970,8 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                     if (v === "" || /^\d+$/.test(v))
                       setTruncateForm((prev) => ({ ...prev, foldSize: v }));
                   }}
-                  className={cx(ui.input, "mt-1 h-8 text-[12px]")}
+                  className="mt-1 h-8 text-[12px]"
+                  wrapperClassName="space-y-0"
                   placeholder="e.g. 12"
                 />
               </label>
@@ -4900,13 +5024,13 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
       >
         <div className="space-y-1.5">
           <label className="block text-[11px] font-medium text-[#d9d9d9]">Comment</label>
-          <textarea
+          <Textarea
             value={hyperoptCommentDraft.comment}
             onChange={(e) =>
               setHyperoptCommentDraft((prev) => ({ ...prev, comment: e.target.value }))
             }
             rows={6}
-            className={cx(ui.input, "w-full text-[12px] resize-y min-h-[120px] py-2")}
+            className="w-full text-[12px] resize-y min-h-[120px] py-2"
             placeholder="Notes for this run…"
           />
         </div>
@@ -4973,13 +5097,13 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
               Choose a normalization result (full or trunc data). Metrics will be taken from the selected row and the
               current Signal indicators will be captured as a snapshot.
             </p>
-            <select
+            <AppSelect
               value={manualBestResultSelectionKey}
-              onChange={(e) => setManualBestResultSelectionKey(e.target.value)}
-              className={cx(ui.input, "h-9 text-[12px] w-full")}
-            >
-              <option value="">Select normalization result…</option>
-              {hyperoptResultsRows.flatMap((row) =>
+              onValueChange={setManualBestResultSelectionKey}
+              placeholder="Select normalization result…"
+              className="w-full space-y-0"
+              triggerClassName="h-9 text-[12px]"
+              options={hyperoptResultsRows.flatMap((row) =>
                 (row.children || []).flatMap((sub) => {
                   const entries = [
                     {
@@ -4997,15 +5121,13 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                       scores: sub.truncScores,
                     },
                   ].filter(Boolean);
-                  return entries.map((detail) => (
-                    <option key={detail.id} value={detail.id}>
-                      {row.pairs || pairs} · {row.timeFrame} · {sub.date} · {detail.label} · score{" "}
-                      {detail.scores?.avg ?? detail.scores?.max ?? "-"}
-                    </option>
-                  ));
+                  return entries.map((detail) => ({
+                    value: detail.id,
+                    label: `${row.pairs || pairs} · ${row.timeFrame} · ${sub.date} · ${detail.label} · score ${detail.scores?.avg ?? detail.scores?.max ?? "-"}`,
+                  }));
                 }),
               )}
-            </select>
+            />
           </div>
         </div>
         <div className="flex justify-end gap-2 pt-2">

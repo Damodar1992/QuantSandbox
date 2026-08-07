@@ -34,6 +34,7 @@ const TABLE_HEADERS = [
   "Executed",
   "Total cycles",
   "Status",
+  "Owner",
   "Actions",
 ];
 
@@ -132,7 +133,7 @@ export const MiniBacktestGlobalPage = memo(function MiniBacktestGlobalPage({
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-[12px] min-w-[1800px]">
+          <table className="w-full border-collapse text-[12px] min-w-[1900px]">
             <thead className="bg-[#1f1f1f] text-left text-[12px] text-[#8c8c8c]">
               <tr>
                 {TABLE_HEADERS.map((header, index) => (
@@ -235,6 +236,9 @@ export const MiniBacktestGlobalPage = memo(function MiniBacktestGlobalPage({
                   </td>
                   <td className={cx("px-2 py-2 border-b whitespace-nowrap", crmSurface.border)}>
                     <RunStatusBadge status={row.status} />
+                  </td>
+                  <td className={cx("px-2 py-2 border-b whitespace-nowrap text-[12px] text-muted-foreground", crmSurface.border)}>
+                    {row.owner}
                   </td>
                   <td className={cx("px-2 py-2 border-b", crmSurface.border)}>
                     <button

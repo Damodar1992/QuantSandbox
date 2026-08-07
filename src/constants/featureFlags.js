@@ -1,5 +1,5 @@
 const STORAGE_KEY = "featureFlags";
-const DEFAULTS = { miniBacktest: true, formulas: false };
+const DEFAULTS = { miniBacktest: true, formulas: false, backtesting: true };
 
 export function getFeatureFlags() {
   if (typeof window !== "undefined") {
@@ -32,4 +32,9 @@ export function isMiniBacktestEnabled() {
 
 export function isFormulasEnabled() {
   return getFeatureFlags().formulas;
+}
+
+/** Stage 5 — Backtesting. */
+export function isBacktestingEnabled() {
+  return getFeatureFlags().backtesting;
 }

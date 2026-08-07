@@ -22,7 +22,7 @@ export const STAGE_TYPE_LABELS = {
   entry: "Entry",
   exit: "Exit",
   risk: "Risk",
-  final: "Final",
+  final: "Backtesting",
 };
 
 /** Parent stage type for cascade filtering (null for signal). */

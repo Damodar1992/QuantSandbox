@@ -7,6 +7,7 @@ import { setFeatureFlag } from "../../constants/featureFlags";
 const FEATURES = [
   { key: "miniBacktest", label: "Mini Backtest" },
   { key: "formulas", label: "Formulas" },
+  { key: "backtesting", label: "Stage 5 Backtesting" },
 ];
 
 export const FeatureFlagsDropdown = memo(function FeatureFlagsDropdown({

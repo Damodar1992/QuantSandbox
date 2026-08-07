@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-import { cx, ui } from "../../../constants/ui";
 import { STAGE_TYPE_LABELS } from "../../../constants/versioning";
 import { AppButton } from "../../../components/common/AppButton";
 import { AppDialog } from "../../../components/common/AppDialog";
@@ -44,7 +43,7 @@ export function StageVersionCommentModal({
             onChange={(e) => setDraft(e.target.value)}
             rows={4}
             placeholder="Note about this version…"
-            className={cx(ui.input, "mt-1 w-full text-[12px] resize-y min-h-[88px]")}
+            className="mt-1 w-full text-[12px] resize-y min-h-[88px]"
             autoFocus
           />
         </label>

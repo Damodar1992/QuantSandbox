@@ -2,6 +2,7 @@ import React, { memo, useEffect, useState } from "react";
 import { cx, ui } from "../../../../constants/ui";
 import { AppButton } from "../../../../components/common/AppButton";
 import { AppDialog } from "../../../../components/common/AppDialog";
+import { AppInput } from "../../../../components/common/AppInput";
 
 export function parseEpochNumbersInput(input) {
   const parsed = String(input || "")
@@ -73,13 +74,14 @@ export const BestEpochsModal = memo(function BestEpochsModal({
           <label className="block text-[11px] text-[#8c8c8c] mb-1">
             {isMiniBacktest ? "Epoch number" : "Epoch numbers"}
           </label>
-          <input
+          <AppInput
             value={input}
             onChange={(e) => {
               setInput(e.target.value);
               setError("");
             }}
-            className={cx(ui.input, "h-9 w-full text-[12px]")}
+            className="h-9 w-full text-[12px]"
+            wrapperClassName="space-y-0"
             placeholder={isMiniBacktest ? "e.g. 3" : "e.g. 1, 3, 5"}
             autoFocus
           />

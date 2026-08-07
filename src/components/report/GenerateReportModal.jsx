@@ -1,9 +1,13 @@
-import React, { memo, useState } from "react";
+import React, { memo, useMemo, useState } from "react";
 import { cx, ui } from "../../constants/ui";
 import { HEATMAP_FILTER_KEYS, FILTER_OPERATIONS } from "../../constants/heatmap";
 import { genId, FILTER_PRESET_BUILTIN, cloneFilterRootWithNewIds } from "../heatmap/heatmapFilterPresets";
 import { AppButton } from "../common/AppButton";
 import { AppDialog } from "../common/AppDialog";
+import { AppInput } from "../common/AppInput";
+import { AppSelect } from "../common/AppSelect";
+
+const DENSE = "h-8 text-[12px]";
 
 export const GenerateReportModal = memo(({ open = true, onClose, onGenerate }) => {
   // Локальное состояние фильтра для Report (НЕ связано с HeatMap)
@@ -93,8 +97,7 @@ export const GenerateReportModal = memo(({ open = true, onClose, onGenerate }) =
     }));
   };
 
-  const handlePresetChange = (e) => {
-    const presetKey = e.target.value;
+  const handlePresetChange = (presetKey) => {
     setFilterPreset(presetKey);
     if (!presetKey) {
       setFilterRoot({ rootLogic: "and", groups: [] });
@@ -110,6 +113,25 @@ export const GenerateReportModal = memo(({ open = true, onClose, onGenerate }) =
       setFilterRoot(cloneFilterRootWithNewIds(builtin()));
     }
   };
+
+  const presetOptions = useMemo(
+    () => [
+      { value: "", label: "—" },
+      ...Object.keys(FILTER_PRESET_BUILTIN).map((key) => ({ value: key, label: key })),
+      ...customPresets.map((p) => ({ value: p.name, label: p.name })),
+    ],
+    [customPresets],
+  );
+
+  const fieldOptions = useMemo(
+    () => HEATMAP_FILTER_KEYS.map((f) => ({ value: f, label: f })),
+    [],
+  );
+
+  const opOptions = useMemo(
+    () => FILTER_OPERATIONS.map((op) => ({ value: op.value, label: op.label })),
+    [],
+  );
 
   const handleSaveFilterAsClick = () => {
     const name = window.prompt("Save current filter as:");
@@ -164,23 +186,14 @@ export const GenerateReportModal = memo(({ open = true, onClose, onGenerate }) =
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <label className="text-[10px] text-[#8c8c8c]">Filter Preset</label>
-                  <select
+                  <AppSelect
                     value={filterPreset}
-                    onChange={handlePresetChange}
-                    className={cx(ui.input, "h-8 text-[11px] min-w-[160px]")}
-                  >
-                    <option value="">—</option>
-                    {Object.keys(FILTER_PRESET_BUILTIN).map((key) => (
-                      <option key={key} value={key}>
-                        {key}
-                      </option>
-                    ))}
-                    {customPresets.map((p) => (
-                      <option key={p.id} value={p.name}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
+                    onValueChange={handlePresetChange}
+                    options={presetOptions}
+                    className="space-y-0 min-w-[160px]"
+                    triggerClassName={cx(DENSE, "min-w-[160px]")}
+                    placeholder="—"
+                  />
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
@@ -289,54 +302,44 @@ export const GenerateReportModal = memo(({ open = true, onClose, onGenerate }) =
                               >
                                 ×
                               </button>
-                              <select
+                              <AppSelect
                                 value={cond.field}
-                                onChange={(e) =>
-                                  updateCondition(group.id, cond.id, { field: e.target.value })
+                                onValueChange={(v) =>
+                                  updateCondition(group.id, cond.id, { field: v })
                                 }
-                                className={cx(
-                                  ui.input,
-                                  "h-6 text-[10px] flex-1 min-w-0 bg-sky-900/30 border-sky-500/50 text-sky-100",
+                                options={fieldOptions}
+                                className="flex-1 min-w-0 space-y-0"
+                                triggerClassName={cx(
+                                  DENSE,
+                                  "bg-sky-900/30 border-sky-500/50 text-sky-100",
                                 )}
-                              >
-                                {HEATMAP_FILTER_KEYS.map((f) => (
-                                  <option key={f} value={f}>
-                                    {f}
-                                  </option>
-                                ))}
-                              </select>
-                              <select
+                              />
+                              <AppSelect
                                 value={cond.op}
-                                onChange={(e) =>
-                                  updateCondition(group.id, cond.id, { op: e.target.value })
+                                onValueChange={(v) =>
+                                  updateCondition(group.id, cond.id, { op: v })
                                 }
-                                className={cx(
-                                  ui.input,
-                                  "h-6 text-[10px] flex-1 min-w-0 bg-emerald-900/30 border-emerald-500/50 text-emerald-100",
+                                options={opOptions}
+                                className="flex-1 min-w-0 space-y-0"
+                                triggerClassName={cx(
+                                  DENSE,
+                                  "bg-emerald-900/30 border-emerald-500/50 text-emerald-100",
                                 )}
-                              >
-                                {FILTER_OPERATIONS.map((op) => (
-                                  <option key={op.value} value={op.value}>
-                                    {op.label}
-                                  </option>
-                                ))}
-                              </select>
+                              />
                               {noValue ? (
                                 <span className="text-[10px] text-[#595959] flex-1 min-w-0">
                                   (no value)
                                 </span>
                               ) : (
-                                <input
+                                <AppInput
                                   type="text"
                                   value={cond.value}
                                   onChange={(e) =>
                                     updateCondition(group.id, cond.id, { value: e.target.value })
                                   }
                                   placeholder="Value"
-                                  className={cx(
-                                    ui.input,
-                                    "h-6 text-[10px] flex-1 min-w-0 bg-[#1a1a1a] text-[#d9d9d9]",
-                                  )}
+                                  className={cx(DENSE, "flex-1 min-w-0 bg-[#1a1a1a] text-[#d9d9d9]")}
+                                  wrapperClassName="flex-1 min-w-0 space-y-0"
                                 />
                               )}
                             </div>

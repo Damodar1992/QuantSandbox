@@ -1,7 +1,8 @@
 import React, { memo } from "react";
 import { CircleHelp } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { cx, ui } from "../../../../constants/ui";
+import { AppInput } from "@/components/common/AppInput";
+import { cx } from "../../../../constants/ui";
 
 const FIELD_TOOLTIPS = {
   plateauWidth:
@@ -106,13 +107,14 @@ export const RangeNarrowingFormFields = memo(function RangeNarrowingFormFields({
             Max combinations
             <FieldHelpTooltip label="Max combinations" text={FIELD_TOOLTIPS.maxCombinations} />
           </label>
-          <input
+          <AppInput
             type="number"
             min={1}
             value={maxCombinations}
             disabled={readOnly}
             onChange={(e) => onMaxCombinationsChange(Number(e.target.value))}
-            className={cx(ui.input, "h-9 text-[12px] w-full")}
+            className="h-9 w-full text-[12px]"
+            wrapperClassName="space-y-0"
           />
           <div className="text-[10px] text-[#8c8c8c]">
             The generated config will never exceed this number of combinations.
@@ -123,13 +125,14 @@ export const RangeNarrowingFormFields = memo(function RangeNarrowingFormFields({
             Min epochs per value
             <FieldHelpTooltip label="Min epochs per value" text={FIELD_TOOLTIPS.minEpochsPerValue} />
           </label>
-          <input
+          <AppInput
             type="number"
             min={1}
             value={minEpochsPerValue}
             disabled={readOnly}
             onChange={(e) => onMinEpochsPerValueChange(Number(e.target.value))}
-            className={cx(ui.input, "h-9 text-[12px] w-full")}
+            className="h-9 w-full text-[12px]"
+            wrapperClassName="space-y-0"
           />
           <div className="text-[10px] text-[#8c8c8c] leading-snug">
             Parameter values tested on fewer epochs are ignored during range selection.
@@ -173,13 +176,14 @@ export const RangeNarrowingFormFields = memo(function RangeNarrowingFormFields({
             <span>Margin widen (original grid steps per side, for the «margin» config)</span>
             <FieldHelpTooltip label="Margin widen" text={FIELD_TOOLTIPS.marginWiden} />
           </label>
-          <input
+          <AppInput
             type="number"
             min={0}
             value={marginWiden}
             disabled={readOnly}
             onChange={(e) => onMarginWidenChange(Number(e.target.value))}
-            className={cx(ui.input, "h-9 text-[12px] w-full")}
+            className="h-9 w-full text-[12px]"
+            wrapperClassName="space-y-0"
           />
           <div className="text-[10px] text-[#8c8c8c]">
             How many original grid steps to add on each side of every active range.

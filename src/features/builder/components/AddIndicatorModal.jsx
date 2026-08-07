@@ -1,9 +1,15 @@
-import React, { memo, useEffect, useState } from "react";
+import React, { memo, useEffect, useMemo, useState } from "react";
 import { cx, ui } from "../../../constants/ui";
 import { AppButton } from "../../../components/common/AppButton";
 import { AppDialog } from "../../../components/common/AppDialog";
+import { AppInput } from "../../../components/common/AppInput";
+import { AppSelect } from "../../../components/common/AppSelect";
+import { Textarea } from "../../../components/ui/textarea";
 import { BASE_INDICATORS, SOURCE_OPTIONS } from "../../../constants/indicators";
 import { getDefaultDisplayName } from "../utils/indicatorHelpers";
+
+const CONTROL = "h-9 text-[12px]";
+const DENSE = "h-8 text-[12px]";
 
 export const AddIndicatorModal = memo(({ onClose, onAdd, initialType = "RSI" }) => {
   const [selectedType, setSelectedType] = useState(initialType);
@@ -27,6 +33,20 @@ export const AddIndicatorModal = memo(({ onClose, onAdd, initialType = "RSI" }) 
   }, [selectedType]);
 
   const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  const typeOptions = useMemo(
+    () =>
+      Object.entries(BASE_INDICATORS).map(([key, info]) => ({
+        value: key,
+        label: info.name,
+      })),
+    [],
+  );
+
+  const sourceOptions = useMemo(
+    () => SOURCE_OPTIONS.map((opt) => ({ value: opt, label: opt })),
+    [],
+  );
 
   const handleAdd = () => {
     if (!displayName.trim()) {
@@ -64,10 +84,11 @@ export const AddIndicatorModal = memo(({ onClose, onAdd, initialType = "RSI" }) 
       <div className="space-y-4 overflow-auto max-h-[min(70vh,640px)]">
         <div>
           <label className={cx("block mb-1 text-xs font-medium text-[#d9d9d9]")}>Display Name</label>
-          <input
+          <AppInput
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
-            className={ui.input}
+            className={CONTROL}
+            wrapperClassName="space-y-0"
             placeholder="e.g., rsi, ema, my_indicator"
           />
           <div className={cx("text-[10px]", ui.textMuted, "mt-1")}>
@@ -77,10 +98,10 @@ export const AddIndicatorModal = memo(({ onClose, onAdd, initialType = "RSI" }) 
         {selectedType === "CUSTOM_FORMULA" && (
           <div>
             <label className={cx("block mb-1 text-xs", ui.textMuted)}>Custom Formula</label>
-            <textarea
+            <Textarea
               value={customFormula}
               onChange={(e) => setCustomFormula(e.target.value)}
-              className={cx(ui.input, "font-mono text-[11px]")}
+              className="font-mono text-[11px] min-h-[120px]"
               rows={6}
               placeholder={'dataframe["ema_slope_20"] = dataframe["ema_close_20"].diff(1)\ndataframe["macd_slope"] = dataframe["macd_close"].diff(1)'}
             />
@@ -100,31 +121,23 @@ export const AddIndicatorModal = memo(({ onClose, onAdd, initialType = "RSI" }) 
           <div className="p-3 pt-0 space-y-3 border-t border-[#303030]">
             <div>
               <label className={cx("block mb-1 text-xs", ui.textMuted)}>Indicator Type</label>
-              <select
+              <AppSelect
                 value={selectedType}
-                onChange={(e) => setSelectedType(e.target.value)}
-                className={cx(ui.input, "h-9")}
-              >
-                {Object.entries(BASE_INDICATORS).map(([key, info]) => (
-                  <option key={key} value={key}>
-                    {info.name}
-                  </option>
-                ))}
-              </select>
+                onValueChange={setSelectedType}
+                options={typeOptions}
+                className="space-y-0"
+                triggerClassName={CONTROL}
+              />
             </div>
             <div>
               <label className={cx("block mb-1 text-xs", ui.textMuted)}>Source</label>
-              <select
+              <AppSelect
                 value={source}
-                onChange={(e) => setSource(e.target.value)}
-                className={cx(ui.input, "h-9")}
-              >
-                {SOURCE_OPTIONS.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
-                  </option>
-                ))}
-              </select>
+                onValueChange={setSource}
+                options={sourceOptions}
+                className="space-y-0"
+                triggerClassName={CONTROL}
+              />
             </div>
             {selectedType !== "CUSTOM_FORMULA" && (
               <div>
@@ -136,39 +149,43 @@ export const AddIndicatorModal = memo(({ onClose, onAdd, initialType = "RSI" }) 
                       <div className="grid grid-cols-4 gap-3">
                         <div>
                           <label className={cx("block mb-1 text-[10px]", ui.textMuted)}>Default</label>
-                          <input
+                          <AppInput
                             type="number"
                             value={param.default}
                             readOnly
-                            className={cx(ui.input, "h-8 text-[12px] cursor-not-allowed bg-[#181818]")}
+                            className={cx(DENSE, "cursor-not-allowed bg-[#181818]")}
+                            wrapperClassName="space-y-0"
                           />
                         </div>
                         <div>
                           <label className={cx("block mb-1 text-[10px]", ui.textMuted)}>Min</label>
-                          <input
+                          <AppInput
                             type="number"
                             value={param.min}
                             readOnly
-                            className={cx(ui.input, "h-8 text-[12px] cursor-not-allowed bg-[#181818]")}
+                            className={cx(DENSE, "cursor-not-allowed bg-[#181818]")}
+                            wrapperClassName="space-y-0"
                           />
                         </div>
                         <div>
                           <label className={cx("block mb-1 text-[10px]", ui.textMuted)}>Max</label>
-                          <input
+                          <AppInput
                             type="number"
                             value={param.max}
                             readOnly
-                            className={cx(ui.input, "h-8 text-[12px] cursor-not-allowed bg-[#181818]")}
+                            className={cx(DENSE, "cursor-not-allowed bg-[#181818]")}
+                            wrapperClassName="space-y-0"
                           />
                         </div>
                         <div>
                           <label className={cx("block mb-1 text-[10px]", ui.textMuted)}>Step</label>
-                          <input
+                          <AppInput
                             type="number"
                             step="0.1"
                             value={param.step}
                             readOnly
-                            className={cx(ui.input, "h-8 text-[12px] cursor-not-allowed bg-[#181818]")}
+                            className={cx(DENSE, "cursor-not-allowed bg-[#181818]")}
+                            wrapperClassName="space-y-0"
                           />
                         </div>
                       </div>

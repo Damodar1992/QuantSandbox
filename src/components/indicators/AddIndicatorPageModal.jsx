@@ -1,6 +1,9 @@
-import React, { memo, useState } from "react";
+import React, { memo, useMemo, useState } from "react";
 import { cx, ui } from "../../constants/ui";
 import { ModalShell } from "../common";
+import { AppInput } from "../common/AppInput";
+import { AppSelect } from "../common/AppSelect";
+import { Textarea } from "../ui/textarea";
 
 const DEFAULT_CUSTOM_CODE =
   "import pandas as pd\n\ndef run(df: pd.DataFrame, **kwargs):\n    # Indicator implementation\n    return {}";
@@ -21,6 +24,9 @@ const INDICATOR_CATEGORIES = [
   "Utility",
 ];
 
+const CONTROL = "h-9 text-[12px]";
+const DENSE = "h-8 text-[12px]";
+
 export const AddIndicatorPageModal = memo(function AddIndicatorPageModal({ onClose, onAdd }) {
   const [displayName, setDisplayName] = useState("");
   const [description, setDescription] = useState("");
@@ -29,6 +35,16 @@ export const AddIndicatorPageModal = memo(function AddIndicatorPageModal({ onClo
   const [parameters, setParameters] = useState(() => [
     { name: "", type: "int", default_value: "", min: "", max: "", step: "" },
   ]);
+
+  const categoryOptions = useMemo(
+    () => INDICATOR_CATEGORIES.map((cat) => ({ value: cat, label: cat })),
+    [],
+  );
+
+  const paramTypeOptions = useMemo(
+    () => PARAM_TYPES.map((t) => ({ value: t, label: t })),
+    [],
+  );
 
   const updateParam = (index, field, value) => {
     setParameters((prev) => {
@@ -74,36 +90,33 @@ export const AddIndicatorPageModal = memo(function AddIndicatorPageModal({ onClo
       <div className="space-y-4 max-h-[70vh] overflow-auto">
         <div>
           <label className={cx("block mb-1 text-xs", ui.textMuted)}>Display name</label>
-          <input
+          <AppInput
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
-            className={ui.input}
+            className={CONTROL}
+            wrapperClassName="space-y-0"
             placeholder="Display name"
           />
         </div>
         <div>
           <label className={cx("block mb-1 text-xs", ui.textMuted)}>Description</label>
-          <textarea
+          <Textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className={cx(ui.input, "w-full min-h-[60px]")}
+            className="w-full min-h-[60px] text-[12px]"
             placeholder="Description"
             rows={2}
           />
         </div>
         <div>
           <label className={cx("block mb-1 text-xs", ui.textMuted)}>Indicator category</label>
-          <select
+          <AppSelect
             value={indicatorCategory}
-            onChange={(e) => setIndicatorCategory(e.target.value)}
-            className={cx(ui.input, "h-9 w-full")}
-          >
-            {INDICATOR_CATEGORIES.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
-            ))}
-          </select>
+            onValueChange={setIndicatorCategory}
+            options={categoryOptions}
+            className="space-y-0"
+            triggerClassName={CONTROL}
+          />
         </div>
         <div>
           <label className={cx("block mb-2 text-xs", ui.textMuted)}>Parameters</label>
@@ -124,57 +137,58 @@ export const AddIndicatorPageModal = memo(function AddIndicatorPageModal({ onClo
                 {parameters.map((p, idx) => (
                   <tr key={idx} className="border-t border-[#303030]">
                     <td className="px-2 py-1.5">
-                      <input
+                      <AppInput
                         type="text"
                         value={p.name}
                         onChange={(e) => updateParam(idx, "name", e.target.value)}
                         placeholder="name"
-                        className={cx(ui.input, "h-7 min-w-[80px] text-[11px] font-mono")}
+                        className={cx(DENSE, "min-w-[80px] font-mono")}
+                        wrapperClassName="space-y-0"
                       />
                     </td>
                     <td className="px-2 py-1.5">
-                      <select
+                      <AppSelect
                         value={p.type}
-                        onChange={(e) => updateParam(idx, "type", e.target.value)}
-                        className={cx(ui.input, "h-7 text-[11px] min-w-[72px]")}
-                      >
-                        {PARAM_TYPES.map((t) => (
-                          <option key={t} value={t}>
-                            {t}
-                          </option>
-                        ))}
-                      </select>
+                        onValueChange={(v) => updateParam(idx, "type", v)}
+                        options={paramTypeOptions}
+                        className="space-y-0 min-w-[72px]"
+                        triggerClassName={DENSE}
+                      />
                     </td>
                     <td className="px-2 py-1.5">
-                      <input
+                      <AppInput
                         type="text"
                         value={p.default_value}
                         onChange={(e) => updateParam(idx, "default_value", e.target.value)}
-                        className={cx(ui.input, "h-7 w-16 text-[11px]")}
+                        className={cx(DENSE, "w-16")}
+                        wrapperClassName="space-y-0"
                       />
                     </td>
                     <td className="px-2 py-1.5">
-                      <input
+                      <AppInput
                         type="text"
                         value={p.min}
                         onChange={(e) => updateParam(idx, "min", e.target.value)}
-                        className={cx(ui.input, "h-7 w-14 text-[11px]")}
+                        className={cx(DENSE, "w-14")}
+                        wrapperClassName="space-y-0"
                       />
                     </td>
                     <td className="px-2 py-1.5">
-                      <input
+                      <AppInput
                         type="text"
                         value={p.max}
                         onChange={(e) => updateParam(idx, "max", e.target.value)}
-                        className={cx(ui.input, "h-7 w-14 text-[11px]")}
+                        className={cx(DENSE, "w-14")}
+                        wrapperClassName="space-y-0"
                       />
                     </td>
                     <td className="px-2 py-1.5">
-                      <input
+                      <AppInput
                         type="text"
                         value={p.step}
                         onChange={(e) => updateParam(idx, "step", e.target.value)}
-                        className={cx(ui.input, "h-7 w-14 text-[11px]")}
+                        className={cx(DENSE, "w-14")}
+                        wrapperClassName="space-y-0"
                       />
                     </td>
                     <td className="px-2 py-1.5">
@@ -205,13 +219,10 @@ export const AddIndicatorPageModal = memo(function AddIndicatorPageModal({ onClo
         </div>
         <div>
           <label className={cx("block mb-1 text-xs", ui.textMuted)}>Code</label>
-          <textarea
+          <Textarea
             value={code}
             onChange={(e) => setCode(e.target.value)}
-            className={cx(
-              "text-[11px] font-mono text-[#a6a6a6] p-3 rounded-lg bg-[#0f0f0f] border border-[#303030] w-full min-h-[140px] max-h-40 resize-y",
-              ui.input
-            )}
+            className="text-[11px] font-mono text-[#a6a6a6] min-h-[140px] max-h-40 resize-y"
             placeholder="Indicator code..."
             spellCheck={false}
           />

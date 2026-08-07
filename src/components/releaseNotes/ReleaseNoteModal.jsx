@@ -2,7 +2,10 @@ import React, { memo, useEffect, useState } from "react";
 import { cx, ui } from "../../constants/ui";
 import { AppDialog } from "../common/AppDialog";
 import { AppButton } from "../common/AppButton";
+import { AppInput } from "../common/AppInput";
+import { Textarea } from "../ui/textarea";
 
+const CONTROL = "h-9 text-[12px]";
 const emptyDraft = () => ({ title: "", releasedAt: "", body: "" });
 
 export const ReleaseNoteModal = memo(function ReleaseNoteModal({
@@ -49,32 +52,31 @@ export const ReleaseNoteModal = memo(function ReleaseNoteModal({
       <div className="space-y-4">
         <div>
           <label className={cx("block mb-1 text-xs", ui.textMuted)}>Title</label>
-          <input
+          <AppInput
             value={draft.title}
             onChange={(e) => setDraft((prev) => ({ ...prev, title: e.target.value }))}
-            className={cx(ui.input, "!w-full")}
+            className={cx(CONTROL, "w-full")}
+            wrapperClassName="space-y-0"
             placeholder="e.g. Global Tags release"
           />
         </div>
         <div>
           <label className={cx("block mb-1 text-xs", ui.textMuted)}>Release date</label>
-          <input
+          <AppInput
             type="date"
             value={draft.releasedAt}
             onChange={(e) => setDraft((prev) => ({ ...prev, releasedAt: e.target.value }))}
-            className={cx(ui.input, "!w-full")}
+            className={cx(CONTROL, "w-full")}
+            wrapperClassName="space-y-0"
           />
         </div>
         <div>
           <label className={cx("block mb-1 text-xs", ui.textMuted)}>Description (markdown)</label>
-          <textarea
+          <Textarea
             value={draft.body}
             onChange={(e) => setDraft((prev) => ({ ...prev, body: e.target.value }))}
             rows={12}
-            className={cx(
-              ui.input,
-              "!w-full min-h-[200px] resize-y font-mono text-[11px] leading-relaxed",
-            )}
+            className="w-full min-h-[200px] resize-y font-mono text-[11px] leading-relaxed"
             placeholder={"## What's new\n\n- Feature one\n- Feature two"}
           />
         </div>

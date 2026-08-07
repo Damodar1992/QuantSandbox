@@ -96,6 +96,7 @@ export function buildMiniBacktestTableRow(entry) {
     executed: execCount != null ? String(execCount) : "—",
     totalCycles: totalCycles != null ? String(totalCycles) : "—",
     status: resolveMiniBacktestRunStatus(entry),
+    owner: entry.owner || "—",
     entry,
   };
 }

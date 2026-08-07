@@ -3,6 +3,9 @@ import { cx } from "@/constants/ui";
 import { StageVersionSelect, StageVersionActionsMenu } from "@/features/versioning";
 import { ProdButton } from "@/components/prod/ProdButton";
 
+const PILL =
+  "flex h-9 min-w-0 items-center gap-1.5 rounded-lg border px-2 py-0 transition";
+
 export const BuilderStagePills = memo(function BuilderStagePills({
   stages,
   activeStageId,
@@ -32,7 +35,7 @@ export const BuilderStagePills = memo(function BuilderStagePills({
               <div
                 key={stage.id}
                 className={cx(
-                  "flex min-w-0 items-center gap-1.5 rounded-lg border px-2 py-1.5 transition",
+                  PILL,
                   isActive
                     ? "border-violet-500/55 bg-[#1e1333] shadow-[inset_0_1px_0_rgba(221,214,254,0.08)]"
                     : "border-[rgba(60,40,80,0.5)] bg-[#19102b]/90 hover:border-[rgba(60,40,80,0.75)]",
@@ -54,13 +57,13 @@ export const BuilderStagePills = memo(function BuilderStagePills({
                     }
                   }}
                   className={cx(
-                    "flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden",
+                    "flex min-w-0 flex-1 items-center gap-1.5 self-stretch overflow-hidden",
                     isLocked ? "cursor-not-allowed" : "cursor-pointer",
                   )}
                 >
                   <span
                     className={cx(
-                      "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border [&_svg]:h-3 [&_svg]:w-3",
+                      "inline-flex size-6 shrink-0 items-center justify-center rounded-md border [&_svg]:size-3",
                       isActive
                         ? "border-violet-400/40 bg-[#2c1b46] text-[#ddd6fe]"
                         : "border-[rgba(60,40,80,0.45)] bg-[#2c1b46] text-[#b8aecc]",
@@ -70,7 +73,7 @@ export const BuilderStagePills = memo(function BuilderStagePills({
                   </span>
                   <span
                     className={cx(
-                      "truncate text-[11px] font-semibold leading-tight",
+                      "truncate text-[11px] font-semibold leading-none",
                       isActive ? "text-[#faf7fd]" : "text-[#b8aecc]",
                     )}
                   >
@@ -79,7 +82,11 @@ export const BuilderStagePills = memo(function BuilderStagePills({
                 </div>
 
                 {stageType ? (
-                  <div className="flex shrink-0 items-center gap-1 border-l border-[rgba(60,40,80,0.45)] pl-1.5">
+                  <>
+                    <span
+                      className="h-4 w-px shrink-0 self-center bg-[rgba(60,40,80,0.45)]"
+                      aria-hidden
+                    />
                     <StageVersionSelect
                       value={selectedVersionByStage?.[stageType]}
                       options={stage.versionOptions}
@@ -87,7 +94,6 @@ export const BuilderStagePills = memo(function BuilderStagePills({
                       placeholder={stage.versionDisabled ? "—" : "…"}
                       onChange={(versionId) => onStageVersionChange?.(stageType, versionId)}
                       onAddNewVersion={() => onAddNewStageVersion?.(stageType)}
-                      className="h-6 w-[3.5rem] shrink-0 px-1 text-[9px]"
                     />
                     <StageVersionActionsMenu
                       disabled={stage.versionDisabled}
@@ -97,9 +103,9 @@ export const BuilderStagePills = memo(function BuilderStagePills({
                       onEditComment={() => onOpenVersionComment?.(stageType)}
                       onDeleteComment={() => onDeleteVersionComment?.(stageType)}
                       onArchiveVersion={() => onArchiveStageVersion?.(stageType)}
-                      className="h-6 w-6 shrink-0 [&_svg]:h-2.5 [&_svg]:w-2.5"
+                      className="size-6 shrink-0 self-center p-0 [&_svg]:size-3"
                     />
-                  </div>
+                  </>
                 ) : null}
               </div>
             );
@@ -110,12 +116,12 @@ export const BuilderStagePills = memo(function BuilderStagePills({
           variant="outline"
           size="sm"
           onClick={onOpenVersionTree}
-          className="shrink-0 whitespace-nowrap"
+          className="h-9 shrink-0 whitespace-nowrap"
           title="Show full version hierarchy"
         >
           <svg
             viewBox="0 0 24 24"
-            className="h-3.5 w-3.5 shrink-0"
+            className="size-3.5 shrink-0"
             fill="none"
             stroke="currentColor"
             strokeWidth="2"

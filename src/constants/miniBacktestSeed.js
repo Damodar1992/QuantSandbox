@@ -1,18 +1,29 @@
 import { MINI_BACKTEST_DEFAULTS, MINI_BACKTEST_RUN_STATUSES } from "./miniBacktest";
+import { BT_DEMO_EPOCH_ID } from "./backtesting";
+import { MOCK_CURRENT_USER } from "./tags";
 import { generateCycleDataForEpoch } from "../features/builder/utils/miniBacktestData";
 import { hashParams, runMiniBacktest } from "../features/builder/utils/miniBacktestEngine";
 
 const now = Date.now();
 
-function buildFinishedDemoEntry() {
+function buildFinishedDemoEntry({
+  id = "mbt-demo-finished",
+  epochId = "demo-epoch-finished",
+  epochNumber = 7,
+  stageId = 2,
+  stage = "Entry",
+  hyperoptId = "HO-demo-finished",
+  analyzerId = "AN-demo-finished",
+  createdOffsetMs = 2 * 60 * 1000,
+} = {}) {
   const mockEpoch = {
-    id: "demo-epoch-finished",
-    stageId: 2,
-    epochNumber: 7,
+    id: epochId,
+    stageId,
+    epochNumber,
     hyperoptNumber: 1,
     analyzerNumber: 3,
-    hyperoptId: "HO-demo-finished",
-    analyzerId: "AN-demo-finished",
+    hyperoptId,
+    analyzerId,
     pairs: "BTC/USDT",
     timeframe: "1h",
     hitRate: 58.5,
@@ -21,7 +32,7 @@ function buildFinishedDemoEntry() {
     air: 1.45,
     score: 0.78,
     stability: 0.82,
-    label: "Epoch #7",
+    label: `Epoch #${epochNumber}`,
     knowRange: "2019-06-01 – 2024-03-15",
   };
 
@@ -58,12 +69,12 @@ function buildFinishedDemoEntry() {
   const paramsHash = hashParams(params);
 
   return {
-    id: "mbt-demo-finished",
+    id,
     isDemo: true,
     runStatus: MINI_BACKTEST_RUN_STATUSES.FINISHED,
     epochId: mockEpoch.id,
     stageId: mockEpoch.stageId,
-    stage: "Entry",
+    stage,
     stageVersionLineage: "1.3.2",
     hyperoptNumber: mockEpoch.hyperoptNumber,
     analyzerNumber: mockEpoch.analyzerNumber,
@@ -92,13 +103,24 @@ function buildFinishedDemoEntry() {
     params,
     paramsHash,
     result: backtestResult,
-    createdAt: new Date(now - 2 * 60 * 1000).toISOString(),
+    createdAt: new Date(now - createdOffsetMs).toISOString(),
   };
 }
 
 /** Default demo rows shown in Mini Backtest sidebar (Finished + In Progress + Fail). */
 export const INITIAL_MINI_BACKTEST_DEMO_RESULTS = [
   buildFinishedDemoEntry(),
+  // Linked to Stage 5 seeded favorite so Run Backtest can inherit Mini#N.
+  buildFinishedDemoEntry({
+    id: "mbt-demo-stage5-finished",
+    epochId: BT_DEMO_EPOCH_ID,
+    epochNumber: 126,
+    stageId: 4,
+    stage: "Risk",
+    hyperoptId: "HO-demo-stage5",
+    analyzerId: "AN-demo-stage5",
+    createdOffsetMs: 3 * 60 * 1000,
+  }),
   {
     id: "mbt-demo-in-progress",
     isDemo: true,
@@ -144,10 +166,12 @@ export const INITIAL_MINI_BACKTEST_DEMO_RESULTS = [
 
 /** Seed global registry: demo runs across multiple strategies. */
 export function buildInitialGlobalMiniBacktestResults() {
-  const [finished, inProgress, failed] = INITIAL_MINI_BACKTEST_DEMO_RESULTS;
+  const [finished, stage5Finished, inProgress, failed] = INITIAL_MINI_BACKTEST_DEMO_RESULTS;
+  const owner = MOCK_CURRENT_USER.login;
   return [
-    { ...finished, strategyId: 1, strategyName: "EMA Bounce" },
-    { ...inProgress, strategyId: 1, strategyName: "EMA Bounce" },
-    { ...failed, strategyId: 2, strategyName: "RSI Mean Reversion" },
+    { ...finished, strategyId: 1, strategyName: "EMA Bounce", owner },
+    { ...stage5Finished, strategyId: 1, strategyName: "EMA Bounce", owner },
+    { ...inProgress, strategyId: 1, strategyName: "EMA Bounce", owner },
+    { ...failed, strategyId: 2, strategyName: "RSI Mean Reversion", owner },
   ];
 }

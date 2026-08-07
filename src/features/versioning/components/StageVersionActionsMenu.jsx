@@ -33,7 +33,7 @@ export const StageVersionActionsMenu = memo(function StageVersionActionsMenu({
           title="Version actions"
           aria-label="Version actions"
           className={cx(
-            "relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border text-muted-foreground",
+            "relative inline-flex size-6 shrink-0 items-center justify-center rounded-md border p-0 leading-none text-muted-foreground",
             crmSurface.border,
             crmSurface.input,
             "hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2",
@@ -43,7 +43,7 @@ export const StageVersionActionsMenu = memo(function StageVersionActionsMenu({
             className,
           )}
         >
-          <MoreIcon className="h-3.5 w-3.5" />
+          <MoreIcon className="size-3" />
           {hasComment && (
             <span
               className={cx("absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full ring-2 ring-background", crmAccent.dot)}

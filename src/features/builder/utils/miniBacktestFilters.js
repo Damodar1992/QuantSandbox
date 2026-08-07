@@ -125,6 +125,7 @@ export const EMPTY_GLOBAL_MINI_BACKTEST_FILTERS = {
   exchange: "",
   pairs: "",
   status: "",
+  owner: "",
 };
 
 function resolveTradingModeKey(entry) {
@@ -147,6 +148,10 @@ function resolveStrategyKey(entry) {
   return entry?.strategyName || "";
 }
 
+function resolveOwnerKey(entry) {
+  return entry?.owner ? String(entry.owner) : "";
+}
+
 export function getGlobalMiniBacktestFilterOptions(results = []) {
   const strategies = new Map();
   const stages = new Map();
@@ -154,6 +159,7 @@ export function getGlobalMiniBacktestFilterOptions(results = []) {
   const exchanges = new Set();
   const pairsSet = new Set();
   const statuses = new Set();
+  const owners = new Set();
 
   for (const entry of results) {
     const strategyKey = resolveStrategyKey(entry);
@@ -177,6 +183,9 @@ export function getGlobalMiniBacktestFilterOptions(results = []) {
     if (pairs) pairsSet.add(pairs);
 
     statuses.add(resolveMiniBacktestRunStatus(entry));
+
+    const owner = resolveOwnerKey(entry);
+    if (owner) owners.add(owner);
   }
 
   return {
@@ -207,6 +216,7 @@ export function getGlobalMiniBacktestFilterOptions(results = []) {
       ];
       return order.indexOf(a) - order.indexOf(b);
     }),
+    owners: [...owners].sort().map((value) => ({ value, label: value })),
   };
 }
 
@@ -214,7 +224,7 @@ export function filterGlobalMiniBacktestResults(
   results = [],
   filters = EMPTY_GLOBAL_MINI_BACKTEST_FILTERS,
 ) {
-  const { strategy, stage, tradingMode, exchange, pairs, status } = filters;
+  const { strategy, stage, tradingMode, exchange, pairs, status, owner } = filters;
 
   return results.filter((entry) => {
     if (strategy && resolveStrategyKey(entry) !== strategy) return false;
@@ -223,6 +233,7 @@ export function filterGlobalMiniBacktestResults(
     if (exchange && resolveExchangeKey(entry) !== exchange) return false;
     if (pairs && resolvePairsKey(entry) !== pairs) return false;
     if (status && resolveMiniBacktestRunStatus(entry) !== status) return false;
+    if (owner && resolveOwnerKey(entry) !== owner) return false;
     return true;
   });
 }

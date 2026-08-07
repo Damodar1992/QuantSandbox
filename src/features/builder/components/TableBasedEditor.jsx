@@ -1,6 +1,25 @@
 import React, { memo, useCallback } from "react";
 import { cx, ui } from "../../../constants/ui";
+import { AppSelect } from "../../../components/common/AppSelect";
 import { CollapsibleSelect } from "./CollapsibleSelect";
+
+const DENSE = "h-8 text-[12px]";
+
+const LOGIC_OPTIONS = [
+  { value: "AND", label: "AND" },
+  { value: "OR", label: "OR" },
+];
+
+const OPERATOR_OPTIONS = [
+  { value: ">", label: ">" },
+  { value: "<", label: "<" },
+  { value: ">=", label: ">=" },
+  { value: "<=", label: "<=" },
+  { value: "==", label: "==" },
+  { value: "!=", label: "!=" },
+];
+
+const ACTION_OPTIONS = [{ value: "SIGNAL", label: "Signal = True" }];
 
 export const TableBasedEditor = memo(({ rules, onChange, groupedVars }) => {
   const handleAddRule = useCallback(() => {
@@ -111,16 +130,15 @@ export const TableBasedEditor = memo(({ rules, onChange, groupedVars }) => {
                 <div key={condIndex} className="flex items-center gap-2">
                   <div className="w-20 shrink-0">
                     {condIndex > 0 ? (
-                      <select
+                      <AppSelect
                         value={condition.logic}
-                        onChange={(e) =>
-                          handleUpdateCondition(rule.id, condIndex, "logic", e.target.value)
+                        onValueChange={(v) =>
+                          handleUpdateCondition(rule.id, condIndex, "logic", v)
                         }
-                        className={cx(ui.input, "w-full h-8 text-[11px]")}
-                      >
-                        <option value="AND">AND</option>
-                        <option value="OR">OR</option>
-                      </select>
+                        options={LOGIC_OPTIONS}
+                        className="space-y-0 w-full"
+                        triggerClassName={cx(DENSE, "w-full")}
+                      />
                     ) : null}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -133,20 +151,15 @@ export const TableBasedEditor = memo(({ rules, onChange, groupedVars }) => {
                     />
                   </div>
                   <div className="w-20 shrink-0">
-                    <select
+                    <AppSelect
                       value={condition.operator}
-                      onChange={(e) =>
-                        handleUpdateCondition(rule.id, condIndex, "operator", e.target.value)
+                      onValueChange={(v) =>
+                        handleUpdateCondition(rule.id, condIndex, "operator", v)
                       }
-                      className={cx(ui.input, "w-full h-8 text-[11px]")}
-                    >
-                      <option value=">">{">"}</option>
-                      <option value="<">{"<"}</option>
-                      <option value=">=">{">="}</option>
-                      <option value="<=">{"<="}</option>
-                      <option value="==">{"=="}</option>
-                      <option value="!=">{"!="}</option>
-                    </select>
+                      options={OPERATOR_OPTIONS}
+                      className="space-y-0 w-full"
+                      triggerClassName={cx(DENSE, "w-full")}
+                    />
                   </div>
                   <div className="flex-1 min-w-0">
                     <CollapsibleSelect
@@ -182,13 +195,13 @@ export const TableBasedEditor = memo(({ rules, onChange, groupedVars }) => {
             </button>
             <div className="flex items-center gap-2 pt-2 border-t border-[#303030]">
               <span className="text-[11px] text-[#8c8c8c]">THEN</span>
-              <select
+              <AppSelect
                 value={rule.action}
-                onChange={(e) => handleUpdateAction(rule.id, e.target.value)}
-                className={cx(ui.input, "flex-1 h-8 text-[11px] font-medium text-emerald-400")}
-              >
-                <option value="SIGNAL">Signal = True</option>
-              </select>
+                onValueChange={(v) => handleUpdateAction(rule.id, v)}
+                options={ACTION_OPTIONS}
+                className="flex-1 space-y-0 min-w-0"
+                triggerClassName={cx(DENSE, "font-medium text-emerald-400")}
+              />
             </div>
           </div>
         </div>

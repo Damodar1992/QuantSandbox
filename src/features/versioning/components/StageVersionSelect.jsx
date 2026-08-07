@@ -1,6 +1,7 @@
-import React from "react";
-import { cx, ui } from "../../../constants/ui";
+import React, { useMemo } from "react";
+import { cx } from "../../../constants/ui";
 import { crmAccent } from "../../../constants/crmAccent";
+import { AppSelect } from "../../../components/common/AppSelect";
 import { formatVersionOptionTitle } from "../utils/versionSelection";
 
 /** Sentinel value for the “Add new version” row (not a real version id). */
@@ -17,48 +18,49 @@ export function StageVersionSelect({
   onChange,
   onAddNewVersion,
   className,
+  triggerClassName,
 }) {
   const selected = options.find((o) => o.id === value);
   const canAddNew = !disabled && typeof onAddNewVersion === "function";
   const isSelectDisabled = disabled || (options.length === 0 && !canAddNew);
 
+  const selectOptions = useMemo(() => {
+    const items = [];
+    if (canAddNew) {
+      items.push({ value: ADD_NEW_VERSION_VALUE, label: "Add new version" });
+    }
+    if (options.length === 0) {
+      if (!canAddNew) items.push({ value: "", label: placeholder });
+    } else {
+      for (const opt of options) {
+        items.push({ value: opt.id, label: opt.lineageCode });
+      }
+    }
+    return items;
+  }, [canAddNew, options, placeholder]);
+
   return (
-    <select
+    <AppSelect
       value={value ?? ""}
       disabled={isSelectDisabled}
-      title={selected ? formatVersionOptionTitle(selected) : placeholder}
-      onClick={(e) => e.stopPropagation()}
-      onChange={(e) => {
-        e.stopPropagation();
-        const next = e.target.value || null;
+      placeholder={placeholder}
+      options={selectOptions}
+      size="xs"
+      onValueChange={(next) => {
         if (next === ADD_NEW_VERSION_VALUE) {
           onAddNewVersion?.();
           return;
         }
-        if (typeof onChange === "function") onChange(next);
+        if (typeof onChange === "function") onChange(next || null);
       }}
-      className={cx(
-        ui.select,
-        "h-7 min-w-0 max-w-full px-1.5 text-[10px]",
+      className={className}
+      triggerClassName={cx(
+        "w-[4.25rem] shrink-0 justify-center tabular-nums",
         crmAccent.ring,
-        isSelectDisabled && "opacity-50 cursor-not-allowed",
-        className,
+        isSelectDisabled && "cursor-not-allowed opacity-50",
+        triggerClassName,
       )}
-    >
-      {canAddNew && (
-        <option value={ADD_NEW_VERSION_VALUE} className={crmAccent.textMuted}>
-          Add new version
-        </option>
-      )}
-      {options.length === 0 ? (
-        !canAddNew && <option value="">{placeholder}</option>
-      ) : (
-        options.map((opt) => (
-          <option key={opt.id} value={opt.id} title={formatVersionOptionTitle(opt)}>
-            {opt.lineageCode}
-          </option>
-        ))
-      )}
-    </select>
+      aria-label={selected ? formatVersionOptionTitle(selected) : placeholder}
+    />
   );
 }

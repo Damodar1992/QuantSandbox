@@ -1,9 +1,15 @@
-import React, { memo, useState } from "react";
+import React, { memo, useMemo, useState } from "react";
 import { cx, ui } from "../../../constants/ui";
 import { AppButton } from "../../../components/common/AppButton";
 import { AppDialog } from "../../../components/common/AppDialog";
+import { AppInput } from "../../../components/common/AppInput";
+import { AppSelect } from "../../../components/common/AppSelect";
+import { Textarea } from "../../../components/ui/textarea";
 import { SOURCE_OPTIONS } from "../../../constants/indicators";
 import { getDefaultDisplayName } from "../utils/indicatorHelpers";
+
+const CONTROL = "h-9 text-[12px]";
+const DENSE = "h-8 text-[12px]";
 
 export const EditIndicatorModal = memo(({ indicator, onClose, onSave, rangesOnly = false }) => {
   const [params, setParams] = useState(() => (indicator.params || []).map((p) => ({ ...p })));
@@ -12,6 +18,11 @@ export const EditIndicatorModal = memo(({ indicator, onClose, onSave, rangesOnly
     indicator.displayName || getDefaultDisplayName(indicator.type)
   );
   const [customFormula, setCustomFormula] = useState(indicator.customFormula || "");
+
+  const sourceOptions = useMemo(
+    () => SOURCE_OPTIONS.map((opt) => ({ value: opt, label: opt })),
+    [],
+  );
 
   const handleParamChange = (index, field, value) => {
     setParams((prev) =>
@@ -63,24 +74,21 @@ export const EditIndicatorModal = memo(({ indicator, onClose, onSave, rangesOnly
           <>
             <div>
               <label className={cx("block mb-1 text-xs", ui.textMuted)}>Source</label>
-              <select
+              <AppSelect
                 value={source}
-                onChange={(e) => setSource(e.target.value)}
-                className={cx(ui.input, "h-9")}
-              >
-                {SOURCE_OPTIONS.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
-                  </option>
-                ))}
-              </select>
+                onValueChange={setSource}
+                options={sourceOptions}
+                className="space-y-0"
+                triggerClassName={CONTROL}
+              />
             </div>
             <div>
               <label className={cx("block mb-1 text-xs", ui.textMuted)}>Display Name</label>
-              <input
+              <AppInput
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                className={ui.input}
+                className={CONTROL}
+                wrapperClassName="space-y-0"
                 placeholder="e.g., rsi, ema, my_indicator"
               />
               <div className={cx("text-[10px]", ui.textMuted, "mt-1")}>
@@ -90,10 +98,10 @@ export const EditIndicatorModal = memo(({ indicator, onClose, onSave, rangesOnly
             {indicator.type === "CUSTOM_FORMULA" && (
               <div>
                 <label className={cx("block mb-1 text-xs", ui.textMuted)}>Custom Formula</label>
-                <textarea
+                <Textarea
                   value={customFormula}
                   onChange={(e) => setCustomFormula(e.target.value)}
-                  className={cx(ui.input, "min-h-[120px] font-mono text-[11px]")}
+                  className="min-h-[120px] font-mono text-[11px]"
                   placeholder={`Enter Python code for your custom indicator, e.g.:\ndataframe["ema_slope_20"] = dataframe["ema_close_20"].diff(1)\ndataframe["rsi_ma_14"] = dataframe["rsi_close_14"].rolling(14).mean()`}
                 />
                 <div className={cx("text-[10px]", ui.textMuted, "mt-1")}>
@@ -106,10 +114,10 @@ export const EditIndicatorModal = memo(({ indicator, onClose, onSave, rangesOnly
         {rangesOnly && indicator.type === "CUSTOM_FORMULA" && (
           <div>
             <label className={cx("block mb-1 text-xs", ui.textMuted)}>Custom Formula</label>
-            <textarea
+            <Textarea
               value={customFormula}
               onChange={(e) => setCustomFormula(e.target.value)}
-              className={cx(ui.input, "min-h-[120px] font-mono text-[11px]")}
+              className="min-h-[120px] font-mono text-[11px]"
               placeholder="Python code for custom indicator"
             />
           </div>
@@ -122,39 +130,43 @@ export const EditIndicatorModal = memo(({ indicator, onClose, onSave, rangesOnly
                 <div className="grid grid-cols-4 gap-3">
                   <div>
                     <label className={cx("block mb-1 text-[10px]", ui.textMuted)}>Default</label>
-                    <input
+                    <AppInput
                       type="number"
                       value={param.default}
                       readOnly
-                      className={cx(ui.input, "h-8 text-[12px] cursor-not-allowed bg-[#181818]")}
+                      className={cx(DENSE, "cursor-not-allowed bg-[#181818]")}
+                      wrapperClassName="space-y-0"
                     />
                   </div>
                   <div>
                     <label className={cx("block mb-1 text-[10px]", ui.textMuted)}>Min</label>
-                    <input
+                    <AppInput
                       type="number"
                       value={param.min}
                       onChange={(e) => handleParamChange(idx, "min", e.target.value)}
-                      className={cx(ui.input, "h-8 text-[12px]")}
+                      className={DENSE}
+                      wrapperClassName="space-y-0"
                     />
                   </div>
                   <div>
                     <label className={cx("block mb-1 text-[10px]", ui.textMuted)}>Max</label>
-                    <input
+                    <AppInput
                       type="number"
                       value={param.max}
                       onChange={(e) => handleParamChange(idx, "max", e.target.value)}
-                      className={cx(ui.input, "h-8 text-[12px]")}
+                      className={DENSE}
+                      wrapperClassName="space-y-0"
                     />
                   </div>
                   <div>
                     <label className={cx("block mb-1 text-[10px]", ui.textMuted)}>Step</label>
-                    <input
+                    <AppInput
                       type="number"
                       step="0.1"
                       value={param.step}
                       onChange={(e) => handleParamChange(idx, "step", e.target.value)}
-                      className={cx(ui.input, "h-8 text-[12px]")}
+                      className={DENSE}
+                      wrapperClassName="space-y-0"
                     />
                   </div>
                 </div>

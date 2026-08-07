@@ -1,5 +1,5 @@
 import React, { memo, useState, useCallback } from "react";
-import { cx, ui } from "../../../../constants/ui";
+import { cx } from "../../../../constants/ui";
 import { crmSurface } from "../../../../constants/crmAccent";
 import {
   MINI_BACKTEST_DEFAULTS,
@@ -10,6 +10,7 @@ import {
 import { generateCycleDataForEpoch } from "../../utils/miniBacktestData";
 import { runMiniBacktest, hashParams } from "../../utils/miniBacktestEngine";
 import { AppButton } from "../../../../components/common/AppButton";
+import { AppInput } from "../../../../components/common/AppInput";
 
 /**
  * Mini Backtest Panel — form + result for a single epoch.
@@ -84,11 +85,12 @@ export const MiniBacktestPanel = memo(function MiniBacktestPanel({
                 {MINI_BACKTEST_LABELS[key]}
                 {MINI_BACKTEST_UNITS[key] ? ` (${MINI_BACKTEST_UNITS[key]})` : ""}
               </label>
-              <input
+              <AppInput
                 type="number"
                 value={params[key]}
                 onChange={(e) => updateParam(key, Number(e.target.value))}
-                className={cx(ui.input, "h-7 px-2 text-[11px] w-full")}
+                className="h-8 px-2 text-[12px] w-full"
+                wrapperClassName="space-y-0"
                 step={key === "fees" ? 0.01 : key.includes("Stake") || key === "reservedAmount" || key === "initialBalance" ? 1 : key === "stopout" || key === "relativeStakeAmount" ? 1 : 1}
                 min={0}
               />

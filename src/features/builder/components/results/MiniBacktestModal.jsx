@@ -14,9 +14,10 @@ import { getStageLabel } from "../../utils/stageSelect";
 import { buildMiniBacktestLaunchContext } from "../../utils/miniBacktestDisplay";
 import { AppButton } from "../../../../components/common/AppButton";
 import { AppDialog } from "../../../../components/common/AppDialog";
+import { AppInput } from "../../../../components/common/AppInput";
 
-const INPUT_CLS = cx(ui.input, "h-8 px-2.5 text-[12px] w-full min-w-0");
-const LABEL_CLS = "text-[10px] text-[#8c8c8c] leading-snug mb-1 block";
+const INPUT_CLS = "h-9 w-full min-w-0 text-[12px]";
+const LABEL_CLS = "text-[11px] text-[#8c8c8c] leading-snug mb-1 block";
 
 function FieldLabel({ label, unit, hint, className }) {
   return (
@@ -93,7 +94,7 @@ function Field({ label, unit, hint, inputAlign, children }) {
 function NumberInput({ value, onChange, min, step, placeholder }) {
   const safeValue = Number.isFinite(value) ? value : "";
   return (
-    <input
+    <AppInput
       type="number"
       value={safeValue}
       placeholder={placeholder}
@@ -107,6 +108,7 @@ function NumberInput({ value, onChange, min, step, placeholder }) {
         onChange(Number.isFinite(next) ? next : 0);
       }}
       className={INPUT_CLS}
+      wrapperClassName="space-y-0"
       min={min}
       step={step}
     />

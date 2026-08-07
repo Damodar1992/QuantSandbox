@@ -11,6 +11,7 @@
 import React, { useMemo } from "react";
 import { cx } from "../../constants/ui";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { AppInput } from "@/components/common/AppInput";
 import { CheckboxMultiSelect } from "@/components/common/CheckboxMultiSelect";
 import {
   STAGE_TYPE_OPTIONS,
@@ -19,6 +20,8 @@ import {
   collectTimeframes,
 } from "../../features/storage/utils/storageFilters";
 import { INITIAL_TAGS_REGISTRY } from "../../constants/tags";
+
+const DENSE = "h-8 text-[12px]";
 
 function ChevronIcon() {
   return (
@@ -66,12 +69,13 @@ function TextInput({ label, value, onChange, placeholder }) {
   return (
     <div className="space-y-1">
       {label && <div className="text-[10px] text-muted-foreground">{label}</div>}
-      <input
+      <AppInput
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full rounded border border-border bg-background px-2 py-1.5 text-[11px] outline-none focus:border-violet-500/60"
+        className={DENSE}
+        wrapperClassName="space-y-0"
       />
     </div>
   );
@@ -186,22 +190,24 @@ export function StorageFilters({ filters, updateFilter, clearFilters, strategies
           <div className="space-y-1">
             <div className="text-[10px] text-muted-foreground">Size (GB)</div>
             <div className="flex items-center gap-1.5">
-              <input
+              <AppInput
                 type="number"
                 min="0"
                 value={filters.minSizeGb}
                 onChange={(e) => updateFilter("minSizeGb", e.target.value)}
                 placeholder="Min"
-                className="w-20 rounded border border-border bg-background px-2 py-1.5 text-[11px] outline-none focus:border-violet-500/60"
+                className={cx(DENSE, "w-20")}
+                wrapperClassName="space-y-0"
               />
               <span className="text-muted-foreground text-[10px]">–</span>
-              <input
+              <AppInput
                 type="number"
                 min="0"
                 value={filters.maxSizeGb}
                 onChange={(e) => updateFilter("maxSizeGb", e.target.value)}
                 placeholder="Max"
-                className="w-20 rounded border border-border bg-background px-2 py-1.5 text-[11px] outline-none focus:border-violet-500/60"
+                className={cx(DENSE, "w-20")}
+                wrapperClassName="space-y-0"
               />
             </div>
           </div>

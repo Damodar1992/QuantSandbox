@@ -12,6 +12,7 @@
 - **Оптимизация / Hyperopt**: параметры запуска, таблица результатов, HeatMap, post-processing (нормализация / формулы)
 - **Редактор кода**: Monaco-подобное отображение Python-кода стратегий
 - **Пользователи и настройки**: секции в навигации (mock UI)
+- **Stage 5 «Backtesting»**: валидация favorite-эпохи — иерархия Backtest → Shuffler / Synthetic / Validation analytics, формы запуска, архив эпохи (моки, фича-флаг `backtesting`)
 - **Тёмная тема**: Tailwind CSS
 
 ## Технологии
@@ -54,6 +55,7 @@ QuantSandbox/
 │   ├── utils/                   # Чистые хелперы (weights, builder, mock heatmap, pythonCode, …)
 │   ├── hooks/                   # Общие хуки (например useOutsideClose)
 │   ├── features/builder/        # Фича Builder: components/, utils/
+│   ├── features/backtesting/    # Stage 5 «Backtesting»: экран стейджа, таблица веток, формы запуска
 │   └── components/              # Переиспользуемые блоки по домену
 │       ├── auth/
 │       ├── common/
@@ -90,6 +92,7 @@ ESLint: скрипт `npm run lint` в [`package.json`](package.json); при н
 | Компоненты FormulaEditor, IndicatorLibrary, … | `src/features/builder/components/` |
 | Генерация мок-результатов HeatMap | `src/utils/mockResults.js` |
 | Подробности состояния и таблиц Hyperopt | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| Stage 5 «Backtesting» (иерархия, формы, моки) | `src/features/backtesting/`, `src/constants/backtesting.js`, раздел «Stage 5 — Backtesting» в [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 
 ## Mock-данные
 

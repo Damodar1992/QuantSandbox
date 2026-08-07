@@ -46,29 +46,38 @@ export const AppSelect = memo(function AppSelect({
   const selectValue =
     value === undefined || value === null ? undefined : toItemValue(value);
 
+  const select = (
+    <Select
+      value={selectValue}
+      onValueChange={(v) => onValueChange?.(fromItemValue(v))}
+      disabled={disabled}
+    >
+      <SelectTrigger
+        size={size}
+        className={cn("w-full", triggerClassName)}
+        aria-label={ariaLabel}
+      >
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        {items.map((opt) => (
+          <SelectItem key={opt.value} value={opt.value}>
+            {opt.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+
+  /* No wrapper when unlabeled — keeps trigger in parent flex for alignment. */
+  if (!label) {
+    return className ? <div className={cn("contents", className)}>{select}</div> : select;
+  }
+
   return (
     <div className={cn("space-y-1", className)}>
-      {label ? <Label className="text-xs text-muted-foreground">{label}</Label> : null}
-      <Select
-        value={selectValue}
-        onValueChange={(v) => onValueChange?.(fromItemValue(v))}
-        disabled={disabled}
-      >
-        <SelectTrigger
-          size={size}
-          className={cn("w-full", triggerClassName)}
-          aria-label={ariaLabel}
-        >
-          <SelectValue placeholder={placeholder} />
-        </SelectTrigger>
-        <SelectContent>
-          {items.map((opt) => (
-            <SelectItem key={opt.value} value={opt.value}>
-              {opt.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      {select}
     </div>
   );
 });

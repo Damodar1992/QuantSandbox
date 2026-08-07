@@ -30,6 +30,7 @@ flowchart TB
   - `useCollapsedSections` — сворачивание секций конструктора.
   - `useBuilderStageConfig` — per-stage hyperopt/market config (hyperoptType, exchange, tradingMode, syntheticDataset, maxPossibleStd, unknowTimeRange, foldSize).
 - **`features/builder`** — выносимые части конструктора: `FormulaEditor`, `IndicatorLibrary`, `IndicatorRangesPanel`, модалки add/edit indicator, `TableBasedEditor`, и т.д.
+- **`features/backtesting`** — **Stage 5 «Backtesting»**: экран стейджа, иерархическая таблица веток, формы запуска и мок-стор. Точка входа — `BacktestingStagePanel`, монтируется из `BuilderStepper` при `active.id === 5`. Подробнее — раздел «Stage 5 — Backtesting» ниже.
 - **`features/versioning`** — UI-мок иерархии версий стейджей (Signal→Final): dropdown на табах `BuilderStepper`, модалка дерева; данные в `constants/mockStageVersionTree.js`, логика фильтрации в `features/versioning/utils/versionSelection.js`.
 - **`components/*`** — доменные блоки (auth, heatmap, strategies, users, indicators, report, shared).
 - **`constants`** — данные и конфиг без UI: `app.js`, `formulas.js`, `indicators.js`, `heatmap.js`, `ui.js`.
@@ -45,6 +46,7 @@ flowchart TB
 | Новые мок-списки приложения | `src/constants/app.js` или отдельный файл в `constants/` |
 | Версии стейджей (lineage-дерево) | `src/constants/versioning.js`, `src/constants/mockStageVersionTree.js` |
 | Общий хук | `src/hooks/` |
+| UI / логика Stage 5 (Backtesting) | `src/features/backtesting/` (`components/`, `components/forms/`, `hooks/`, `utils/`); справочники и копирайт — `src/constants/backtesting.js` |
 
 Не вводить новый глобальный state-manager без явной задачи: по умолчанию `useState` / `useMemo` / `useCallback` в `BuilderStepper.jsx` или доменных хуках в `features/builder/hooks/`. Общий доменный хук → `src/hooks/`.
 
@@ -94,3 +96,78 @@ npm run lint
 ```
 
 При изменении навигации или списков секций — сверить **`SECTIONS` / `DISABLED_SECTIONS`** в `src/constants/app.js`.
+
+
+## Stage 5 — Backtesting
+
+Пятый стейдж пайплайна (`Signal → Entry → Exit → Risk → Backtesting`). Реализован по ТЗ
+«QuantSandbox · Stage 5 — Backtesting» v1.0 и логической спеке «Единая логика размещения объектов» v1.1.
+
+### Иерархия объектов
+
+```
+Stage 5 (контекст: стратегия + favorite-эпоха из Stage 4)
+└── Level 0 · BacktestRun            ← единственный корневой объект
+    ├── Level 1 · ShufflerRun(s)     ← источник задан родителем, не выбирается
+    ├── Level 1 · SyntheticRun(s)
+    └── Level 1 · ValidationAnalytics(s)   ← комбинация «бэктест + 1 shuffler + 1 synthetic»
+```
+
+Ключевой инвариант: `backtest_id` дочерних объектов immutable, поэтому состояние «chain broken»
+невозможно по построению и проверка lineage (C7) не реализуется. Остаётся только проверка
+сравнимости (C6) — `utils/integrity.js`.
+
+### Карта модулей
+
+| Файл | Назначение |
+|---|---|
+| `BacktestingStagePanel.jsx` | Корневой экран: 3 секции (`BuilderSectionShell`), все модалки, подтверждения удаления |
+| `components/EpochContextPanel.jsx` | «Configuration under validation» — селектор favorite-эпохи + read-only карточки Stages 1–4 (индикаторы / risk) |
+| `components/forms/RunBacktestForm.jsx` | Инлайн-форма запуска Backtest в секции 1 (mini + params); `RunBacktestModal` — тонкая обёртка |
+| `components/BacktestTree.jsx` | Таблица Level 0 (8 колонок: expand, ID-copy, Pairs, Timeframe, Time Range, Status, Created, Action), разворот ветки через `<tr><td colSpan={8}>` |
+| `components/BranchPanel.jsx` | Содержимое ветки: панель действий + 4 сворачиваемых уровня (Core metrics / Shuffler / Synthetic / Analytics) |
+| `components/CoreMetricsCompareTable.jsx` | Таблица METRIC · BACKTEST · MINI-BACKTEST · Δ |
+| `components/AnalyticsArchivePanel.jsx` | Архив эпохи: saved-аналитики удалённых веток (read-only) |
+| `components/forms/*` | 4 формы запуска: `RunBacktestModal`, `RunShufflerModal` (+ `PessimismGrid`), `RunSyntheticModal`, `CreateAnalyticsModal`, `AnalyticsDraftModal` |
+| `components/RunResultPreviewModal.jsx` | Core-таблицы результатов (полные вью §6 — следующая итерация) |
+| `hooks/useBacktestingState.js` | Мок-стор `{ [epochId]: { runs, archive } }` + мутации + симуляция прогресса |
+| `hooks/useBacktestTreeState.js` | Expand/collapse (`Set`, тот же идиом, что `useHyperoptResultsState`) |
+| `utils/integrity.js` | C6-сравнимость трёх линий, блокеры Save |
+| `utils/shufflerValidity.js` | Правила валидности метрик STATIC/DYNAMIC (§6.2.1) |
+| `utils/pessimism.js` | Грид уровней: `Runs = floor(share × shuffles)`, таргеты от Original, недостижимые значения |
+| `utils/miniSource.js` | Адаптер над Mini Backtest: `Mini#N`, наследование параметров, diff «✎ edited» |
+| `utils/format.js` | Форматтеры + цветовая семантика §8.7 и перцентильные зоны |
+| `utils/mockResults.js` | Детерминированные мок-результаты (сид от id рана) |
+| `utils/seed.js` | Демо-ветки для сидовой эпохи |
+
+### Соглашения, специфичные для стейджа
+
+- **Цвета чисел (§8.7):** красный — отрицательное, зелёный — положительное, **янтарный — просадка**
+  (записана положительной, но всегда потеря), нейтральный — счётчики/даты. Перцентильные зоны
+  40–60 % зелёная · 25–75 % жёлтая · вне — красная. Используется `green-*`/`red-*`, **не `emerald-*`**
+  (prod-тема ремапит emerald в фиолетовый).
+- **`colSpan`:** таблица Level 0 — 8 колонок (`LEVEL0_COLS` в `BacktestTree.jsx`). При добавлении
+  колонки синхронизировать константу.
+- **Секции стейджа** нумеруются 1–3 и имеют **свой** экземпляр `useCollapsedSections()` —
+  нумерация не пересекается с секциями стейджей 1–4.
+- **Комиссии** никогда не вводятся руками: `resolveBtFees(exchange, mode)` в `constants/backtesting.js`.
+  Это единственное штатное отличие бэктеста от mini, и именно его измеряет Δ.
+- **Кнопка `▶ Run Backtest`** живёт в секции 1 (инлайн `RunBacktestForm`), а не в аккордеоне
+  секции 2: заголовок `BuilderAccordion` сам является `<button>`, вложенная кнопка ломает клик.
+- **Конфиг Stages 1–4:** `utils/resolveEpochStageConfig.js` — frozen `indicatorsByStage` /
+  `riskParams` на risk-favorite, иначе walk live source-chain (`signal/entry/exitBestResults`).
+
+### Точки подключения
+
+| Файл | Правка |
+|---|---|
+| `src/constants/versioning.js` | `STAGE_TYPE_LABELS.final = "Backtesting"` (внутренний ключ стейджа остался `"final"`) |
+| `src/features/builder/BuilderStepper.jsx` | запись стейджа 5 (`label`, `title`, `locked: !backtestingEnabled`), монтирование панели, сид `riskBestResults` |
+| `src/features/builder/utils/stageSelect.js` | `pickByStage` — ветка для стейджа 5 (иначе он молча наследует состояние Signal); `getBuilderStageCopy` — `case 5` |
+| `src/features/builder/utils/defaultBbSetup.js` | `createDefaultRiskFavoriteEpoch()` — сидовая favorite-эпоха с risk-гиперпараметрами |
+| `src/constants/featureFlags.js`, `FeatureFlagsDropdown.jsx`, `src/App.jsx` | флаг `backtesting` (по умолчанию `true`) |
+
+### Тесты
+
+`npm test` покрывает чистую логику стейджа: `integrity`, `shufflerValidity`, `pessimism`,
+`miniSource`, `format` (`src/features/backtesting/utils/*.test.js`).

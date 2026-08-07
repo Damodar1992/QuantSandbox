@@ -1,13 +1,17 @@
 import React, { memo } from "react";
 import { cx, ui } from "../../constants/ui";
 import { ModalShell } from "../common";
+import { AppInput } from "../common/AppInput";
+import { Textarea } from "../ui/textarea";
+
+const CONTROL = "h-9 text-[12px]";
 
 export const CreateStrategyModal = memo(function CreateStrategyModal({
   name,
-  template,
+  template: _template,
   description,
   onNameChange,
-  onTemplateChange,
+  onTemplateChange: _onTemplateChange,
   onDescriptionChange,
   onClose,
   onCreate,
@@ -17,15 +21,21 @@ export const CreateStrategyModal = memo(function CreateStrategyModal({
       <div className="space-y-4">
         <div>
           <label className={cx("block mb-1 text-xs", ui.textMuted)}>Strategy name</label>
-          <input value={name} onChange={(e) => onNameChange(e.target.value)} className={ui.input} placeholder="e.g. EMA Bounce" />
+          <AppInput
+            value={name}
+            onChange={(e) => onNameChange(e.target.value)}
+            className={CONTROL}
+            wrapperClassName="space-y-0"
+            placeholder="e.g. EMA Bounce"
+          />
         </div>
 
         <div>
           <label className={cx("block mb-1 text-xs", ui.textMuted)}>Description</label>
-          <textarea
+          <Textarea
             value={description}
             onChange={(e) => onDescriptionChange(e.target.value)}
-            className="w-full rounded-md border border-[#303030] bg-[#0f0f0f] px-3 py-2 text-sm text-[#d9d9d9] placeholder:text-[#595959] focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+            className="w-full text-[12px] min-h-[72px] resize-y"
             rows={3}
             placeholder="Optional description"
           />

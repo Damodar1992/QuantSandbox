@@ -11,6 +11,7 @@ import { CalendarIcon } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
+import { crm } from "@/components/ui/crm-theme";
 import { cn } from "@/lib/utils";
 
 /** Default “All dataset” bounds used when caller doesn’t pass dataset range. */
@@ -140,9 +141,9 @@ export const DateRangePicker = memo(function DateRangePicker({
   const hasValue = Boolean(from || to);
 
   return (
-    <div className={cn("space-y-1.5", className)}>
+    <div className={cn(label ? "space-y-1" : null, className)}>
       {label ? (
-        <label className="block text-xs text-muted-foreground">{label}</label>
+        <label className="block text-[11px] text-muted-foreground">{label}</label>
       ) : null}
       <Popover open={disabled ? false : open} onOpenChange={disabled ? undefined : setOpen}>
         <PopoverTrigger asChild>
@@ -150,16 +151,20 @@ export const DateRangePicker = memo(function DateRangePicker({
             type="button"
             disabled={disabled}
             className={cn(
-              "flex h-9 w-full items-center justify-between gap-2 rounded-md border border-[rgba(60,40,80,0.5)] bg-[#170f29] px-2.5 text-left text-[12px] text-[#faf7fd] transition-colors",
-              "hover:bg-[#1e1333] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/40",
-              "disabled:cursor-not-allowed disabled:opacity-80",
-              !hasValue && "text-[#8c8c8c]",
+              "flex w-full items-center justify-between gap-2 text-left whitespace-nowrap transition-colors outline-none select-none",
+              crm.input,
+              crm.focusRing,
+              "disabled:cursor-not-allowed disabled:opacity-50",
+              !hasValue && "text-muted-foreground",
               triggerClassName,
             )}
             aria-label={label || "Date range"}
           >
-            <span className="truncate tabular-nums">{summary}</span>
-            <CalendarIcon className="size-3.5 shrink-0 text-[#b8aecc]" aria-hidden />
+            <span className="min-w-0 flex-1 truncate tabular-nums text-[12px]">{summary}</span>
+            <CalendarIcon
+              className="pointer-events-none size-3.5 shrink-0 text-muted-foreground"
+              aria-hidden
+            />
           </button>
         </PopoverTrigger>
         <PopoverContent

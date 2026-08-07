@@ -13,6 +13,7 @@ export const AppDialog = memo(function AppDialog({
   onOpenChange,
   title,
   description,
+  headerAction,
   children,
   className,
   showCloseButton = true,
@@ -20,10 +21,15 @@ export const AppDialog = memo(function AppDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className={cn(className)} showCloseButton={showCloseButton}>
-        {(title || description) && (
+        {(title || description || headerAction) && (
           <DialogHeader>
-            {title ? <DialogTitle>{title}</DialogTitle> : null}
-            {description ? <DialogDescription>{description}</DialogDescription> : null}
+            <div className="flex items-start justify-between gap-3 pr-8">
+              <div className="min-w-0 space-y-1">
+                {title ? <DialogTitle>{title}</DialogTitle> : null}
+                {description ? <DialogDescription>{description}</DialogDescription> : null}
+              </div>
+              {headerAction ? <div className="shrink-0">{headerAction}</div> : null}
+            </div>
           </DialogHeader>
         )}
         {children}

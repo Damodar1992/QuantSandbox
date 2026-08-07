@@ -175,6 +175,7 @@ export default function App() {
   // --- Mini Backtest Analyzer ---
   const [miniBacktestEnabled, setMiniBacktestEnabled] = useState(() => getFeatureFlags().miniBacktest);
   const [formulasEnabled, setFormulasEnabled] = useState(() => getFeatureFlags().formulas);
+  const [backtestingEnabled, setBacktestingEnabled] = useState(() => getFeatureFlags().backtesting);
   const [allMiniBacktestResults, setAllMiniBacktestResults] = useState(() =>
     buildInitialGlobalMiniBacktestResults(),
   );
@@ -514,6 +515,7 @@ export default function App() {
       strategyId: selected?.strategyId ?? result.strategyId ?? null,
       strategyName: strategy?.name ?? result.strategyName ?? null,
       strategyVersionId: selected?.versionId ?? result.strategyVersionId ?? null,
+      owner: MOCK_CURRENT_USER.login,
     };
     setAllMiniBacktestResults((prev) => {
       const scopeId = finishedResult.strategyId;
@@ -1005,11 +1007,16 @@ export default function App() {
     setFeatureFlag(key, value);
     if (key === "miniBacktest") setMiniBacktestEnabled(value);
     if (key === "formulas") setFormulasEnabled(value);
+    if (key === "backtesting") setBacktestingEnabled(value);
   }, []);
 
   const headerFeatureFlags = useMemo(
-    () => ({ miniBacktest: miniBacktestEnabled, formulas: formulasEnabled }),
-    [miniBacktestEnabled, formulasEnabled],
+    () => ({
+      miniBacktest: miniBacktestEnabled,
+      formulas: formulasEnabled,
+      backtesting: backtestingEnabled,
+    }),
+    [miniBacktestEnabled, formulasEnabled, backtestingEnabled],
   );
 
   useEffect(() => {
@@ -1468,6 +1475,7 @@ export default function App() {
               versionComments={versionComments}
               onOpenVersionComment={handleOpenVersionComment}
               onDeleteVersionComment={handleDeleteVersionComment}
+              backtestingEnabled={backtestingEnabled}
               miniBacktestEnabled={miniBacktestEnabled}
               onMiniBacktestEnabledChange={(v) => {
                 const value = typeof v === "function" ? v(miniBacktestEnabled) : v;
@@ -1867,25 +1875,41 @@ export default function App() {
             <div className="overflow-auto space-y-4 max-h-[min(70vh,560px)]">
               <div>
                 <label className={cx("block mb-1 text-xs", ui.textMuted)}>Name</label>
-                <input type="text" value={formulaDraft.name ?? ""} onChange={(e) => setFormulaDraft((d) => ({ ...d, name: e.target.value }))} placeholder="Formula name" className={cx(ui.input, "h-9 text-[12px] w-full")} />
+                <AppInput
+                  type="text"
+                  value={formulaDraft.name ?? ""}
+                  onChange={(e) => setFormulaDraft((d) => ({ ...d, name: e.target.value }))}
+                  placeholder="Formula name"
+                  className="h-9 w-full text-[12px]"
+                  wrapperClassName="space-y-0"
+                />
               </div>
               <div>
                 <label className={cx("block mb-1 text-xs", ui.textMuted)}>Hyperopt Type</label>
-                <select value={formulaDraft.hyperoptType} onChange={(e) => setFormulaDraft((d) => ({ ...d, hyperoptType: e.target.value }))} className={cx(ui.input, "h-9 text-[12px] w-full")}>
-                  {FORMULA_HYPEROPT_TYPES.map((v) => <option key={v} value={v}>{v}</option>)}
-                </select>
+                <AppSelect
+                  value={formulaDraft.hyperoptType}
+                  onValueChange={(v) => setFormulaDraft((d) => ({ ...d, hyperoptType: v }))}
+                  options={FORMULA_HYPEROPT_TYPES.map((v) => ({ value: v, label: v }))}
+                  triggerClassName="h-9 text-[12px]"
+                />
               </div>
               <div>
                 <label className={cx("block mb-1 text-xs", ui.textMuted)}>Type</label>
-                <select value={formulaDraft.type} onChange={(e) => setFormulaDraft((d) => ({ ...d, type: e.target.value }))} className={cx(ui.input, "h-9 text-[12px] w-full")}>
-                  {FORMULA_TYPES.map((v) => <option key={v} value={v}>{v}</option>)}
-                </select>
+                <AppSelect
+                  value={formulaDraft.type}
+                  onValueChange={(v) => setFormulaDraft((d) => ({ ...d, type: v }))}
+                  options={FORMULA_TYPES.map((v) => ({ value: v, label: v }))}
+                  triggerClassName="h-9 text-[12px]"
+                />
               </div>
               <div>
                 <label className={cx("block mb-1 text-xs", ui.textMuted)}>SubType</label>
-                <select value={formulaDraft.subType} onChange={(e) => setFormulaDraft((d) => ({ ...d, subType: e.target.value }))} className={cx(ui.input, "h-9 text-[12px] w-full")}>
-                  {FORMULA_SUBTYPES.map((v) => <option key={v} value={v}>{v}</option>)}
-                </select>
+                <AppSelect
+                  value={formulaDraft.subType}
+                  onValueChange={(v) => setFormulaDraft((d) => ({ ...d, subType: v }))}
+                  options={FORMULA_SUBTYPES.map((v) => ({ value: v, label: v }))}
+                  triggerClassName="h-9 text-[12px]"
+                />
               </div>
               <div className="space-y-2">
                 <label className={cx("block mb-1 text-xs", ui.textMuted)}>Formula</label>
@@ -1930,21 +1954,22 @@ export default function App() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <div className="text-[11px] font-medium text-[#d9d9d9]">Functions</div>
-                  <select
-                    className={cx(ui.input, "h-8 text-[11px] flex-1 w-full")}
-                    onChange={(e) => {
-                      if (!e.target.value) return;
-                      insertIntoFormulaModal(e.target.value);
-                      e.target.selectedIndex = 0;
+                  <AppSelect
+                    value=""
+                    onValueChange={(v) => {
+                      if (!v) return;
+                      insertIntoFormulaModal(v);
                     }}
-                  >
-                    <option value="">Select function…</option>
-                    {FORMULA_MODAL_FUNCTIONS.map((fn) => (
-                      <option key={fn.label} value={fn.template}>
-                        {fn.label} — {fn.template}
-                      </option>
-                    ))}
-                  </select>
+                    options={[
+                      { value: "", label: "Select function…" },
+                      ...FORMULA_MODAL_FUNCTIONS.map((fn) => ({
+                        value: fn.template,
+                        label: `${fn.label} — ${fn.template}`,
+                      })),
+                    ]}
+                    placeholder="Select function…"
+                    triggerClassName="h-8 text-[12px]"
+                  />
                 </div>
               </div>
               <div className="space-y-2">

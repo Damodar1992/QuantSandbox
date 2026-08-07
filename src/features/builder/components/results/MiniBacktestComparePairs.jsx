@@ -22,32 +22,58 @@ function formatIntrinsicNum(val, decimals = 2) {
   return formatMbNum(val, decimals);
 }
 
-/* ─── Value cell (left or right column) ──────────────────────────────── */
+/* ─── Value cell (left or right column) ────────────────────────────────
+ * BEFORE:  [formula ........] [value ▸]   — values right-aligned toward center
+ * AFTER:   [◂ value] [formula ........]   — values left-aligned toward center
+ * CSS grid + fixed value track + tabular-nums → same columns on every row.
+ */
+const VALUE_COL = "8rem";
+
 function ValueCell({ value, formula, tone, dim }) {
+  const isBefore = tone === "before";
   return (
     <div
-      className={cx(
-        "px-3 py-3 min-w-0",
-        tone === "before" ? "text-left" : "text-right",
-      )}
+      className="grid min-w-0 items-center gap-2.5 whitespace-nowrap px-3 py-2.5"
+      style={{
+        gridTemplateColumns: isBefore
+          ? `minmax(0,1fr) ${VALUE_COL}`
+          : `${VALUE_COL} minmax(0,1fr)`,
+      }}
     >
-      <div
-        className={cx(
-          "text-[18px] font-bold font-mono leading-tight",
-          dim ? "text-[#4a4a5a]" : "text-[#faf7fd]",
-        )}
-      >
-        {value}
-      </div>
-      {formula && (
-        <div
-          className={cx(
-            "mt-1 text-[9px] font-mono leading-snug",
-            tone === "before" ? "text-blue-300/50" : "text-violet-300/50",
-          )}
-        >
-          {formula}
-        </div>
+      {isBefore ? (
+        <>
+          <div
+            className="min-w-0 truncate text-left font-mono text-[9px] leading-none text-blue-300/50"
+            title={formula || undefined}
+          >
+            {formula || "\u00A0"}
+          </div>
+          <div
+            className={cx(
+              "text-right font-mono text-[18px] font-bold leading-none tabular-nums",
+              dim ? "text-[#4a4a5a]" : "text-[#faf7fd]",
+            )}
+          >
+            {value}
+          </div>
+        </>
+      ) : (
+        <>
+          <div
+            className={cx(
+              "text-left font-mono text-[18px] font-bold leading-none tabular-nums",
+              dim ? "text-[#4a4a5a]" : "text-[#faf7fd]",
+            )}
+          >
+            {value}
+          </div>
+          <div
+            className="min-w-0 truncate text-right font-mono text-[9px] leading-none text-violet-300/50"
+            title={formula || undefined}
+          >
+            {formula || "\u00A0"}
+          </div>
+        </>
       )}
     </div>
   );
@@ -59,7 +85,7 @@ function DeltaBadge({ delta }) {
   const tone = delta.positive ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/25"
                               : "text-red-400 bg-red-500/10 border-red-500/25";
   return (
-    <span className={cx("inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 font-mono text-[10px] font-bold shrink-0", tone)}>
+    <span className={cx("inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 font-mono text-[10px] font-bold shrink-0 whitespace-nowrap tabular-nums", tone)}>
       <span>{delta.positive ? "▲" : "▼"}</span>
       <span>{delta.primary}</span>
     </span>
@@ -69,45 +95,53 @@ function DeltaBadge({ delta }) {
 /* ─── Category badge ──────────────────────────────────────────────────── */
 function CatBadge({ type }) {
   if (type === "paired") return (
-    <span className="inline-flex items-center rounded px-1 py-px text-[8px] font-bold border bg-violet-500/10 text-violet-300 border-violet-500/25">🔁 Paired</span>
+    <span className="inline-flex items-center rounded px-1 py-px text-[8px] font-bold border bg-violet-500/10 text-violet-300 border-violet-500/25 whitespace-nowrap">🔁 Paired</span>
   );
   if (type === "carried") return (
-    <span className="inline-flex items-center rounded px-1 py-px text-[8px] font-bold border bg-teal-500/10 text-teal-300 border-teal-500/25">＝ Carried</span>
+    <span className="inline-flex items-center rounded px-1 py-px text-[8px] font-bold border bg-teal-500/10 text-teal-300 border-teal-500/25 whitespace-nowrap">＝ Carried</span>
   );
   return (
-    <span className="inline-flex items-center rounded px-1 py-px text-[8px] font-bold border bg-[#1f1f30] text-[#8c8c8c] border-[rgba(60,40,80,0.4)]">— No-pair</span>
+    <span className="inline-flex items-center rounded px-1 py-px text-[8px] font-bold border bg-[#1f1f30] text-[#8c8c8c] border-[rgba(60,40,80,0.4)] whitespace-nowrap">— No-pair</span>
   );
 }
 
 /* ─── 3-column comparison row ─────────────────────────────────────────── */
 function CompareRow({ name, cat, before, beforeFormula, beforeDim, after, afterFormula, afterDim, delta, note, onFormulaClick }) {
   return (
-    <div className="grid grid-cols-[1fr_220px_1fr] border-b border-[rgba(60,40,80,0.2)] last:border-b-0">
-      {/* Left: BEFORE */}
-      <div className={cx("border-r border-[rgba(60,40,80,0.2)]", "bg-blue-500/[0.03]")}>
+    <div className="grid grid-cols-[minmax(0,1fr)_240px_minmax(0,1fr)] items-center border-b border-[rgba(60,40,80,0.2)] last:border-b-0">
+      {/* Left: BEFORE — formula left, value right (toward center) */}
+      <div className="min-w-0 border-r border-[rgba(60,40,80,0.2)] bg-blue-500/[0.03]">
         <ValueCell value={before} formula={beforeFormula} tone="before" dim={beforeDim} />
       </div>
 
       {/* Center: name + badges + delta */}
-      <div className="px-3 py-3 flex flex-col items-center justify-center gap-1.5 text-center bg-[#0d0718]/40">
-        {onFormulaClick ? (
-          <button
-            type="button"
-            onClick={onFormulaClick}
-            className="text-[12px] font-bold text-[#e8e0f0] hover:text-violet-300 transition-colors underline decoration-dotted underline-offset-2"
-          >
-            {name}
-          </button>
-        ) : (
-          <span className="text-[12px] font-bold text-[#e8e0f0]">{name}</span>
-        )}
-        <CatBadge type={cat} />
-        {delta && <DeltaBadge delta={delta} />}
-        {note && <span className="text-[9px] text-[#6b6b6b] italic leading-snug">{note}</span>}
+      <div className="flex min-w-0 flex-col items-center justify-center gap-1 px-2 py-2 text-center bg-[#0d0718]/40">
+        <div className="flex max-w-full flex-wrap items-center justify-center gap-1.5">
+          {onFormulaClick ? (
+            <button
+              type="button"
+              onClick={onFormulaClick}
+              className="max-w-full truncate whitespace-nowrap text-[12px] font-bold text-[#e8e0f0] hover:text-violet-300 transition-colors underline decoration-dotted underline-offset-2"
+            >
+              {name}
+            </button>
+          ) : (
+            <span className="max-w-full truncate whitespace-nowrap text-[12px] font-bold text-[#e8e0f0]">{name}</span>
+          )}
+          <CatBadge type={cat} />
+        </div>
+        <div className="flex max-w-full flex-wrap items-center justify-center gap-1.5">
+          {delta ? <DeltaBadge delta={delta} /> : null}
+          {note ? (
+            <span className="max-w-full truncate text-[9px] text-[#6b6b6b] italic" title={note}>
+              {note}
+            </span>
+          ) : null}
+        </div>
       </div>
 
-      {/* Right: AFTER */}
-      <div className={cx("border-l border-[rgba(60,40,80,0.2)]", "bg-violet-500/[0.03]")}>
+      {/* Right: AFTER — value left (toward center), formula right */}
+      <div className="min-w-0 border-l border-[rgba(60,40,80,0.2)] bg-violet-500/[0.03]">
         <ValueCell value={after} formula={afterFormula} tone="after" dim={afterDim} />
       </div>
     </div>
@@ -127,15 +161,31 @@ function SectionHeader({ label, count }) {
 function DetailedCompareTable({ pairedRows, carriedRows, noPairRows, onGotoFormula }) {
   return (
     <>
-      <div className="grid grid-cols-[1fr_220px_1fr] border-b border-[rgba(60,40,80,0.3)]">
-        <div className="px-3 py-2 bg-blue-500/[0.05] border-r border-[rgba(60,40,80,0.2)]">
-          <span className="text-[9px] font-bold uppercase tracking-wider text-blue-300/70">BEFORE · Analyzer</span>
+      <div className="grid grid-cols-[minmax(0,1fr)_240px_minmax(0,1fr)] border-b border-[rgba(60,40,80,0.3)]">
+        <div
+          className="grid items-center gap-2.5 px-3 py-2 bg-blue-500/[0.05] border-r border-[rgba(60,40,80,0.2)]"
+          style={{ gridTemplateColumns: `minmax(0,1fr) ${VALUE_COL}` }}
+        >
+          <span className="min-w-0 truncate text-left text-[9px] font-bold uppercase tracking-wider text-blue-300/50 whitespace-nowrap">
+            Formula
+          </span>
+          <span className="text-right text-[9px] font-bold uppercase tracking-wider text-blue-300/70 whitespace-nowrap">
+            BEFORE
+          </span>
         </div>
         <div className="px-3 py-2 bg-[#0d0718]/40 text-center">
-          <span className="text-[9px] font-bold uppercase tracking-wider text-[#6b6b6b]">Δ · what moved it</span>
+          <span className="text-[9px] font-bold uppercase tracking-wider text-[#6b6b6b] whitespace-nowrap">Δ · what moved it</span>
         </div>
-        <div className="px-3 py-2 bg-violet-500/[0.05] border-l border-[rgba(60,40,80,0.2)] text-right">
-          <span className="text-[9px] font-bold uppercase tracking-wider text-violet-300/70">Mini Backtest</span>
+        <div
+          className="grid items-center gap-2.5 px-3 py-2 bg-violet-500/[0.05] border-l border-[rgba(60,40,80,0.2)]"
+          style={{ gridTemplateColumns: `${VALUE_COL} minmax(0,1fr)` }}
+        >
+          <span className="text-left text-[9px] font-bold uppercase tracking-wider text-violet-300/70 whitespace-nowrap">
+            Mini BT
+          </span>
+          <span className="min-w-0 truncate text-right text-[9px] font-bold uppercase tracking-wider text-violet-300/50 whitespace-nowrap">
+            Formula
+          </span>
         </div>
       </div>
 
@@ -184,8 +234,22 @@ function DetailedCompareTable({ pairedRows, carriedRows, noPairRows, onGotoFormu
   );
 }
 
-/* ─── Account Result grid ─────────────────────────────────────────────── */
-function AccountResult({ summary, params, execCount, totalCount, futures }) {
+/* ─── Account Result — same MetricCard style as MiniBacktestDashboard ─── */
+function AccountMetricCard({ label, value, valueClassName, detail, detailClassName }) {
+  return (
+    <div className="rounded-lg border border-[rgba(60,40,80,0.35)] bg-[#120a20] px-3 py-2.5 min-w-0">
+      <div className="text-[9px] font-medium uppercase tracking-wide text-[#8c8c8c]">{label}</div>
+      <div className={cx("mt-1 text-[18px] font-semibold font-mono leading-tight", valueClassName || "text-[#f5f5f5]")}>
+        {value}
+      </div>
+      {detail != null && detail !== "" ? (
+        <div className={cx("text-[9px] mt-1 font-mono", detailClassName || "text-[#6b6b6b]")}>{detail}</div>
+      ) : null}
+    </div>
+  );
+}
+
+function AccountResult({ summary, execCount, totalCount, futures }) {
   const s = summary;
   const equity    = s.equity ?? s.finalBalance ?? 0;
   const tradable  = s.tradable ?? equity - (s.reserve ?? 0);
@@ -199,32 +263,56 @@ function AccountResult({ summary, params, execCount, totalCount, futures }) {
   const skipped   = totalCount - execCount;
 
   const items = [
-    { label: "Total balance",    value: `${formatMbMoney(equity)} · ${formatMbPct(roiTotal)}`,     cls: roiTotal >= 0 ? "text-emerald-400" : "text-red-400" },
-    { label: "Tradable balance", value: `${formatMbMoney(tradable)} · ${formatMbPct(roiTrad)}`,     cls: roiTrad >= 0 ? "text-emerald-400" : "text-red-400" },
-    { label: "Reserved balance", value: `${formatMbMoney(reserve)} · +${roiRes.toFixed(2)}%`,       cls: "text-teal-400" },
-    { label: "Trading fees",     value: formatMbMoney(-fees),                                        cls: "text-red-400" },
-    ...(futures ? [
-      { label: "Funding",        value: formatMbMoney(-funding),                                     cls: "text-red-400" },
-      { label: "Liquidations",   value: `${liqCount} cycles`,                                        cls: liqCount > 0 ? "text-amber-400" : "text-[#d9d9d9]" },
-    ] : []),
+    {
+      label: "Total balance",
+      value: formatMbMoney(equity),
+      valueClassName: roiTotal >= 0 ? "text-emerald-400" : "text-red-400",
+      detail: formatMbPct(roiTotal),
+      detailClassName: roiTotal >= 0 ? "text-emerald-400" : "text-red-400",
+    },
+    {
+      label: "Tradable balance",
+      value: formatMbMoney(tradable),
+      valueClassName: roiTrad >= 0 ? "text-emerald-400" : "text-red-400",
+      detail: formatMbPct(roiTrad),
+      detailClassName: roiTrad >= 0 ? "text-emerald-400" : "text-red-400",
+    },
+    {
+      label: "Reserved balance",
+      value: formatMbMoney(reserve),
+      valueClassName: "text-teal-400",
+      detail: `+${roiRes.toFixed(2)}%`,
+      detailClassName: "text-teal-400",
+    },
+    {
+      label: "Trading fees",
+      value: formatMbMoney(-fees),
+      valueClassName: "text-red-400",
+    },
+    ...(futures
+      ? [
+          { label: "Funding", value: formatMbMoney(-funding), valueClassName: "text-red-400" },
+          {
+            label: "Liquidations",
+            value: `${liqCount}`,
+            valueClassName: liqCount > 0 ? "text-amber-400" : "text-[#f5f5f5]",
+            detail: "cycles",
+          },
+        ]
+      : []),
     {
       label: "Executed / Total",
-      value: `${execCount} / ${totalCount}${skipped > 0 ? ` · ${skipped} skipped` : ""}`,
-      cls: "text-[#d9d9d9]",
+      value: `${execCount} / ${totalCount}`,
+      detail: skipped > 0 ? `${skipped} skipped` : undefined,
     },
   ];
 
   return (
-    <div className="rounded-xl border border-[rgba(60,40,80,0.35)] bg-[#120a20] overflow-hidden">
-      <div className="px-3 py-2 border-b border-[rgba(60,40,80,0.25)] bg-[#1a1028]/80">
-        <span className="text-[11px] font-semibold text-[#e8e0f0]">Account Result</span>
-      </div>
-      <div className="p-3 flex flex-nowrap gap-2.5 overflow-x-auto">
+    <div className="space-y-2">
+      <h3 className="text-[13px] font-medium text-[#f5f5f5]">Account Result</h3>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-2">
         {items.map((item) => (
-          <div key={item.label} className="flex-1 min-w-0 rounded-lg border border-[rgba(60,40,80,0.25)] bg-[#0d0718]/40 px-2.5 py-2">
-            <div className="text-[9px] uppercase tracking-wider font-bold text-[#6b6b6b] mb-1">{item.label}</div>
-            <div className={cx("text-[12px] font-bold font-mono leading-tight", item.cls)}>{item.value}</div>
-          </div>
+          <AccountMetricCard key={item.label} {...item} />
         ))}
       </div>
     </div>
@@ -372,20 +460,21 @@ export const MiniBacktestComparePairs = memo(function MiniBacktestComparePairs({
       {/* Account Result */}
       <AccountResult
         summary={s}
-        params={result?.params}
         execCount={execCount}
         totalCount={totalCount}
         futures={futures}
       />
 
       {/* Comparison table */}
-      <div className="rounded-xl border border-[rgba(60,40,80,0.35)] bg-[#120a20] overflow-hidden">
-        <DetailedCompareTable
-          pairedRows={pairedRows}
-          carriedRows={carriedRows}
-          noPairRows={noPairRows}
-          onGotoFormula={onGotoFormula}
-        />
+      <div className="rounded-xl border border-[rgba(60,40,80,0.35)] bg-[#120a20] overflow-x-auto">
+        <div className="min-w-[720px]">
+          <DetailedCompareTable
+            pairedRows={pairedRows}
+            carriedRows={carriedRows}
+            noPairRows={noPairRows}
+            onGotoFormula={onGotoFormula}
+          />
+        </div>
       </div>
     </div>
   );

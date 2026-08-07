@@ -3,6 +3,7 @@ import { cx, ui } from "../../../constants/ui";
 import { crmSurface } from "../../../constants/crmAccent";
 import { BASE_INDICATORS, INDICATOR_GROUPS } from "../../../constants/indicators";
 import { resolveTagNames } from "../../tags/utils/tagStore";
+import { AppInput } from "../../../components/common/AppInput";
 
 export const IndicatorLibrary = memo(({
   query,
@@ -137,10 +138,11 @@ export const IndicatorLibrary = memo(({
             <circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" strokeWidth="2" />
             <path d="m21 21-4.35-4.35" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
-          <input
+          <AppInput
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
-            className={cx(ui.input, "h-7 pl-8 text-[11px]")}
+            className="h-8 pl-8 text-[12px]"
+            wrapperClassName="space-y-0"
             placeholder="Search indicators..."
           />
         </div>

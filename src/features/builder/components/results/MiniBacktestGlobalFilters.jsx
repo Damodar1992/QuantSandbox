@@ -63,6 +63,14 @@ export const MiniBacktestGlobalFilters = memo(function MiniBacktestGlobalFilters
     [options.statuses],
   );
 
+  const ownerOptions = useMemo(
+    () => [
+      { value: "", label: "All owners" },
+      ...(options.owners ?? []).map((item) => ({ value: item.value, label: item.label })),
+    ],
+    [options.owners],
+  );
+
   return (
     <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
       <AppSelect
@@ -117,6 +125,15 @@ export const MiniBacktestGlobalFilters = memo(function MiniBacktestGlobalFilters
         className="w-[132px] shrink-0"
         triggerClassName="h-8"
         aria-label="Filter by status"
+      />
+
+      <AppSelect
+        value={filters.owner}
+        onValueChange={(v) => setFilter("owner", v)}
+        options={ownerOptions}
+        className="w-[132px] shrink-0"
+        triggerClassName="h-8"
+        aria-label="Filter by owner"
       />
 
       {hasActiveFilters ? (

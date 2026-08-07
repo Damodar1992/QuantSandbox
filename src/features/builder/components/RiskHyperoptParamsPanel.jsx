@@ -1,6 +1,9 @@
 import React, { memo } from "react";
 import { cx, ui } from "../../../constants/ui";
 import { RISK_HYPEROPT_PARAM_DEFS } from "../../../constants/risk";
+import { AppInput } from "../../../components/common/AppInput";
+
+const CONTROL = "h-8 text-[12px] w-full font-mono";
 
 export const RiskHyperoptParamsPanel = memo(function RiskHyperoptParamsPanel({ params, onChange }) {
   const enabled = !!params?.loss_streak_cooldown_enabled;
@@ -45,35 +48,38 @@ export const RiskHyperoptParamsPanel = memo(function RiskHyperoptParamsPanel({ p
                 <div className="flex items-end gap-2">
                   <div className="space-y-1 flex-1 min-w-0">
                     <label className={cx("block text-[10px]", ui.textMuted)}>Min</label>
-                    <input
+                    <AppInput
                       type="number"
                       min={def.minFloor}
                       step={1}
                       value={min}
                       onChange={(e) => handleChange(def.minKey, e.target.value)}
-                      className={cx(ui.input, "h-8 text-[11px] w-full font-mono", invalid && "border-amber-500/50")}
+                      className={cx(CONTROL, invalid && "border-amber-500/50")}
+                      wrapperClassName="space-y-0"
                     />
                   </div>
                   <div className="space-y-1 flex-1 min-w-0">
                     <label className={cx("block text-[10px]", ui.textMuted)}>Max</label>
-                    <input
+                    <AppInput
                       type="number"
                       min={def.minFloor}
                       step={1}
                       value={max}
                       onChange={(e) => handleChange(def.maxKey, e.target.value)}
-                      className={cx(ui.input, "h-8 text-[11px] w-full font-mono", invalid && "border-amber-500/50")}
+                      className={cx(CONTROL, invalid && "border-amber-500/50")}
+                      wrapperClassName="space-y-0"
                     />
                   </div>
                   <div className="space-y-1 flex-1 min-w-0">
                     <label className={cx("block text-[10px]", ui.textMuted)}>Step</label>
-                    <input
+                    <AppInput
                       type="number"
                       min={1}
                       step={1}
                       value={step}
                       onChange={(e) => handleChange(def.stepKey, e.target.value)}
-                      className={cx(ui.input, "h-8 text-[11px] w-full font-mono", invalid && "border-amber-500/50")}
+                      className={cx(CONTROL, invalid && "border-amber-500/50")}
+                      wrapperClassName="space-y-0"
                     />
                   </div>
                 </div>
