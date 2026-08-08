@@ -144,6 +144,16 @@ export const RunBacktestForm = memo(function RunBacktestForm({
     [params.exchange, params.mode],
   );
 
+  const feesHeadline = useMemo(() => {
+    if (!params.exchange || !params.mode) return null;
+    const exchange =
+      BT_EXCHANGES.find((e) => e.value === params.exchange)?.label || params.exchange;
+    const mode =
+      BT_TRADING_MODES.find((m) => m.value === params.mode)?.label || params.mode;
+    const modeLabel = String(mode).charAt(0).toUpperCase() + String(mode).slice(1);
+    return `${exchange} ${modeLabel}`;
+  }, [params.exchange, params.mode]);
+
   const missing = useMemo(() => {
     const required = [
       ["periodFrom", "period"],
@@ -280,164 +290,178 @@ export const RunBacktestForm = memo(function RunBacktestForm({
           ) : null}
         </div>
 
-        <div className={cx(ui.radius, ui.panelMuted, "grid gap-3 p-3 sm:grid-cols-2 xl:grid-cols-3")}>
-          <Field label="Exchange">
-            <AppSelect
-              value={params.exchange}
-              onValueChange={(v) => patch("exchange", v)}
-              options={BT_EXCHANGES}
-              disabled={readOnly}
-              placeholder="Select exchange…"
-              triggerClassName={CONTROL}
-            />
-          </Field>
+        <div className="space-y-3">
+          {/* MARKET SETUP */}
+          <div className={cx(ui.radius, ui.panelMuted, "space-y-3 p-3")}>
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-[#9b8ec4]">
+              Market setup
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <Field label="Exchange">
+                <AppSelect
+                  value={params.exchange}
+                  onValueChange={(v) => patch("exchange", v)}
+                  options={BT_EXCHANGES}
+                  disabled={readOnly}
+                  placeholder="Select exchange…"
+                  triggerClassName={CONTROL}
+                />
+              </Field>
 
-          <Field label="Trading Mode">
-            <AppSelect
-              value={params.mode}
-              onValueChange={(v) => patch("mode", v)}
-              options={BT_TRADING_MODES}
-              disabled={readOnly}
-              placeholder="spot / futures"
-              triggerClassName={CONTROL}
-            />
-          </Field>
+              <Field label="Trading Mode">
+                <AppSelect
+                  value={params.mode}
+                  onValueChange={(v) => patch("mode", v)}
+                  options={BT_TRADING_MODES}
+                  disabled={readOnly}
+                  placeholder="spot / futures"
+                  triggerClassName={CONTROL}
+                />
+              </Field>
 
-          <Field label="Pair">
-            <AppSelect
-              value={params.pair}
-              onValueChange={(v) => patch("pair", v)}
-              options={BT_PAIR_OPTIONS.map((p) => ({ value: p, label: p }))}
-              disabled={readOnly}
-              placeholder="Select pair…"
-              triggerClassName={CONTROL}
-            />
-          </Field>
+              <Field label="Pair">
+                <AppSelect
+                  value={params.pair}
+                  onValueChange={(v) => patch("pair", v)}
+                  options={BT_PAIR_OPTIONS.map((p) => ({ value: p, label: p }))}
+                  disabled={readOnly}
+                  placeholder="Select pair…"
+                  triggerClassName={CONTROL}
+                />
+              </Field>
 
-          <Field label="Timeframe">
-            <AppSelect
-              value={params.timeframe}
-              onValueChange={(v) => patch("timeframe", v)}
-              options={BT_TIMEFRAMES.map((t) => ({ value: t, label: t }))}
-              disabled={readOnly}
-              placeholder="Select timeframe…"
-              triggerClassName={CONTROL}
-            />
-          </Field>
+              <Field label="Timeframe">
+                <AppSelect
+                  value={params.timeframe}
+                  onValueChange={(v) => patch("timeframe", v)}
+                  options={BT_TIMEFRAMES.map((t) => ({ value: t, label: t }))}
+                  disabled={readOnly}
+                  placeholder="Select timeframe…"
+                  triggerClassName={CONTROL}
+                />
+              </Field>
 
-          <Field label="Time Range">
-            <DateRangePicker
-              label={null}
-              from={params.periodFrom}
-              to={params.periodTo}
-              disabled={readOnly}
-              onChange={({ from, to }) => {
-                setParams((prev) => ({ ...prev, periodFrom: from || "", periodTo: to || "" }));
-              }}
-              className="space-y-0"
-              triggerClassName={CONTROL}
-            />
-          </Field>
+              <Field label="Time Range">
+                <DateRangePicker
+                  label={null}
+                  from={params.periodFrom}
+                  to={params.periodTo}
+                  disabled={readOnly}
+                  onChange={({ from, to }) => {
+                    setParams((prev) => ({ ...prev, periodFrom: from || "", periodTo: to || "" }));
+                  }}
+                  className="space-y-0"
+                  triggerClassName={CONTROL}
+                />
+              </Field>
 
-          <Field label="Leverage">
-            <AppInput
-              type="number"
-              min={BT_LEVERAGE_RANGE.min}
-              max={BT_LEVERAGE_RANGE.max}
-              value={params.leverage}
-              disabled={readOnly || params.mode === "spot"}
-              onChange={(e) => patch("leverage", e.target.value)}
-              className={CONTROL}
-              wrapperClassName="space-y-0"
-            />
-          </Field>
+              <Field label="Leverage">
+                <AppInput
+                  type="number"
+                  min={BT_LEVERAGE_RANGE.min}
+                  max={BT_LEVERAGE_RANGE.max}
+                  value={params.leverage}
+                  disabled={readOnly || params.mode === "spot"}
+                  onChange={(e) => patch("leverage", e.target.value)}
+                  className={CONTROL}
+                  wrapperClassName="space-y-0"
+                />
+              </Field>
+            </div>
+          </div>
 
-          <Field label="Starting capital, USDT">
-            <AppInput
-              type="number"
-              min={0}
-              value={params.startingCapital}
-              disabled={readOnly}
-              onChange={(e) => patch("startingCapital", e.target.value)}
-              className={CONTROL}
-              wrapperClassName="space-y-0"
-            />
-          </Field>
+          {/* CAPITAL & POSITION */}
+          <div className={cx(ui.radius, ui.panelMuted, "space-y-3 p-3")}>
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-[#9b8ec4]">
+              Capital & position
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <Field label="Starting Capital">
+                <AppInput
+                  type="number"
+                  min={0}
+                  value={params.startingCapital}
+                  disabled={readOnly}
+                  onChange={(e) => patch("startingCapital", e.target.value)}
+                  className={CONTROL}
+                  wrapperClassName="space-y-0"
+                />
+              </Field>
 
-          <Field label="Stake mode">
-            <div className="grid grid-cols-[minmax(0,1fr)_5.5rem] items-center gap-2">
-              <AppSelect
-                value={params.stakeMode}
-                onValueChange={(v) => patch("stakeMode", v)}
-                options={BT_STAKE_MODES}
-                disabled={readOnly}
-                className="min-w-0 space-y-0"
-                triggerClassName={CONTROL}
-              />
-              <AppInput
-                type="number"
-                min={0}
-                value={params.stakeValue}
-                disabled={readOnly}
-                onChange={(e) => patch("stakeValue", e.target.value)}
-                placeholder={params.stakeMode === "relative" ? "%" : "USDT"}
-                className={cx(CONTROL, "px-2")}
-                wrapperClassName="min-w-0 space-y-0"
-                aria-label={params.stakeMode === "relative" ? "% of balance" : "USDT per trade"}
+              <Field label="Stake Mode">
+                <AppSelect
+                  value={params.stakeMode}
+                  onValueChange={(v) => patch("stakeMode", v)}
+                  options={BT_STAKE_MODES}
+                  disabled={readOnly}
+                  triggerClassName={CONTROL}
+                />
+              </Field>
+
+              <Field label="Stake Value">
+                <AppInput
+                  type="number"
+                  min={0}
+                  value={params.stakeValue}
+                  disabled={readOnly}
+                  onChange={(e) => patch("stakeValue", e.target.value)}
+                  placeholder={params.stakeMode === "relative" ? "%" : "USDT"}
+                  className={CONTROL}
+                  wrapperClassName="space-y-0"
+                  aria-label={params.stakeMode === "relative" ? "% of balance" : "USDT per trade"}
+                />
+              </Field>
+
+              <Field
+                label={
+                  <>
+                    <span>Profit Reserving</span>
+                    <BtInfoTooltip
+                      label="Profit Reserving"
+                      text="% taken out of every winning trade · empty = off"
+                    />
+                  </>
+                }
+              >
+                <AppInput
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={params.profitReserving ?? ""}
+                  disabled={readOnly}
+                  onChange={(e) => patch("profitReserving", e.target.value)}
+                  className={CONTROL}
+                  wrapperClassName="space-y-0"
+                />
+              </Field>
+            </div>
+          </div>
+
+          {/* FEES */}
+          <div className={cx(ui.radius, ui.panelMuted, "space-y-2 p-3")}>
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#9b8ec4]">
+              <span>Fees</span>
+              <BtInfoTooltip
+                label="Fees"
+                text="Binance spot 0.10/0.10 · futures 0.05/0.02 + funding. HTX spot 0.20/0.20 · futures 0.05/0.02 + funding."
               />
             </div>
-          </Field>
-
-          <Field
-            label={
+            {derivedFees ? (
               <>
-                <span>Profit Reserving, %</span>
-                <BtInfoTooltip
-                  label="Profit Reserving"
-                  text="% taken out of every winning trade · empty = off"
-                />
+                <div className="text-[12px] font-medium text-[#faf7fd]">
+                  {feesHeadline} · Maker {derivedFees.maker}% · Taker {derivedFees.taker}%
+                  {derivedFees.funding ? " · funding" : ""}
+                </div>
+                <div className={cx("text-[10px]", ui.textSubtle)}>
+                  Calculated automatically from exchange and trading mode
+                </div>
               </>
-            }
-          >
-            <AppInput
-              type="number"
-              min={0}
-              max={100}
-              value={params.profitReserving ?? ""}
-              disabled={readOnly}
-              onChange={(e) => patch("profitReserving", e.target.value)}
-              className={CONTROL}
-              wrapperClassName="space-y-0"
-            />
-          </Field>
-
-          <Field
-            label={
-              <>
-                <span>
-                  Fees (derived · always taken from exchange + mode, never entered by hand)
-                </span>
-                <BtInfoTooltip
-                  label="Fees"
-                  text="Binance spot 0.10/0.10 · futures 0.05/0.02 + funding. HTX spot 0.20/0.20 · futures 0.05/0.02 + funding."
-                />
-              </>
-            }
-            className="col-span-full xl:col-span-3"
-          >
-            <AppInput
-              readOnly
-              value={
-                derivedFees
-                  ? `maker ${derivedFees.maker}% · taker ${derivedFees.taker}%${
-                      derivedFees.funding ? " · funding" : ""
-                    }`
-                  : "select exchange and mode"
-              }
-              className={cx(CONTROL, "cursor-not-allowed opacity-70")}
-              wrapperClassName="space-y-0"
-            />
-          </Field>
+            ) : (
+              <div className={cx("text-[12px]", ui.textSubtle)}>
+                Select exchange and trading mode to see derived fees
+              </div>
+            )}
+          </div>
         </div>
       </section>
 

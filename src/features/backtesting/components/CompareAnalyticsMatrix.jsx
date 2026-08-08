@@ -1,18 +1,12 @@
 import React, { memo, useMemo } from "react";
 import { cx } from "@/constants/ui";
-import {
-  BT_CORE_METRICS,
-  BT_SYNTHETIC_METHODS,
-  BT_TOOLTIPS,
-} from "@/constants/backtesting";
+import { BT_CORE_METRICS, BT_TOOLTIPS } from "@/constants/backtesting";
 import {
   BT_MUTED,
   coreMetricTone,
   deltaVsMini,
   fmtCoreMetric,
-  fmtInt,
   fmtPct,
-  fmtPeriod,
   percentileTone,
   signedTone,
 } from "../utils/format";
@@ -26,13 +20,6 @@ const TD = "px-2.5 py-1.5 text-center font-mono tabular-nums whitespace-nowrap t
 const ROW = "border-b border-[rgba(60,40,80,0.18)] last:border-b-0";
 const GROUP_SEP = "border-l border-[rgba(60,40,80,0.35)]";
 
-function shortId(id) {
-  if (!id) return "—";
-  const s = String(id);
-  if (s.length <= 14) return s;
-  return `${s.slice(0, 8)}…${s.slice(-2)}`;
-}
-
 function fmtMatrixValue(metricKey, value) {
   const base = fmtCoreMetric(metricKey, value);
   if (base === "—" || base === "N/A") return base;
@@ -43,24 +30,6 @@ function fmtMatrixValue(metricKey, value) {
 function fmtPctCell(value) {
   if (value == null || value === "" || value === "N/A") return "N/A";
   return fmtPct(value, 0);
-}
-
-function shufflerApproachLabel(config) {
-  if (!config) return "—";
-  const approach =
-    config.approach === "block_by_streak"
-      ? "block"
-      : config.approach === "levels"
-        ? "levels"
-        : "full";
-  const mode = config.simulationMode === "dynamic" ? "DYNAMIC" : "STATIC";
-  return `${approach} (${fmtInt(config.shufflesN)}) · ${mode}`;
-}
-
-function syntheticMethodLabel(config) {
-  const hit = BT_SYNTHETIC_METHODS.find((m) => m.value === config?.method);
-  const raw = hit?.label || config?.method || "—";
-  return String(raw).replace(/\s*\(.*\)$/, "");
 }
 
 function coreByKey(listOrMap) {
@@ -89,26 +58,8 @@ export const CompareAnalyticsMatrix = memo(function CompareAnalyticsMatrix({
     const miniCore = backtest?.miniCore || null;
     const shMap = coreByKey(shufflerRun?.result?.core);
     const syMap = coreByKey(syntheticRun?.result?.core);
-    const p = backtest?.params || {};
 
     return {
-      backtestMeta: [
-        shortId(backtest?.id),
-        fmtPeriod(p.periodFrom, p.periodTo),
-        backtest?.miniName ? `from ${backtest.miniName}` : null,
-      ]
-        .filter(Boolean)
-        .join(" · "),
-      shufflerMeta: shufflerRun
-        ? [shortId(shufflerRun.id), shufflerApproachLabel(shufflerRun.config)].join(" · ")
-        : "—",
-      syntheticMeta: syntheticRun
-        ? [
-            shortId(syntheticRun.id),
-            syntheticMethodLabel(syntheticRun.config),
-            `N=${fmtInt(syntheticRun.config?.nRuns)}`,
-          ].join(" · ")
-        : "—",
       rows: BT_CORE_METRICS.map((metric) => {
         const bt = btCore[metric.key] ?? null;
         const mini = miniCore ? miniCore[metric.key] ?? null : null;
@@ -158,24 +109,15 @@ export const CompareAnalyticsMatrix = memo(function CompareAnalyticsMatrix({
               <div className="text-[12px] font-semibold normal-case tracking-normal text-[#faf7fd]">
                 Backtest
               </div>
-              <div className="mt-0.5 text-[9px] font-normal normal-case tracking-normal text-[#6e6682]">
-                {model.backtestMeta}
-              </div>
             </th>
             <th colSpan={4} className={cx(TH_GROUP, GROUP_SEP)}>
               <div className="text-[12px] font-semibold normal-case tracking-normal text-[#faf7fd]">
                 Shuffler
               </div>
-              <div className="mt-0.5 text-[9px] font-normal normal-case tracking-normal text-[#6e6682]">
-                {model.shufflerMeta}
-              </div>
             </th>
             <th colSpan={4} className={cx(TH_GROUP, GROUP_SEP)}>
               <div className="text-[12px] font-semibold normal-case tracking-normal text-[#faf7fd]">
                 Synthetic
-              </div>
-              <div className="mt-0.5 text-[9px] font-normal normal-case tracking-normal text-[#6e6682]">
-                {model.syntheticMeta}
               </div>
             </th>
           </tr>
