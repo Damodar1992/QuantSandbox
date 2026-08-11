@@ -1,6 +1,6 @@
 import React, { memo, useEffect, useMemo, useState } from "react";
 import { cx, ui } from "../../constants/ui";
-import { formatReleaseDate, sortReleaseNotesByDate } from "../../constants/releaseNotes";
+import { formatReleaseDate, normalizeReleaseNotes, sortReleaseNotesByDate } from "../../constants/releaseNotes";
 import { ReleaseNoteMarkdown } from "./ReleaseNoteMarkdown";
 import { AppButton } from "../common/AppButton";
 
@@ -9,8 +9,12 @@ export const ReleaseNotesPage = memo(function ReleaseNotesPage({
   selectedId,
   onSelectId,
   onEditNote,
+  onDeleteNote,
 }) {
-  const sortedNotes = useMemo(() => sortReleaseNotesByDate(notes), [notes]);
+  const sortedNotes = useMemo(
+    () => sortReleaseNotesByDate(normalizeReleaseNotes(notes)),
+    [notes],
+  );
   const [internalId, setInternalId] = useState(null);
 
   const activeId = selectedId ?? internalId;
@@ -76,8 +80,12 @@ export const ReleaseNotesPage = memo(function ReleaseNotesPage({
                 >
                   {note.title}
                 </div>
-                <div className={cx("text-[10px] mt-0.5", ui.textMuted)}>
-                  {formatReleaseDate(note.releasedAt)}
+                <div className={cx("mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[10px]", ui.textMuted)}>
+                  <span className="font-mono text-[#d9d9d9]">
+                    v{note.version || "—"}
+                  </span>
+                  <span aria-hidden>·</span>
+                  <span>{formatReleaseDate(note.releasedAt)}</span>
                 </div>
               </button>
             );
@@ -98,19 +106,38 @@ export const ReleaseNotesPage = memo(function ReleaseNotesPage({
               <div className="min-w-0">
                 <h2 className="text-[16px] font-semibold text-[#faf7fd]">{selectedNote.title}</h2>
                 <p className={cx("text-[11px] mt-1", ui.textMuted)}>
+                  {selectedNote.version ? (
+                    <>
+                      <span className="font-mono text-[#d9d9d9]">v{selectedNote.version}</span>
+                      {" · "}
+                    </>
+                  ) : null}
                   Released {formatReleaseDate(selectedNote.releasedAt)}
                 </p>
               </div>
-              {onEditNote && (
-                <AppButton
-                  type="button"
-                  variant="outline"
-                  size="xs"
-                  onClick={() => onEditNote(selectedNote)}
-                >
-                  Edit
-                </AppButton>
-              )}
+              <div className="flex shrink-0 items-center gap-1.5">
+                {onEditNote ? (
+                  <AppButton
+                    type="button"
+                    variant="outline"
+                    size="xs"
+                    onClick={() => onEditNote(selectedNote)}
+                  >
+                    Edit
+                  </AppButton>
+                ) : null}
+                {onDeleteNote ? (
+                  <AppButton
+                    type="button"
+                    variant="outline"
+                    size="xs"
+                    onClick={() => onDeleteNote(selectedNote)}
+                    className="border-red-500/60 text-red-300 hover:bg-red-500/10"
+                  >
+                    Delete
+                  </AppButton>
+                ) : null}
+              </div>
             </div>
             <ReleaseNoteMarkdown content={selectedNote.body} />
           </div>

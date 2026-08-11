@@ -1,12 +1,13 @@
 import React, { memo, useEffect, useState } from "react";
 import { cx, ui } from "../../constants/ui";
+import { isValidReleaseVersion } from "../../constants/releaseNotes";
 import { AppDialog } from "../common/AppDialog";
 import { AppButton } from "../common/AppButton";
 import { AppInput } from "../common/AppInput";
 import { Textarea } from "../ui/textarea";
 
 const CONTROL = "h-9 text-[12px]";
-const emptyDraft = () => ({ title: "", releasedAt: "", body: "" });
+const emptyDraft = () => ({ title: "", version: "", releasedAt: "", body: "" });
 
 export const ReleaseNoteModal = memo(function ReleaseNoteModal({
   open,
@@ -21,6 +22,7 @@ export const ReleaseNoteModal = memo(function ReleaseNoteModal({
     if (editingNote) {
       setDraft({
         title: editingNote.title ?? "",
+        version: editingNote.version ?? "",
         releasedAt: editingNote.releasedAt ?? "",
         body: editingNote.body ?? "",
       });
@@ -29,12 +31,15 @@ export const ReleaseNoteModal = memo(function ReleaseNoteModal({
     }
   }, [open, editingNote]);
 
-  const isValid = draft.title.trim() && draft.releasedAt && draft.body.trim();
+  const versionOk = isValidReleaseVersion(draft.version);
+  const isValid =
+    draft.title.trim() && draft.releasedAt && draft.body.trim() && versionOk;
 
   const handleSave = () => {
     if (!isValid) return;
     onSave?.({
       title: draft.title.trim(),
+      version: draft.version.trim(),
       releasedAt: draft.releasedAt,
       body: draft.body,
     });
@@ -46,7 +51,7 @@ export const ReleaseNoteModal = memo(function ReleaseNoteModal({
       open={open}
       onOpenChange={onOpenChange}
       title={editingNote ? "Edit release note" : "Add release note"}
-      description="Title, release date, and markdown description."
+      description="Title, version, release date, and markdown description."
       className="max-w-lg"
     >
       <div className="space-y-4">
@@ -60,15 +65,34 @@ export const ReleaseNoteModal = memo(function ReleaseNoteModal({
             placeholder="e.g. Global Tags release"
           />
         </div>
-        <div>
-          <label className={cx("block mb-1 text-xs", ui.textMuted)}>Release date</label>
-          <AppInput
-            type="date"
-            value={draft.releasedAt}
-            onChange={(e) => setDraft((prev) => ({ ...prev, releasedAt: e.target.value }))}
-            className={cx(CONTROL, "w-full")}
-            wrapperClassName="space-y-0"
-          />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <label className={cx("block mb-1 text-xs", ui.textMuted)}>Release date</label>
+            <AppInput
+              type="date"
+              value={draft.releasedAt}
+              onChange={(e) => setDraft((prev) => ({ ...prev, releasedAt: e.target.value }))}
+              className={cx(CONTROL, "w-full")}
+              wrapperClassName="space-y-0"
+            />
+          </div>
+          <div>
+            <label className={cx("block mb-1 text-xs", ui.textMuted)}>Version</label>
+            <AppInput
+              value={draft.version}
+              onChange={(e) => setDraft((prev) => ({ ...prev, version: e.target.value }))}
+              className={cx(CONTROL, "w-full font-mono")}
+              wrapperClassName="space-y-0"
+              placeholder="0.1.0"
+              inputMode="decimal"
+              aria-invalid={draft.version ? !versionOk : undefined}
+            />
+            {draft.version && !versionOk ? (
+              <div className="mt-1 text-[10px] text-amber-300">Use format 0.1.0</div>
+            ) : (
+              <div className={cx("mt-1 text-[10px]", ui.textSubtle)}>e.g. 0.1.0, 0.1.1, 0.2.0</div>
+            )}
+          </div>
         </div>
         <div>
           <label className={cx("block mb-1 text-xs", ui.textMuted)}>Description (markdown)</label>

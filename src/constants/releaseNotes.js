@@ -1,10 +1,11 @@
-/** @typedef {{ id: string, title: string, releasedAt: string, body: string, createdAt: string }} ReleaseNote */
+/** @typedef {{ id: string, title: string, version: string, releasedAt: string, body: string, createdAt: string }} ReleaseNote */
 
 /** @type {ReleaseNote[]} */
 export const INITIAL_RELEASE_NOTES = [
   {
     id: "rn-3",
     title: "Global Tags & Prod-only UI",
+    version: "0.3.0",
     releasedAt: "2026-06-22",
     createdAt: "2026-06-22T10:00:00",
     body: `## Highlights
@@ -27,6 +28,7 @@ export const INITIAL_RELEASE_NOTES = [
   {
     id: "rn-2",
     title: "Mini Backtest Analyzer",
+    version: "0.2.0",
     releasedAt: "2026-06-15",
     createdAt: "2026-06-15T14:30:00",
     body: `## What's new
@@ -44,6 +46,7 @@ Run Mini BT → configure params → save result to summary table
   {
     id: "rn-1",
     title: "Prod UI & Builder improvements",
+    version: "0.1.0",
     releasedAt: "2026-05-01",
     createdAt: "2026-05-01T09:00:00",
     body: `## Builder
@@ -58,6 +61,24 @@ Run Mini BT → configure params → save result to summary table
 - shadcn/ui primitives bridge`,
   },
 ];
+
+/** Semver-like: 0.1.0, 0.1.1, 1.2.3 */
+export const RELEASE_VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
+
+export function isValidReleaseVersion(value) {
+  return RELEASE_VERSION_PATTERN.test(String(value || "").trim());
+}
+
+/** Ensure older mock notes still expose a version after HMR / partial drafts. */
+export function normalizeReleaseNotes(notes = []) {
+  const seedById = new Map(INITIAL_RELEASE_NOTES.map((n) => [n.id, n]));
+  return notes.map((note, index) => {
+    if (note?.version && isValidReleaseVersion(note.version)) return note;
+    const seeded = seedById.get(note?.id)?.version;
+    const fallback = seeded || `0.${Math.max(1, notes.length - index)}.0`;
+    return { ...note, version: fallback };
+  });
+}
 
 export function sortReleaseNotesByDate(notes) {
   return [...notes].sort((a, b) => b.releasedAt.localeCompare(a.releasedAt));

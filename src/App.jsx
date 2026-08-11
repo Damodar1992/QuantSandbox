@@ -81,7 +81,7 @@ import {
 } from "./features/tags/utils/tagStore";
 import { TagsPage, TagsEditModal } from "./components/tags";
 import { ReleaseNotesPage, ReleaseNoteModal } from "./components/releaseNotes";
-import { INITIAL_RELEASE_NOTES } from "./constants/releaseNotes";
+import { INITIAL_RELEASE_NOTES, normalizeReleaseNotes } from "./constants/releaseNotes";
 import { BuilderStepper } from "./features/builder/BuilderStepper";
 import { useStorageState } from "./features/storage/hooks/useStorageState";
 import { StoragePage } from "./components/storage";
@@ -756,10 +756,15 @@ export default function App() {
   }, []);
 
   // Release notes (mock)
-  const [releaseNotes, setReleaseNotes] = useState(() => INITIAL_RELEASE_NOTES);
+  const [releaseNotes, setReleaseNotes] = useState(() => normalizeReleaseNotes(INITIAL_RELEASE_NOTES));
   const [releaseNoteModalOpen, setReleaseNoteModalOpen] = useState(false);
   const [editingReleaseNote, setEditingReleaseNote] = useState(null);
   const [selectedReleaseNoteId, setSelectedReleaseNoteId] = useState(null);
+  const [releaseNoteToDelete, setReleaseNoteToDelete] = useState(null);
+
+  useEffect(() => {
+    setReleaseNotes((prev) => normalizeReleaseNotes(prev));
+  }, []);
 
   // Formulas (Settings → Formulas)
   const formulaModalFormulaRef = useRef(null);
@@ -1054,13 +1059,31 @@ export default function App() {
     setReleaseNoteModalOpen(true);
   }, []);
 
+  const handleDeleteReleaseNote = useCallback((note) => {
+    setReleaseNoteToDelete(note);
+  }, []);
+
+  const handleConfirmDeleteReleaseNote = useCallback(() => {
+    if (!releaseNoteToDelete) return;
+    const deletedId = releaseNoteToDelete.id;
+    setReleaseNotes((prev) => prev.filter((n) => n.id !== deletedId));
+    setSelectedReleaseNoteId((current) => (current === deletedId ? null : current));
+    setReleaseNoteToDelete(null);
+  }, [releaseNoteToDelete]);
+
   const handleSaveReleaseNote = useCallback(
     (draft) => {
       if (editingReleaseNote) {
         setReleaseNotes((prev) =>
           prev.map((n) =>
             n.id === editingReleaseNote.id
-              ? { ...n, title: draft.title, releasedAt: draft.releasedAt, body: draft.body }
+              ? {
+                  ...n,
+                  title: draft.title,
+                  version: draft.version,
+                  releasedAt: draft.releasedAt,
+                  body: draft.body,
+                }
               : n,
           ),
         );
@@ -1070,6 +1093,7 @@ export default function App() {
           {
             id,
             title: draft.title,
+            version: draft.version,
             releasedAt: draft.releasedAt,
             body: draft.body,
             createdAt: new Date().toISOString(),
@@ -1628,6 +1652,7 @@ export default function App() {
             selectedId={selectedReleaseNoteId}
             onSelectId={setSelectedReleaseNoteId}
             onEditNote={handleEditReleaseNote}
+            onDeleteNote={handleDeleteReleaseNote}
           />
         )}
 
@@ -1839,6 +1864,35 @@ export default function App() {
         editingNote={editingReleaseNote}
         onSave={handleSaveReleaseNote}
       />
+
+      <AppDialog
+        open={Boolean(releaseNoteToDelete)}
+        onOpenChange={(open) => {
+          if (!open) setReleaseNoteToDelete(null);
+        }}
+        title="Delete release note?"
+        description={
+          releaseNoteToDelete
+            ? `“${releaseNoteToDelete.title}” will be removed from the list.`
+            : undefined
+        }
+        className="max-w-md"
+      >
+        <div className="flex justify-end gap-2 pt-1">
+          <AppButton type="button" variant="outline" size="sm" onClick={() => setReleaseNoteToDelete(null)}>
+            Cancel
+          </AppButton>
+          <AppButton
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleConfirmDeleteReleaseNote}
+            className="border-red-500/60 text-red-300 hover:bg-red-500/10"
+          >
+            Delete
+          </AppButton>
+        </div>
+      </AppDialog>
 
       {userToEdit && (
         <EditUserModal
