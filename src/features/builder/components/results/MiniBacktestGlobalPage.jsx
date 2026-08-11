@@ -111,8 +111,8 @@ export const MiniBacktestGlobalPage = memo(function MiniBacktestGlobalPage({
 
   return (
     <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
-      <div className={cx("flex items-center gap-3 px-4 py-3", ui.panelMuted, "border-0 border-b", ui.divider)}>
-        <div className={cx("text-[12px]", ui.textSubtle)}>
+      <div className={cx("flex min-w-0 items-center gap-3 px-4 py-3", ui.panelMuted, "border-0 border-b", ui.divider)}>
+        <div className={cx("shrink-0 text-[12px]", ui.textSubtle)}>
           {rows.length}
           {rows.length !== results.length ? ` / ${results.length}` : ""} runs
         </div>

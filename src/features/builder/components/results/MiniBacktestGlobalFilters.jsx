@@ -72,12 +72,12 @@ export const MiniBacktestGlobalFilters = memo(function MiniBacktestGlobalFilters
   );
 
   return (
-    <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+    <div className="ml-auto flex min-w-0 flex-nowrap items-center justify-end gap-2 overflow-x-auto">
       <AppSelect
         value={filters.strategy}
         onValueChange={(v) => setFilter("strategy", v)}
         options={strategyOptions}
-        className="w-[132px] shrink-0"
+        className="w-[120px] shrink-0"
         triggerClassName="h-8"
         aria-label="Filter by strategy"
       />
@@ -86,7 +86,7 @@ export const MiniBacktestGlobalFilters = memo(function MiniBacktestGlobalFilters
         value={filters.stage}
         onValueChange={(v) => setFilter("stage", v)}
         options={stageOptions}
-        className="w-[132px] shrink-0"
+        className="w-[110px] shrink-0"
         triggerClassName="h-8"
         aria-label="Filter by stage"
       />
@@ -95,7 +95,7 @@ export const MiniBacktestGlobalFilters = memo(function MiniBacktestGlobalFilters
         value={filters.tradingMode}
         onValueChange={(v) => setFilter("tradingMode", v)}
         options={tradingModeOptions}
-        className="w-[132px] shrink-0"
+        className="w-[110px] shrink-0"
         triggerClassName="h-8"
         aria-label="Filter by trading mode"
       />
@@ -104,7 +104,7 @@ export const MiniBacktestGlobalFilters = memo(function MiniBacktestGlobalFilters
         value={filters.exchange}
         onValueChange={(v) => setFilter("exchange", v)}
         options={exchangeOptions}
-        className="w-[132px] shrink-0"
+        className="w-[120px] shrink-0"
         triggerClassName="h-8"
         aria-label="Filter by exchange"
       />
@@ -113,7 +113,7 @@ export const MiniBacktestGlobalFilters = memo(function MiniBacktestGlobalFilters
         value={filters.pairs}
         onValueChange={(v) => setFilter("pairs", v)}
         options={pairsOptions}
-        className="w-[132px] shrink-0"
+        className="w-[110px] shrink-0"
         triggerClassName="h-8"
         aria-label="Filter by pairs"
       />
@@ -122,7 +122,7 @@ export const MiniBacktestGlobalFilters = memo(function MiniBacktestGlobalFilters
         value={filters.status}
         onValueChange={(v) => setFilter("status", v)}
         options={statusOptions}
-        className="w-[132px] shrink-0"
+        className="w-[110px] shrink-0"
         triggerClassName="h-8"
         aria-label="Filter by status"
       />
@@ -131,7 +131,7 @@ export const MiniBacktestGlobalFilters = memo(function MiniBacktestGlobalFilters
         value={filters.owner}
         onValueChange={(v) => setFilter("owner", v)}
         options={ownerOptions}
-        className="w-[132px] shrink-0"
+        className="w-[110px] shrink-0"
         triggerClassName="h-8"
         aria-label="Filter by owner"
       />
@@ -141,7 +141,7 @@ export const MiniBacktestGlobalFilters = memo(function MiniBacktestGlobalFilters
           type="button"
           variant="outline"
           onClick={() => onFiltersChange?.({ ...EMPTY_GLOBAL_MINI_BACKTEST_FILTERS })}
-          className="h-8 px-2 text-[12px] whitespace-nowrap"
+          className="h-8 shrink-0 px-2 text-[12px] whitespace-nowrap"
         >
           Clear filters
         </AppButton>

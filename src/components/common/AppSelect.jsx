@@ -69,9 +69,9 @@ export const AppSelect = memo(function AppSelect({
     </Select>
   );
 
-  /* No wrapper when unlabeled — keeps trigger in parent flex for alignment. */
+  /* Unlabeled: real wrapper when className sets size; bare select otherwise. */
   if (!label) {
-    return className ? <div className={cn("contents", className)}>{select}</div> : select;
+    return className ? <div className={cn(className)}>{select}</div> : select;
   }
 
   return (
