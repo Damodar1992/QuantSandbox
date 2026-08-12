@@ -24,7 +24,7 @@ const TD = "px-2.5 py-1.5 align-middle text-[11px] font-mono tabular-nums whites
 const ROW = "border-b border-[rgba(60,40,80,0.18)] last:border-b-0";
 const TH_METRIC = cx(TH, "text-left min-w-[140px]");
 const TH_NUM = cx(TH, "text-right");
-const TH_PCT = cx(TH, "text-left min-w-[160px]");
+const TH_PCT = cx(TH, "text-right min-w-[72px]");
 const TD_NUM = cx(TD, "text-right");
 const STRIP =
   "flex w-full items-center justify-between gap-2 border-b border-[rgba(60,40,80,0.3)] px-3 py-2 text-left text-[11px] font-medium hover:bg-white/[0.03] transition-colors bg-violet-500/10 text-violet-200";
@@ -37,17 +37,21 @@ function barColors(tone) {
   return { fill: "bg-violet-400", dot: "bg-violet-400" };
 }
 
-export function PercentileCell({ value }) {
+export function PercentileCell({ value, withBar = true }) {
   if (value == null || value === "" || value === "N/A") {
     return <span className={BT_MUTED}>{value === "N/A" ? "N/A" : "—"}</span>;
   }
   const pct = Math.max(0, Math.min(100, Number(value)));
   const tone = percentileTone(pct);
+  const label = `${fmtInt(Math.round(pct))}%`;
+  if (!withBar) {
+    return <span className={cx("tabular-nums", tone)}>{label}</span>;
+  }
   const colors = barColors(tone);
   return (
     <div className="flex min-w-[120px] items-center gap-2">
-      <span className={cx("w-8 shrink-0 text-right tabular-nums", tone)}>
-        {fmtInt(Math.round(pct))}
+      <span className={cx("w-10 shrink-0 text-right tabular-nums", tone)}>
+        {label}
       </span>
       <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-[#2a2040]">
         <div
@@ -115,13 +119,13 @@ export const SyntheticCoreResultsPanel = memo(function SyntheticCoreResultsPanel
           <div className="overflow-x-auto">
             <table className="w-full table-fixed border-collapse">
               <colgroup>
-                <col className="w-[18%]" />
+                <col className="w-[20%]" />
+                <col className="w-[13%]" />
                 <col className="w-[12%]" />
-                <col className="w-[22%]" />
-                <col className="w-[12%]" />
-                <col className="w-[12%]" />
-                <col className="w-[12%]" />
-                <col className="w-[12%]" />
+                <col className="w-[13%]" />
+                <col className="w-[14%]" />
+                <col className="w-[14%]" />
+                <col className="w-[14%]" />
               </colgroup>
               <thead>
                 <tr>
@@ -161,8 +165,8 @@ export const SyntheticCoreResultsPanel = memo(function SyntheticCoreResultsPanel
                     >
                       {fmtCoreMetric(row.key, row.original)}
                     </td>
-                    <td className={cx(TD, "align-middle")}>
-                      <PercentileCell value={row.percentile} />
+                    <td className={cx(TD_NUM, "align-middle")}>
+                      <PercentileCell value={row.percentile} withBar={false} />
                     </td>
                     <td className={cx(TD_NUM, "text-[#b8aecc]")}>
                       {fmtCoreMetric(row.key, row.min)}

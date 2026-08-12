@@ -177,7 +177,7 @@ function SectionBlock({ section }) {
             {row.textOnly ? (
               <span className={BT_MUTED}>—</span>
             ) : (
-              <PercentileCell value={row.percentile} />
+              <PercentileCell value={row.percentile} withBar={false} />
             )}
           </td>
           <td className={cx(TD_NUM, "text-[#d9d9d9]")}>

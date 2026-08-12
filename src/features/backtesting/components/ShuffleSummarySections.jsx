@@ -144,7 +144,7 @@ export function SummarySectionCard({ section, open, onToggle }) {
                 <th className={TH}>Metric</th>
                 <th className={cx(TH, "bg-sky-950/50 text-sky-200/90")}>Original</th>
                 <th className={cx(TH, "bg-emerald-950/40 text-sky-200/90")}>
-                  <span className="text-emerald-300">Original pct</span>
+                  <span className="text-emerald-300">Percentile</span>
                 </th>
                 <th className={TH}>Mean</th>
                 <th className={TH}>Median</th>
