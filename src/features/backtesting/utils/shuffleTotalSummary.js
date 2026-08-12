@@ -124,6 +124,19 @@ export function buildShuffleTotalSummary(run, opts = {}) {
       "pct",
     ),
     row(
+      "ddPeak",
+      "Max Drawdown",
+      ddPeak,
+      {
+        mean: round(7.34 * stress, 2),
+        median: round(7.1 * stress, 2),
+        max: round(23.1 * stress, 2),
+        min: round(5.08 * Math.min(1, stress), 2),
+      },
+      pctOrNa(rnd, false, Math.round(48 / stress)),
+      "pct",
+    ),
+    row(
       "maxDdInit",
       "Max Drawdown from initial balance",
       maxDdInit,
@@ -134,19 +147,6 @@ export function buildShuffleTotalSummary(run, opts = {}) {
         min: round(8.8 * Math.min(1, stress), 2),
       },
       pctOrNa(rnd, false, Math.round(55 / stress)),
-      "pct",
-    ),
-    row(
-      "ddPeak",
-      "Drawdown from Peak",
-      ddPeak,
-      {
-        mean: round(7.34 * stress, 2),
-        median: round(7.1 * stress, 2),
-        max: round(23.1 * stress, 2),
-        min: round(5.08 * Math.min(1, stress), 2),
-      },
-      pctOrNa(rnd, false, Math.round(48 / stress)),
       "pct",
     ),
     row(

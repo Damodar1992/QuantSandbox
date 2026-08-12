@@ -133,6 +133,8 @@ function EmptyLevel({ children }) {
 export const BranchPanel = memo(function BranchPanel({
   run,
   onDeleteChild,
+  onRunShuffler,
+  onRunSynthetic,
   onToggleShufflerForValidation,
   onOpenShuffleInfo,
   onOpenShufflerParams,
@@ -177,9 +179,21 @@ export const BranchPanel = memo(function BranchPanel({
       >
         {shufflerRuns.length === 0 ? (
           <EmptyLevel>
-            {isDone
-              ? "No Shuffler runs yet — use ▶ Run Shuffler above."
-              : BT_COPY.childrenLocked}
+            {isDone ? (
+              <div className="flex flex-col items-center gap-3">
+                <span>No Shuffler runs yet.</span>
+                <AppButton
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  onClick={() => onRunShuffler?.(run)}
+                >
+                  ▶ Run Shuffler
+                </AppButton>
+              </div>
+            ) : (
+              BT_COPY.childrenLocked
+            )}
           </EmptyLevel>
         ) : (
           <ShufflerTable
@@ -200,9 +214,21 @@ export const BranchPanel = memo(function BranchPanel({
       >
         {syntheticRuns.length === 0 ? (
           <EmptyLevel>
-            {isDone
-              ? "No Synthetic runs yet — use ▶ Run Synthetic above."
-              : BT_COPY.childrenLocked}
+            {isDone ? (
+              <div className="flex flex-col items-center gap-3">
+                <span>No Synthetic runs yet.</span>
+                <AppButton
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  onClick={() => onRunSynthetic?.(run)}
+                >
+                  ▶ Run Synthetic Backtest
+                </AppButton>
+              </div>
+            ) : (
+              BT_COPY.childrenLocked
+            )}
           </EmptyLevel>
         ) : (
           <SyntheticTable

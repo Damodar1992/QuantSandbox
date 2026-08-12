@@ -236,6 +236,8 @@ export const BacktestTree = memo(function BacktestTree({
                       <BranchPanel
                         run={run}
                         onDeleteChild={onDeleteChild}
+                        onRunShuffler={onRunShuffler}
+                        onRunSynthetic={onRunSynthetic}
                         onToggleShufflerForValidation={onToggleShufflerForValidation}
                         onOpenShuffleInfo={onOpenShuffleInfo}
                         onOpenShufflerParams={onOpenShufflerParams}
