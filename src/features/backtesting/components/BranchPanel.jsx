@@ -220,7 +220,6 @@ export const BranchPanel = memo(function BranchPanel({
         toneKey={BT_CHILD_TYPE.ANALYTICS}
         title="Compare analytics"
         count={hasCompareLines ? "3 lines" : "—"}
-        defaultOpen
       >
         {!isDone ? (
           <EmptyLevel>{BT_COPY.childrenLocked}</EmptyLevel>
@@ -281,10 +280,22 @@ function ShufflerTable({
   onToggleShufflerForValidation,
   onDeleteChild,
 }) {
+  const [expanded, setExpanded] = useState(() => new Set());
+
+  const toggleExpanded = (id) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   return (
     <table className="w-full border-collapse text-[11px]">
       <thead className="bg-[#19102b] text-[#8c8c8c]">
         <tr>
+          <th className={cx(TH, "w-8")} aria-label="Expand" />
           <th className={cx(TH, "w-12")}>ID</th>
           <th className={TH}>Mode</th>
           <th className={TH}>Shuffle</th>
@@ -302,136 +313,164 @@ function ShufflerTable({
           const childDone = child.status === BT_RUN_STATUS.DONE;
           const dynamic = child.config?.simulationMode === "dynamic";
           const selected = Boolean(child.selectedForValidation);
+          const isOpen = expanded.has(child.id);
           return (
-            <tr key={child.id} className={ROW}>
-              <td className={TD}>
-                <div className="inline-flex items-center gap-1">
-                  <CopyIdButton id={child.id} />
-                  <AppButton
-                    type="button"
-                    variant="outline"
-                    size="icon-xs"
-                    disabled={!childDone}
-                    title={childDone ? "Shuffle info" : "Run in progress"}
-                    aria-label={childDone ? "Shuffle info" : "Run in progress"}
-                    onClick={() => onOpenShuffleInfo?.(child, parent)}
-                  >
-                    <Eye className="h-3.5 w-3.5" />
-                  </AppButton>
-                </div>
-              </td>
-              <td className={TD}>
-                <span
-                  className={cx(
-                    "rounded border px-1.5 py-0.5 text-[9px] font-medium",
-                    dynamic
-                      ? "border-violet-500/45 bg-[rgba(168,96,240,0.16)] text-[#ddd6fe]"
-                      : "border-[rgba(60,40,80,0.45)] bg-[#0f0a1b] text-[#b8aecc]",
-                  )}
-                >
-                  {dynamic ? "DYNAMIC" : "STATIC"}
-                </span>
-              </td>
-              <td className={cx(TD, "whitespace-nowrap font-mono tabular-nums")}>
-                {child.config?.approach === "block_by_streak"
-                  ? "block"
-                  : child.config?.approach === "levels"
-                    ? "levels"
-                    : "full"}{" "}
-                ({fmtInt(child.config?.shufflesN)})
-              </td>
-              <td className={TD}>
-                <LevelsTags config={child.config} />
-              </td>
-              <td className={cx(TD, "font-mono tabular-nums text-amber-300")}>
-                {fmtPct(child.result?.maxddMean)}
-              </td>
-              <td className={TD}>
-                <BtValueTooltip text={BT_TOOLTIPS.resilience}>
-                  <span
-                    className={cx(
-                      "font-mono tabular-nums",
-                      resilienceTone(child.result?.resilience?.score),
-                    )}
-                  >
-                    {child.result?.resilience?.score ?? "—"}
-                  </span>
-                </BtValueTooltip>
-              </td>
-              <td className={TD}>
-                <BtStatusCell
-                  status={child.status}
-                  pct={
-                    child.progress?.totalN
-                      ? ((child.progress?.doneN ?? 0) / child.progress.totalN) * 100
-                      : 0
-                  }
-                  progressLabel={`Shuffling ${fmtInt(child.progress?.doneN)} / ${fmtInt(
-                    child.progress?.totalN,
-                  )}`}
-                  error={child.error}
-                />
-              </td>
-              <td className={cx(TD, "whitespace-nowrap tabular-nums text-[#b8aecc]")}>
-                {fmtDateTime(child.createdAt)}
-              </td>
-              <td className={TD_CENTER}>
-                <div className="flex justify-center">
+            <React.Fragment key={child.id}>
+              <tr className={ROW}>
+                <td className={TD}>
                   <button
                     type="button"
                     disabled={!childDone}
-                    onClick={() => onToggleShufflerForValidation?.(parent, child)}
-                    title={
-                      !childDone
-                        ? "Run in progress"
-                        : selected
-                          ? "Unmark for Validation analytics"
-                          : "Mark for Validation analytics"
-                    }
-                    aria-label={
-                      selected ? "Unmark for Validation analytics" : "Mark for Validation analytics"
-                    }
+                    onClick={() => toggleExpanded(child.id)}
                     className={cx(
-                      "rounded p-0.5 hover:bg-white/5",
+                      "rounded p-0.5 text-[#8c8c8c] hover:text-[#d9d9d9]",
                       !childDone && "cursor-not-allowed opacity-40",
                     )}
+                    title={childDone ? (isOpen ? "Collapse" : "Expand") : "Run in progress"}
+                    aria-label={childDone ? (isOpen ? "Collapse" : "Expand") : "Expand unavailable"}
+                    aria-expanded={isOpen}
                   >
-                    <Star
-                      className={cx(
-                        "h-3.5 w-3.5",
-                        selected ? "fill-amber-300 text-amber-300" : "text-[#6e6682]",
-                      )}
+                    <ChevronDown
+                      className={cx("h-3.5 w-3.5 transition-transform", isOpen && "rotate-180")}
                     />
                   </button>
-                </div>
-              </td>
-              <td className={TD}>
-                <div className="inline-flex items-center gap-1">
-                  <AppButton
-                    type="button"
-                    variant="outline"
-                    size="icon-xs"
-                    disabled={!childDone}
-                    title="Run Shuffler parameters"
-                    aria-label="Run Shuffler parameters"
-                    onClick={() => onOpenShufflerParams?.(child, parent)}
+                </td>
+                <td className={TD}>
+                  <div className="inline-flex items-center gap-1">
+                    <CopyIdButton id={child.id} />
+                    <AppButton
+                      type="button"
+                      variant="outline"
+                      size="icon-xs"
+                      disabled={!childDone}
+                      title={childDone ? "Shuffle info" : "Run in progress"}
+                      aria-label={childDone ? "Shuffle info" : "Run in progress"}
+                      onClick={() => onOpenShuffleInfo?.(child, parent)}
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                    </AppButton>
+                  </div>
+                </td>
+                <td className={TD}>
+                  <span
+                    className={cx(
+                      "rounded border px-1.5 py-0.5 text-[9px] font-medium",
+                      dynamic
+                        ? "border-violet-500/45 bg-[rgba(168,96,240,0.16)] text-[#ddd6fe]"
+                        : "border-[rgba(60,40,80,0.45)] bg-[#0f0a1b] text-[#b8aecc]",
+                    )}
                   >
-                    <Info className="h-3.5 w-3.5" />
-                  </AppButton>
-                  <AppButton
-                    type="button"
-                    variant="outline"
-                    size="icon-xs"
-                    title="Delete Shuffler run"
-                    aria-label="Delete Shuffler run"
-                    className="border-red-500/60 text-red-400 hover:bg-red-500/10"
-                    onClick={() => onDeleteChild?.(BT_CHILD_TYPE.SHUFFLER, child, parent)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </AppButton>
-                </div>
-              </td>
-            </tr>
+                    {dynamic ? "DYNAMIC" : "STATIC"}
+                  </span>
+                </td>
+                <td className={cx(TD, "whitespace-nowrap font-mono tabular-nums")}>
+                  {child.config?.approach === "block_by_streak"
+                    ? "block"
+                    : child.config?.approach === "levels"
+                      ? "levels"
+                      : "full"}{" "}
+                  ({fmtInt(child.config?.shufflesN)})
+                </td>
+                <td className={TD}>
+                  <LevelsTags config={child.config} />
+                </td>
+                <td className={cx(TD, "font-mono tabular-nums text-amber-300")}>
+                  {fmtPct(child.result?.maxddMean)}
+                </td>
+                <td className={TD}>
+                  <BtValueTooltip text={BT_TOOLTIPS.resilience}>
+                    <span
+                      className={cx(
+                        "font-mono tabular-nums",
+                        resilienceTone(child.result?.resilience?.score),
+                      )}
+                    >
+                      {child.result?.resilience?.score ?? "—"}
+                    </span>
+                  </BtValueTooltip>
+                </td>
+                <td className={TD}>
+                  <BtStatusCell
+                    status={child.status}
+                    pct={
+                      child.progress?.totalN
+                        ? ((child.progress?.doneN ?? 0) / child.progress.totalN) * 100
+                        : 0
+                    }
+                    progressLabel={`Shuffling ${fmtInt(child.progress?.doneN)} / ${fmtInt(
+                      child.progress?.totalN,
+                    )}`}
+                    error={child.error}
+                  />
+                </td>
+                <td className={cx(TD, "whitespace-nowrap tabular-nums text-[#b8aecc]")}>
+                  {fmtDateTime(child.createdAt)}
+                </td>
+                <td className={TD_CENTER}>
+                  <div className="flex justify-center">
+                    <button
+                      type="button"
+                      disabled={!childDone}
+                      onClick={() => onToggleShufflerForValidation?.(parent, child)}
+                      title={
+                        !childDone
+                          ? "Run in progress"
+                          : selected
+                            ? "Unmark for Validation analytics"
+                            : "Mark for Validation analytics"
+                      }
+                      aria-label={
+                        selected ? "Unmark for Validation analytics" : "Mark for Validation analytics"
+                      }
+                      className={cx(
+                        "rounded p-0.5 hover:bg-white/5",
+                        !childDone && "cursor-not-allowed opacity-40",
+                      )}
+                    >
+                      <Star
+                        className={cx(
+                          "h-3.5 w-3.5",
+                          selected ? "fill-amber-300 text-amber-300" : "text-[#6e6682]",
+                        )}
+                      />
+                    </button>
+                  </div>
+                </td>
+                <td className={TD}>
+                  <div className="inline-flex items-center gap-1">
+                    <AppButton
+                      type="button"
+                      variant="outline"
+                      size="icon-xs"
+                      disabled={!childDone}
+                      title="Run Shuffler parameters"
+                      aria-label="Run Shuffler parameters"
+                      onClick={() => onOpenShufflerParams?.(child, parent)}
+                    >
+                      <Info className="h-3.5 w-3.5" />
+                    </AppButton>
+                    <AppButton
+                      type="button"
+                      variant="outline"
+                      size="icon-xs"
+                      title="Delete Shuffler run"
+                      aria-label="Delete Shuffler run"
+                      className="border-red-500/60 text-red-400 hover:bg-red-500/10"
+                      onClick={() => onDeleteChild?.(BT_CHILD_TYPE.SHUFFLER, child, parent)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </AppButton>
+                  </div>
+                </td>
+              </tr>
+              {isOpen && childDone ? (
+                <tr className="border-b border-[rgba(60,40,80,0.22)] bg-[#0d0818]">
+                  <td colSpan={11} className="px-3 py-2 align-top">
+                    <SyntheticCoreResultsPanel run={child} />
+                  </td>
+                </tr>
+              ) : null}
+            </React.Fragment>
           );
         })}
       </tbody>

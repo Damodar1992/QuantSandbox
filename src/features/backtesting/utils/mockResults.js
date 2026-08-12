@@ -614,14 +614,19 @@ export function buildShufflerResult(run, parent) {
     const mean = originalValue == null ? null : round(originalValue * spread, metric.decimals);
     const median =
       mean == null ? null : round(mean * between(rnd, 0.96, 1.04), metric.decimals);
+    const min = mean == null ? null : round(mean * between(rnd, 0.55, 0.85), metric.decimals);
+    const max = mean == null ? null : round(mean * between(rnd, 1.15, 1.55), metric.decimals);
     return {
       metric: metric.key,
       original: originalValue,
       mean,
       median,
+      min,
+      max,
       percentile: round(between(rnd, dynamic ? 8 : 20, dynamic ? 92 : 80), 1),
       valid: true,
       reason: null,
+      star: metric.kind === "drawdown" ? "max" : "none",
     };
   });
 

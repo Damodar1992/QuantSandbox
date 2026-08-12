@@ -38,8 +38,8 @@ function barColors(tone) {
 }
 
 export function PercentileCell({ value }) {
-  if (value == null || value === "") {
-    return <span className={BT_MUTED}>—</span>;
+  if (value == null || value === "" || value === "N/A") {
+    return <span className={BT_MUTED}>{value === "N/A" ? "N/A" : "—"}</span>;
   }
   const pct = Math.max(0, Math.min(100, Number(value)));
   const tone = percentileTone(pct);
