@@ -295,14 +295,6 @@ export const BacktestingStagePanel = memo(function BacktestingStagePanel({
           onOpenRunParams={(run) => setModal({ kind: "runParams", backtestId: run.id })}
           onRunShuffler={(run) => setModal({ kind: "runShuffler", backtestId: run.id })}
           onRunSynthetic={(run) => setModal({ kind: "runSynthetic", backtestId: run.id })}
-          onCreateAnalytics={(run) => {
-            const starred = (run.shufflerRuns || []).find((r) => r.selectedForValidation);
-            setModal({
-              kind: "createAnalytics",
-              backtestId: run.id,
-              shufflerRunId: starred?.id ?? null,
-            });
-          }}
           onDeleteBacktest={confirmDeleteBacktest}
           onOpenChildResult={(type, child) =>
             setModal({ kind: "result", resultKind: type, run: child })

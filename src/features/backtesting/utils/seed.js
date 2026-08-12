@@ -7,6 +7,7 @@ import {
   BT_DEMO_EPOCH_ID,
   BT_ERROR_CODES,
   BT_RUN_STATUS,
+  BT_VOLATILITY_DEFAULT,
   resolveBtFees,
 } from "@/constants/backtesting";
 import { checkIntegrity } from "./integrity";
@@ -208,7 +209,7 @@ export function createBacktestingSeed() {
     id: "soc-7d10bc94a2",
     parent: bt1,
     method: "metric_generator",
-    volatility: "same_as_source",
+    volatility: BT_VOLATILITY_DEFAULT,
     nRuns: 1000,
     createdAt: "2026-07-28T11:20:00.000Z",
   });

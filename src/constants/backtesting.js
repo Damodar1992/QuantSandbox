@@ -313,13 +313,14 @@ export const BT_SYNTHETIC_METHODS = [
 ];
 
 export const BT_VOLATILITY_LEVELS = [
-  { value: "same_as_source", label: "Same as source" },
   { value: "0_calm", label: "0 — calm" },
   { value: "1_low", label: "1 — low" },
   { value: "2_medium", label: "2 — medium" },
   { value: "3_high", label: "3 — high" },
   { value: "4_extreme", label: "4 — extreme" },
 ];
+
+export const BT_VOLATILITY_DEFAULT = "2_medium";
 
 export const BT_SYNTHETIC_N_PRESETS = [10, 100, 500, 1000, 2000, 5000];
 export const BT_SYNTHETIC_N_DEFAULT = 1000;

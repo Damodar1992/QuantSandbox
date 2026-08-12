@@ -65,7 +65,6 @@ export const BacktestTree = memo(function BacktestTree({
   onOpenRunParams,
   onRunShuffler,
   onRunSynthetic,
-  onCreateAnalytics,
   onDeleteBacktest,
   onOpenChildResult,
   onDeleteChild,
@@ -217,13 +216,6 @@ export const BacktestTree = memo(function BacktestTree({
                             onSelect={() => onRunSynthetic?.(run)}
                           >
                             Run Synthetic
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            disabled={!isDone}
-                            title={isDone ? undefined : BT_COPY.childrenLocked}
-                            onSelect={() => onCreateAnalytics?.(run)}
-                          >
-                            Create validation analytics
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem

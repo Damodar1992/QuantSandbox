@@ -1880,8 +1880,8 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
       },
       {
         id: 5,
-        label: "Backtesting",
-        title: "STAGE 5: BACKTESTING",
+        label: "Validation",
+        title: "STAGE 5: VALIDATION",
         locked: !backtestingEnabled,
         icon: (
           <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">

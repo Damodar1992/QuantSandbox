@@ -6,6 +6,7 @@ import { AppSelect } from "@/components/common/AppSelect";
 import {
   BT_SYNTHETIC_N_DEFAULT,
   BT_SYNTHETIC_N_PRESETS,
+  BT_VOLATILITY_DEFAULT,
   BT_VOLATILITY_LEVELS,
 } from "@/constants/backtesting";
 import { BT_FORM_CONTROL } from "./formControl";
@@ -18,7 +19,7 @@ export const RunSyntheticModal = memo(function RunSyntheticModal({
   onClose,
   onSubmit,
 }) {
-  const [volatility, setVolatility] = useState("same_as_source");
+  const [volatility, setVolatility] = useState(BT_VOLATILITY_DEFAULT);
   const [nRuns, setNRuns] = useState(String(BT_SYNTHETIC_N_DEFAULT));
 
   const nOptions = useMemo(
@@ -30,11 +31,11 @@ export const RunSyntheticModal = memo(function RunSyntheticModal({
     if (!open) return;
     if (readOnly && snapshotRun?.config) {
       const cfg = snapshotRun.config;
-      setVolatility(cfg.volatility || "same_as_source");
+      setVolatility(cfg.volatility || BT_VOLATILITY_DEFAULT);
       setNRuns(String(cfg.nRuns ?? BT_SYNTHETIC_N_DEFAULT));
       return;
     }
-    setVolatility("same_as_source");
+    setVolatility(BT_VOLATILITY_DEFAULT);
     setNRuns(String(BT_SYNTHETIC_N_DEFAULT));
   }, [open, parentRun, readOnly, snapshotRun]);
 
