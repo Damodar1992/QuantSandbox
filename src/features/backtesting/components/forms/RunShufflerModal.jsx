@@ -66,6 +66,13 @@ export const RunShufflerModal = memo(function RunShufflerModal({
     [levels, shufflesN, original],
   );
 
+  const approachOptions = useMemo(() => {
+    if (readOnly && approach === "levels") {
+      return [...BT_SHUFFLE_APPROACHES, { value: "levels", label: "LEVELS" }];
+    }
+    return BT_SHUFFLE_APPROACHES;
+  }, [readOnly, approach]);
+
   const changeLevel = (level, patch) => {
     if (readOnly) return;
     setLevels((prev) => prev.map((row) => (row.level === level ? { ...row, ...patch } : row)));
@@ -133,7 +140,7 @@ export const RunShufflerModal = memo(function RunShufflerModal({
               label="Shuffle Approach"
               value={approach}
               onValueChange={setApproach}
-              options={BT_SHUFFLE_APPROACHES}
+              options={approachOptions}
               disabled={readOnly}
               triggerClassName={BT_FORM_CONTROL}
             />

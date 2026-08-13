@@ -11,7 +11,6 @@ import {
   BT_CHILD_TYPE,
   BT_COPY,
   BT_RUN_STATUS,
-  BT_TOOLTIPS,
   BT_VOLATILITY_LEVELS,
 } from "@/constants/backtesting";
 import {
@@ -19,11 +18,9 @@ import {
   fmtDateTime,
   fmtInt,
   fmtPct,
-  resilienceTone,
 } from "../utils/format";
 import { computePessimismGrid } from "../utils/pessimism";
 import { BtFailureBlock, BtStatusCell } from "./BtStatusCell";
-import { BtValueTooltip } from "./BtInfoTooltip";
 import { CoreMetricsCompareTable } from "./CoreMetricsCompareTable";
 import {
   CompareAnalyticsMatrix,
@@ -327,7 +324,6 @@ function ShufflerTable({
           <th className={TH}>Shuffle</th>
           <th className={TH}>Levels</th>
           <th className={TH}>Max DD mean</th>
-          <th className={TH}>Resilience</th>
           <th className={TH}>Status</th>
           <th className={TH}>Created</th>
           <th className={TH_CENTER}>Compare</th>
@@ -402,18 +398,6 @@ function ShufflerTable({
                 </td>
                 <td className={cx(TD, "font-mono tabular-nums text-amber-300")}>
                   {fmtPct(child.result?.maxddMean)}
-                </td>
-                <td className={TD}>
-                  <BtValueTooltip text={BT_TOOLTIPS.resilience}>
-                    <span
-                      className={cx(
-                        "font-mono tabular-nums",
-                        resilienceTone(child.result?.resilience?.score),
-                      )}
-                    >
-                      {child.result?.resilience?.score ?? "—"}
-                    </span>
-                  </BtValueTooltip>
                 </td>
                 <td className={TD}>
                   <BtStatusCell
@@ -491,7 +475,7 @@ function ShufflerTable({
               </tr>
               {isOpen && childDone ? (
                 <tr className="border-b border-[rgba(60,40,80,0.22)] bg-[#0d0818]">
-                  <td colSpan={11} className="px-3 py-2 align-top">
+                  <td colSpan={10} className="px-3 py-2 align-top">
                     <SyntheticCoreResultsPanel run={child} />
                   </td>
                 </tr>

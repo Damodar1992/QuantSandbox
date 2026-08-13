@@ -202,7 +202,6 @@ export const BT_SHUFFLES_DEFAULT = 500;
 export const BT_SHUFFLE_APPROACHES = [
   { value: "full", label: "FULL" },
   { value: "block_by_streak", label: "BLOCK BY WIN-LOSS STREAKS" },
-  { value: "levels", label: "LEVELS" },
 ];
 
 export const BT_PESSIMISM_LEVELS = ["L1", "L2", "L3", "L4", "L5"];
