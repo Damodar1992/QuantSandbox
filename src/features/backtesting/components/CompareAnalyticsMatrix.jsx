@@ -137,7 +137,7 @@ export const CompareAnalyticsMatrix = memo(function CompareAnalyticsMatrix({
                 Pct
               </BtHeaderWithHelp>
             </th>
-            <th className={cx(TH, "text-center", GROUP_SEP)}>Real</th>
+            <th className={cx(TH, "text-center", GROUP_SEP)}>Original</th>
             <th className={cx(TH, "text-center")}>Mean</th>
             <th className={cx(TH, "text-center")}>Median</th>
             <th className={cx(TH, "text-center")}>
