@@ -1,4 +1,5 @@
 import React, { memo, useEffect, useMemo, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { cx, ui } from "@/constants/ui";
 import { BT_TEMPORAL_TOOLTIPS } from "@/constants/backtesting";
 import {
@@ -11,10 +12,14 @@ import {
 import { buildTemporalSummary } from "../utils/temporalSummary";
 import { BtHeaderWithHelp } from "./BtInfoTooltip";
 
-const TH =
-  "px-3 py-2 text-left text-[10px] font-medium uppercase tracking-wide border-b border-[rgba(60,40,80,0.35)] text-[#8c8c8c]";
-const TD = "px-3 py-2 align-middle text-[11px] font-mono tabular-nums";
-const SECTION_ROW = "bg-[#161022]";
+const TH_GROUP =
+  "px-2.5 py-2 text-center text-[10px] font-semibold uppercase tracking-wide text-[#9b8ec4] border-b border-[rgba(60,40,80,0.35)] bg-[#161022]";
+const TH_METRIC =
+  "px-2.5 py-2 text-center text-[9px] font-medium uppercase tracking-wide text-[#8c8c8c] border-b border-[rgba(60,40,80,0.35)] bg-[#19102b] align-bottom leading-snug whitespace-normal min-w-[132px] max-w-[168px]";
+const TD =
+  "px-2.5 py-2 text-center align-middle text-[11px] font-mono tabular-nums whitespace-nowrap";
+const GROUP_SEP = "border-l border-[rgba(60,40,80,0.35)]";
+const PERIOD_ROW = "bg-[#19102b]";
 
 function toneClass(tone) {
   switch (tone) {
@@ -30,6 +35,67 @@ function toneClass(tone) {
   }
 }
 
+function PeriodMetrics({ sections }) {
+  if (!sections.length) return null;
+
+  return (
+    <tr className="bg-[#0d0818]">
+      <td className="p-0 align-top">
+        <div className="overflow-x-auto">
+          <table className="w-max min-w-full border-collapse">
+            <thead>
+              <tr>
+                {sections.map((section, index) => (
+                  <th
+                    key={section.key}
+                    colSpan={Math.max(1, section.rows.length)}
+                    className={cx(TH_GROUP, index > 0 && GROUP_SEP)}
+                    title={section.hint || undefined}
+                  >
+                    {section.title}
+                  </th>
+                ))}
+              </tr>
+              <tr>
+                {sections.flatMap((section, index) =>
+                  section.rows.map((row, rowIndex) => (
+                    <th
+                      key={`${section.key}-${row.key}`}
+                      className={cx(TH_METRIC, index > 0 && rowIndex === 0 && GROUP_SEP)}
+                    >
+                      <BtHeaderWithHelp label={row.label} tip={BT_TEMPORAL_TOOLTIPS[row.key]}>
+                        {row.label}
+                      </BtHeaderWithHelp>
+                    </th>
+                  )),
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                {sections.flatMap((section, index) =>
+                  section.rows.map((row, rowIndex) => (
+                    <td
+                      key={`${section.key}-${row.key}`}
+                      className={cx(
+                        TD,
+                        toneClass(row.tone),
+                        index > 0 && rowIndex === 0 && GROUP_SEP,
+                      )}
+                    >
+                      {row.total}
+                    </td>
+                  )),
+                )}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 export const TemporalSummaryTab = memo(function TemporalSummaryTab({ run }) {
   const temporal = useMemo(() => {
     if (run?.result?.temporal) return run.result.temporal;
@@ -37,13 +103,29 @@ export const TemporalSummaryTab = memo(function TemporalSummaryTab({ run }) {
     return buildTemporalSummary(run);
   }, [run]);
 
-  const [periodId, setPeriodId] = useState(temporal?.defaultPeriodId || "all");
+  const periodIds = useMemo(
+    () => temporal?.periods?.map((period) => period.id) ?? [],
+    [temporal],
+  );
+  const periodSignature = periodIds.join("|");
+
+  const [expanded, setExpanded] = useState(() => new Set(["all"]));
 
   useEffect(() => {
-    if (!temporal) return;
-    const exists = temporal.periods.some((p) => p.id === periodId);
-    if (!exists) setPeriodId(temporal.defaultPeriodId || temporal.periods[0]?.id || "all");
-  }, [temporal, periodId]);
+    setExpanded(new Set(["all"]));
+  }, [periodSignature]);
+
+  const togglePeriod = (id) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const expandAll = () => setExpanded(new Set(periodIds));
+  const collapseAll = () => setExpanded(new Set());
 
   if (!temporal?.periods?.length) {
     return (
@@ -53,14 +135,29 @@ export const TemporalSummaryTab = memo(function TemporalSummaryTab({ run }) {
     );
   }
 
-  const periodData = temporal.byPeriod?.[periodId] || temporal.byPeriod?.all;
-  const sections = periodData?.sections || [];
-
   return (
     <div className="space-y-4">
       <div>
-        <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[#d9d9d9]">
-          Temporal metrics summary
+        <div className="mb-1 flex items-start justify-between gap-3">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-[#d9d9d9]">
+            Temporal metrics summary
+          </div>
+          <div className="inline-flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={expandAll}
+              className="rounded px-1.5 py-0.5 text-[10px] text-violet-300 hover:bg-[#1a1a1a]"
+            >
+              Expand all
+            </button>
+            <button
+              type="button"
+              onClick={collapseAll}
+              className="rounded px-1.5 py-0.5 text-[10px] text-violet-300 hover:bg-[#1a1a1a]"
+            >
+              Collapse all
+            </button>
+          </div>
         </div>
         <div className={cx("mb-3 text-[10px] leading-snug", ui.textSubtle)}>
           The same run broken down by period. Values are given on two axes:{" "}
@@ -69,65 +166,39 @@ export const TemporalSummaryTab = memo(function TemporalSummaryTab({ run }) {
           including open positions.
         </div>
 
-        <div className="mb-3 flex flex-wrap gap-1.5">
-          {temporal.periods.map((period) => {
-            const active = period.id === periodId;
-            return (
-              <button
-                key={period.id}
-                type="button"
-                onClick={() => setPeriodId(period.id)}
-                className={cx(
-                  "rounded-md border px-2.5 py-1 text-[11px] transition-colors",
-                  active
-                    ? "border-violet-400/50 bg-violet-500/20 text-violet-100"
-                    : "border-[rgba(60,40,80,0.4)] bg-[#120b20] text-[#8c8c8c] hover:border-violet-400/30 hover:text-[#d9d9d9]",
-                )}
-              >
-                {period.label}
-              </button>
-            );
-          })}
-        </div>
-
         <div className="overflow-x-auto rounded-lg border border-[rgba(60,40,80,0.35)]">
           <table className="w-full border-collapse">
-            <thead className="bg-[#19102b]">
-              <tr>
-                <th className={cx(TH, "min-w-[240px]")}>Metric</th>
-                <th className={cx(TH, "min-w-[140px]")}>Total</th>
-              </tr>
-            </thead>
             <tbody>
-              {sections.map((section) => (
-                <React.Fragment key={section.key}>
-                  <tr className={SECTION_ROW}>
-                    <td colSpan={2} className="px-3 py-2">
-                      <div className="text-[10px] font-semibold uppercase tracking-wide text-[#9b8ec4]">
-                        {section.title}
-                      </div>
-                      {section.hint ? (
-                        <div className={cx("mt-0.5 text-[10px] leading-snug", ui.textSubtle)}>
-                          {section.hint}
-                        </div>
-                      ) : null}
-                    </td>
-                  </tr>
-                  {section.rows.map((row) => (
-                    <tr
-                      key={`${section.key}-${row.key}`}
-                      className="border-b border-[rgba(60,40,80,0.22)] last:border-b-0"
-                    >
-                      <td className={cx(TD, "font-sans font-medium text-[#faf7fd]")}>
-                        <BtHeaderWithHelp label={row.label} tip={BT_TEMPORAL_TOOLTIPS[row.key]}>
-                          {row.label}
-                        </BtHeaderWithHelp>
+              {temporal.periods.map((period) => {
+                const isOpen = expanded.has(period.id);
+                const sections = temporal.byPeriod?.[period.id]?.sections || [];
+                return (
+                  <React.Fragment key={period.id}>
+                    <tr className={PERIOD_ROW}>
+                      <td className="p-0">
+                        <button
+                          type="button"
+                          onClick={() => togglePeriod(period.id)}
+                          aria-expanded={isOpen}
+                          aria-label={isOpen ? `Collapse ${period.label}` : `Expand ${period.label}`}
+                          className="flex w-full items-center gap-2 px-3 py-2.5 text-left hover:bg-[#1f1633]"
+                        >
+                          <ChevronDown
+                            className={cx(
+                              "h-3.5 w-3.5 shrink-0 text-[#8c8c8c] transition-transform",
+                              isOpen && "rotate-180",
+                            )}
+                          />
+                          <span className="text-[11px] font-semibold uppercase tracking-wide text-violet-200">
+                            {period.label}
+                          </span>
+                        </button>
                       </td>
-                      <td className={cx(TD, toneClass(row.tone))}>{row.total}</td>
                     </tr>
-                  ))}
-                </React.Fragment>
-              ))}
+                    {isOpen ? <PeriodMetrics sections={sections} /> : null}
+                  </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>

@@ -1,7 +1,7 @@
 import React, { memo, useEffect, useState } from "react";
 import { cx } from "@/constants/ui";
 import { AppDialog } from "@/components/common/AppDialog";
-import { BT_INFO_DIALOG_CLASS } from "./btInfoDialogClass";
+import { BT_INFO_DIALOG_FULLSCREEN_CLASS } from "./btInfoDialogClass";
 import { ExportExcelMenu } from "./ExportExcelMenu";
 import { PerformanceSummaryTab } from "./PerformanceSummaryTab";
 import { TemporalSummaryTab } from "./TemporalSummaryTab";
@@ -13,8 +13,8 @@ const INFO_TABS = [
   { value: "performance", label: "Performance" },
   { value: "temporal", label: "Temporal" },
   { value: "fees", label: "Fees" },
-  { value: "settings", label: "Settings" },
   { value: "trades", label: "Trades" },
+  { value: "settings", label: "Settings" },
 ];
 
 function PillTab({ active, children, onClick }) {
@@ -55,7 +55,7 @@ export const BacktestingInfoModal = memo(function BacktestingInfoModal({
       title="Backtesting info"
       description={run?.epochLabel || run?.id || "Backtest run"}
       headerAction={<ExportExcelMenu disabled={!run} />}
-      className={BT_INFO_DIALOG_CLASS}
+      className={BT_INFO_DIALOG_FULLSCREEN_CLASS}
     >
       <div className="mb-4 flex shrink-0 flex-wrap justify-start gap-2 border-b border-[rgba(60,40,80,0.35)] pb-3">
         {INFO_TABS.map((item) => (

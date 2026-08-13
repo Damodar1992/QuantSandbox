@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { Eye } from "lucide-react";
 import { cx, ui } from "@/constants/ui";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -19,10 +19,7 @@ import {
 import { buildPerformanceSummary } from "../utils/mockResults";
 import { BtHeaderWithHelp } from "./BtInfoTooltip";
 
-const TH =
-  "px-3 py-2 text-left text-[10px] font-medium uppercase tracking-wide border-b border-[rgba(60,40,80,0.35)] text-[#8c8c8c]";
-const TD = "px-3 py-2 align-middle text-[11px] font-mono tabular-nums";
-const SECTION_ROW = "bg-[#161022]";
+const CARD_SHELL = cx(ui.radius, "border border-[rgba(60,40,80,0.35)] bg-[#120b20] p-3 space-y-2");
 
 function toneClass(tone, value) {
   switch (tone) {
@@ -184,6 +181,53 @@ function useEnabledKeys(rowKeys) {
   return [enabledKeys, setEnabledKeys];
 }
 
+function MetricCard({ title, hint, options, enabledKeys, onChange, children }) {
+  return (
+    <div className={CARD_SHELL}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-[#9b8ec4]">
+            {title}
+          </div>
+          {hint ? (
+            <div className={cx("mt-0.5 text-[10px] leading-snug", ui.textSubtle)}>{hint}</div>
+          ) : null}
+        </div>
+        <MetricsVisibilityControl rows={options} enabledKeys={enabledKeys} onChange={onChange} />
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function MetricRows({ rows, getValue, getValueClass }) {
+  return (
+    <ul className="space-y-1.5">
+      {rows.map((row, i) => (
+        <li
+          key={row.key || row.label || i}
+          className="flex items-baseline justify-between gap-3 text-[11px]"
+        >
+          <span className={cx(BT_MUTED, "inline-flex min-w-0 items-center gap-1")}>
+            <BtHeaderWithHelp
+              label={row.label}
+              tip={row.key ? BT_PERFORMANCE_TOOLTIPS[row.key] : null}
+            >
+              <span className="truncate">{row.label}</span>
+            </BtHeaderWithHelp>
+          </span>
+          <span className={cx("shrink-0 font-mono tabular-nums text-right", getValueClass(row))}>
+            {getValue(row)}
+          </span>
+        </li>
+      ))}
+      {!rows.length ? (
+        <li className={cx("py-1 text-center text-[11px]", ui.textSubtle)}>No metrics selected</li>
+      ) : null}
+    </ul>
+  );
+}
+
 function SectionBlock({ section }) {
   const options = useMemo(
     () => section.rows.map((r) => ({ key: r.key, label: r.label })),
@@ -194,54 +238,19 @@ function SectionBlock({ section }) {
   const visibleRows = section.rows.filter((r) => enabledKeys.has(r.key));
 
   return (
-    <React.Fragment>
-      <tr className={SECTION_ROW}>
-        <td colSpan={2} className="px-3 py-2">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-[#9b8ec4]">
-                {section.title}
-              </div>
-              {section.hint ? (
-                <div className={cx("mt-0.5 text-[10px] leading-snug", ui.textSubtle)}>
-                  {section.hint}
-                </div>
-              ) : null}
-            </div>
-            <div className="inline-flex shrink-0 items-center gap-2">
-              <span className={cx("text-[10px] uppercase tracking-wide", ui.textSubtle)}>
-                {enabledKeys.size} metrics
-              </span>
-              <MetricsVisibilityControl
-                rows={options}
-                enabledKeys={enabledKeys}
-                onChange={setEnabledKeys}
-              />
-            </div>
-          </div>
-        </td>
-      </tr>
-      {visibleRows.map((row) => (
-        <tr
-          key={`${section.key}-${row.key}`}
-          className="border-b border-[rgba(60,40,80,0.22)] last:border-b-0"
-        >
-          <td className={cx(TD, "font-sans font-medium text-[#faf7fd]")}>
-            <BtHeaderWithHelp label={row.label} tip={BT_PERFORMANCE_TOOLTIPS[row.key]}>
-              {row.label}
-            </BtHeaderWithHelp>
-          </td>
-          <td className={cx(TD, toneClass(row.tone, row.total))}>{formatCell(row, "total")}</td>
-        </tr>
-      ))}
-      {!visibleRows.length ? (
-        <tr>
-          <td colSpan={2} className={cx("px-3 py-3 text-center text-[11px]", ui.textSubtle)}>
-            No metrics selected
-          </td>
-        </tr>
-      ) : null}
-    </React.Fragment>
+    <MetricCard
+      title={section.title}
+      hint={section.hint}
+      options={options}
+      enabledKeys={enabledKeys}
+      onChange={setEnabledKeys}
+    >
+      <MetricRows
+        rows={visibleRows}
+        getValue={(row) => formatCell(row, "total")}
+        getValueClass={(row) => toneClass(row.tone, row.total)}
+      />
+    </MetricCard>
   );
 }
 
@@ -259,41 +268,18 @@ function CardBlock({ card }) {
   const visibleRows = card.rows.filter((r, i) => enabledKeys.has(r.key || `row-${i}`));
 
   return (
-    <div className={cx(ui.radius, "border border-[rgba(60,40,80,0.35)] bg-[#120b20] p-3 space-y-2")}>
-      <div className="flex items-start justify-between gap-2">
-        <div className="text-[10px] font-semibold uppercase tracking-wide text-[#9b8ec4]">
-          {card.title}
-        </div>
-        <MetricsVisibilityControl
-          rows={options}
-          enabledKeys={enabledKeys}
-          onChange={setEnabledKeys}
-        />
-      </div>
-      <ul className="space-y-1.5">
-        {visibleRows.map((row, i) => (
-          <li
-            key={`${card.key}-${row.key || row.label || i}`}
-            className="flex items-baseline justify-between gap-3 text-[11px]"
-          >
-            <span className={cx(BT_MUTED, "inline-flex min-w-0 items-center gap-1")}>
-              <BtHeaderWithHelp
-                label={row.label}
-                tip={row.key ? BT_PERFORMANCE_TOOLTIPS[row.key] : null}
-              >
-                <span className="truncate">{row.label}</span>
-              </BtHeaderWithHelp>
-            </span>
-            <span className={cx("shrink-0 font-mono tabular-nums text-right", cardValueClass(row))}>
-              {formatCardValue(row)}
-            </span>
-          </li>
-        ))}
-        {!visibleRows.length ? (
-          <li className={cx("py-1 text-center text-[11px]", ui.textSubtle)}>No metrics selected</li>
-        ) : null}
-      </ul>
-    </div>
+    <MetricCard
+      title={card.title}
+      options={options}
+      enabledKeys={enabledKeys}
+      onChange={setEnabledKeys}
+    >
+      <MetricRows
+        rows={visibleRows}
+        getValue={formatCardValue}
+        getValueClass={cardValueClass}
+      />
+    </MetricCard>
   );
 }
 
@@ -353,25 +339,13 @@ export const PerformanceSummaryTab = memo(function PerformanceSummaryTab({ run }
 
   return (
     <div className="space-y-4">
-      <div>
-        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#d9d9d9]">
-          Performance summary
-        </div>
-        <div className="overflow-x-auto rounded-lg border border-[rgba(60,40,80,0.35)]">
-          <table className="w-full border-collapse">
-            <thead className="bg-[#19102b]">
-              <tr>
-                <th className={cx(TH, "min-w-[220px]")}>Metric</th>
-                <th className={cx(TH, "min-w-[140px]")}>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {performance.sections.map((section) => (
-                <SectionBlock key={section.key} section={section} />
-              ))}
-            </tbody>
-          </table>
-        </div>
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-[#d9d9d9]">
+        Performance summary
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {performance.sections.map((section) => (
+          <SectionBlock key={section.key} section={section} />
+        ))}
       </div>
 
       {performance.cards?.length ? (
