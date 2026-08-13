@@ -1,10 +1,8 @@
 import React, { memo, useEffect, useState } from "react";
-import { Download } from "lucide-react";
 import { cx } from "@/constants/ui";
 import { AppDialog } from "@/components/common/AppDialog";
-import { AppButton } from "@/components/common/AppButton";
-import { downloadBacktestingInfoExcel } from "../utils/exportBacktestingInfoExcel";
 import { BT_INFO_DIALOG_CLASS } from "./btInfoDialogClass";
+import { ExportExcelMenu } from "./ExportExcelMenu";
 import { PerformanceSummaryTab } from "./PerformanceSummaryTab";
 import { TemporalSummaryTab } from "./TemporalSummaryTab";
 import { FeesSummaryTab } from "./FeesSummaryTab";
@@ -56,18 +54,7 @@ export const BacktestingInfoModal = memo(function BacktestingInfoModal({
       }}
       title="Backtesting info"
       description={run?.epochLabel || run?.id || "Backtest run"}
-      headerAction={
-        <AppButton
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={!run}
-          onClick={() => downloadBacktestingInfoExcel(run)}
-        >
-          <Download className="mr-1.5 h-3.5 w-3.5" />
-          Export Excel
-        </AppButton>
-      }
+      headerAction={<ExportExcelMenu disabled={!run} />}
       className={BT_INFO_DIALOG_CLASS}
     >
       <div className="mb-4 flex shrink-0 flex-wrap justify-start gap-2 border-b border-[rgba(60,40,80,0.35)] pb-3">

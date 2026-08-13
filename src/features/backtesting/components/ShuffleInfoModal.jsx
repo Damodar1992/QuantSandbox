@@ -1,10 +1,9 @@
 import React, { memo, useEffect, useState } from "react";
-import { Download } from "lucide-react";
 import { cx } from "@/constants/ui";
 import { AppDialog } from "@/components/common/AppDialog";
 import { AppButton } from "@/components/common/AppButton";
-import { downloadShuffleInfoExcel } from "../utils/exportShuffleInfoExcel";
 import { BT_INFO_DIALOG_CLASS } from "./btInfoDialogClass";
+import { ExportExcelMenu } from "./ExportExcelMenu";
 import { ShuffleChartsPanel } from "./ShuffleChartsPanel";
 import { ShuffleSectionSummaryPanel } from "./ShuffleSectionSummaryPanel";
 
@@ -23,18 +22,7 @@ export const ShuffleInfoModal = memo(function ShuffleInfoModal({ open, run, onCl
         if (!next) onClose?.();
       }}
       title="Shuffle info"
-      headerAction={
-        <AppButton
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={!run}
-          onClick={() => downloadShuffleInfoExcel(run)}
-        >
-          <Download className="mr-1.5 h-3.5 w-3.5" />
-          Export Excel
-        </AppButton>
-      }
+      headerAction={<ExportExcelMenu disabled={!run} />}
       className={BT_INFO_DIALOG_CLASS}
     >
       <div className="mb-4 flex shrink-0 flex-wrap justify-start gap-2 border-b border-[rgba(60,40,80,0.35)] pb-3">
