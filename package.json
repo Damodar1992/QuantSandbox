@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "ui:add": "node scripts/shadcn-add.mjs",
     "ui:add:overwrite": "node scripts/shadcn-add.mjs --overwrite",
-    "graphify:view": "node scripts/serve-graphify.mjs"
+    "graphify:view": "node scripts/serve-graphify.mjs",
+    "graphify:update": "py -m graphify update ."
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.2.9",

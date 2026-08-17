@@ -22,12 +22,19 @@ import {
 } from "../utils/format";
 import { buildSyntheticPerformanceSummary } from "../utils/syntheticPerformanceSummary";
 import { BtValueTooltip } from "./BtInfoTooltip";
-import { PercentileCell } from "./SyntheticCoreResultsPanel";
+import {
+  compactRailLabel,
+  DISTRIBUTION_HEADER_CLASS,
+  DISTRIBUTION_META_CLASS,
+  DISTRIBUTION_TITLE_CLASS,
+  DistributionMetricRow,
+  distributionHeaderMeta,
+  formatRailValue,
+} from "./DistributionMetricRow";
 
 const CARD = cx(ui.radius, "border border-[rgba(60,40,80,0.35)] bg-[#120b20] overflow-hidden");
 const LABEL_DOTTED =
   "underline decoration-dotted underline-offset-2 decoration-[#6e6682]";
-const STATS_BOX = "rounded-md border border-[rgba(60,40,80,0.28)] bg-[#161022] px-2 py-1.5";
 
 /** Reference card layout — row keys from buildSyntheticPerformanceSummary. */
 const PERFORMANCE_LAYOUT = [
@@ -226,6 +233,22 @@ function formatField(row, field) {
   return String(value);
 }
 
+function railFormat(tone) {
+  if (tone === "signed" || tone === "drawdown-pct") return "pct";
+  if (tone === "money" || tone === "drawdown-money" || tone === "money-unsigned") return "money";
+  if (tone === "int" || tone === "int-neg" || tone === "int-pos") return "int";
+  return "num";
+}
+
+function signedRail(tone) {
+  return tone !== "drawdown-pct" && tone !== "drawdown-money" && tone !== "money-unsigned";
+}
+
+function formatPerformanceRail(row, value) {
+  if (typeof value === "string") return compactRailLabel(value);
+  return formatRailValue(value, railFormat(row.tone), { signed: signedRail(row.tone) });
+}
+
 function MetricsVisibilityControl({ rows, enabledKeys, onChange }) {
   const total = rows.length;
   const visible = enabledKeys.size;
@@ -286,76 +309,25 @@ function MetricsVisibilityControl({ rows, enabledKeys, onChange }) {
   );
 }
 
-function MetricBlock({ row, nRuns, paired = false }) {
+function MetricBlock({ row }) {
   const originalDisplay =
     typeof row.original === "string" ? row.original : formatField(row, "original");
-  const valueTone = toneClass(row.tone, row.original);
 
   return (
-    <div
-      className={cx(
-        "px-3 py-2.5",
-        paired ? "min-w-0" : "border-b border-[rgba(60,40,80,0.18)] last:border-b-0",
-      )}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 text-[11px] font-medium text-[#faf7fd]">
-          <MetricLabel label={row.label} tipKey={row.key} />
-        </div>
-        <div className="shrink-0 text-right">
-          <div
-            className={cx(
-              "inline-flex flex-wrap items-baseline justify-end gap-x-1.5 font-mono text-[13px] font-semibold tabular-nums leading-tight",
-              valueTone,
-            )}
-          >
-            <span>{originalDisplay}</span>
-            {row.sub ? (
-              <>
-                <span className="font-normal opacity-70">·</span>
-                <span>{row.sub}</span>
-              </>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
-      {!row.textOnly && row.percentile != null ? (
-        <div className="mt-2 flex items-center justify-between gap-3">
-          <span className={cx("text-[9px] font-medium uppercase tracking-wide", ui.textSubtle)}>
-            Original vs {fmtInt(nRuns)} runs
-          </span>
-          <div className="min-w-[120px] shrink-0">
-            <PercentileCell value={row.percentile} />
-          </div>
-        </div>
-      ) : null}
-
-      {!row.textOnly ? (
-        <div
-          className={cx(
-            STATS_BOX,
-            "mt-2 flex divide-x divide-[rgba(60,40,80,0.45)] text-center",
-          )}
-        >
-          {[
-            { label: "Min", field: "min" },
-            { label: "Median", field: "median" },
-            { label: "Mean", field: "mean" },
-            { label: "Max", field: "max" },
-          ].map(({ label, field }) => (
-            <div key={field} className="min-w-0 flex-1 px-2 first:pl-0 last:pr-0">
-              <div className={cx("text-[9px] font-medium uppercase tracking-wide", ui.textSubtle)}>
-                {label}
-              </div>
-              <div className="mt-0.5 font-mono text-[11px] tabular-nums text-[#d9d9d9]">
-                {formatField(row, field)}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : null}
-    </div>
+    <DistributionMetricRow
+      label={<MetricLabel label={row.label} tipKey={row.key} />}
+      value={originalDisplay}
+      valueClassName={toneClass(row.tone, row.original)}
+      percentile={row.percentile}
+      original={row.original}
+      min={row.min}
+      median={row.median}
+      mean={row.mean}
+      max={row.max}
+      formatRail={(value) => formatPerformanceRail(row, value)}
+      hideRail={Boolean(row.textOnly) || row.min == null}
+      sub={row.sub}
+    />
   );
 }
 
@@ -407,7 +379,7 @@ function PerformanceCard({ card, rowsByKey, nRuns }) {
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className={CARD}>
-      <CollapsibleTrigger type="button" className="flex w-full items-center justify-between gap-2 border-b border-[rgba(60,40,80,0.3)] bg-[#161022] px-3 py-2 text-left hover:bg-white/[0.03]">
+      <CollapsibleTrigger type="button" className={DISTRIBUTION_HEADER_CLASS}>
         <span className="inline-flex min-w-0 items-center gap-2">
           <ChevronDown
             className={cx(
@@ -415,13 +387,13 @@ function PerformanceCard({ card, rowsByKey, nRuns }) {
               open && "rotate-180",
             )}
           />
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-200">
+          <span className={DISTRIBUTION_TITLE_CLASS}>
             {card.title}
           </span>
         </span>
         <div className="inline-flex shrink-0 items-center gap-2" onClick={(e) => e.stopPropagation()}>
-          <span className={cx("text-[9px] uppercase tracking-wide", ui.textSubtle)}>
-            {enabledKeys.size}/{rows.length}
+          <span className={DISTRIBUTION_META_CLASS}>
+            {distributionHeaderMeta(nRuns, enabledKeys.size, rows.length)}
           </span>
           <MetricsVisibilityControl rows={rows} enabledKeys={enabledKeys} onChange={setEnabledKeys} />
         </div>
@@ -437,17 +409,12 @@ function PerformanceCard({ card, rowsByKey, nRuns }) {
               )}
             >
               {rowGroup.map((row) => (
-                <MetricBlock
-                  key={row.key}
-                  row={row}
-                  nRuns={nRuns}
-                  paired={rowGroup.length > 1}
-                />
+                <MetricBlock key={row.key} row={row} />
               ))}
             </div>
           ))
         ) : visibleRows.length ? (
-          visibleRows.map((row) => <MetricBlock key={row.key} row={row} nRuns={nRuns} />)
+          visibleRows.map((row) => <MetricBlock key={row.key} row={row} />)
         ) : (
           <div className={cx("px-3 py-4 text-center text-[11px]", ui.textSubtle)}>No metrics selected</div>
         )}

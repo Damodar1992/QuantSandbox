@@ -3,12 +3,14 @@ import { ChevronDown, Eye } from "lucide-react";
 import { cx, ui } from "@/constants/ui";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { BT_MUTED, fmtInt, fmtMoney, fmtNum, fmtPct } from "../utils/format";
+import { BT_MUTED, BT_NEUTRAL, BT_POSITIVE, BT_DRAWDOWN, BT_NEGATIVE, fmtInt, fmtMoney, fmtNum, fmtPct, signedTone } from "../utils/format";
+import { DistributionMetricRow, formatRailValue } from "./DistributionMetricRow";
 import { PercentileCell } from "./SyntheticCoreResultsPanel";
 
 const CARD = cx(ui.radius, "border border-[rgba(60,40,80,0.35)] bg-[#120b20] overflow-hidden");
 const STATS_BOX = "rounded-md border border-[rgba(60,40,80,0.28)] bg-[#161022] px-2 py-1.5";
-const PAIRED_SECTION_KEYS = new Set(["general", "recoveryPeriods"]);
+const PAIRED_SECTION_KEYS = new Set(["recoveryPeriods"]);
+const DISTRIBUTION_VARIANT = "distribution";
 
 function formatValue(value, format) {
   if (value == null || value === "") return "—";
@@ -23,6 +25,59 @@ function formatValue(value, format) {
 function formatStatValue(value, format) {
   if (value == null || value === "") return "N/A";
   return formatValue(value, format);
+}
+
+function formatDisplayValue(row) {
+  if (row.original == null || row.original === "") return "N/A";
+  if (row.format === "pct") {
+    const signed = row.pctTone !== "bad" && row.key !== "winrate";
+    return fmtPct(row.original, 2, signed);
+  }
+  if (row.format === "money") return fmtMoney(row.original, 2, false);
+  if (row.format === "int") return fmtInt(row.original);
+  return formatValue(row.original, row.format);
+}
+
+function valueTone(row) {
+  if (row.original == null || row.original === "") return BT_MUTED;
+  if (row.pctTone === "bad") return BT_DRAWDOWN;
+  const num = Number(row.original);
+  if (!Number.isFinite(num)) return BT_MUTED;
+  if (row.key === "pf") return num >= 1 ? BT_POSITIVE : BT_NEGATIVE;
+  if (row.key === "winrate") return num >= 50 ? BT_POSITIVE : BT_NEGATIVE;
+  if (row.format === "pct" || row.format === "money") return signedTone(num);
+  return BT_NEUTRAL;
+}
+
+const DISTRIBUTION_ROW_PAIRS = [
+  ["finalPnl", "roi"],
+  ["pf", "winrate"],
+  ["ddPeak", "maxDdInit"],
+  ["mcl", "mcw"],
+  ["acl", "acw"],
+  ["maxRecInit", "recPeak"],
+];
+
+function pairDistributionRows(rows, sectionKey) {
+  const byKey = new Map(rows.map((row) => [row.key, row]));
+  const used = new Set();
+  const groups = [];
+
+  for (const keys of DISTRIBUTION_ROW_PAIRS) {
+    const group = keys.map((key) => byKey.get(key)).filter(Boolean);
+    if (!group.length) continue;
+    group.forEach((row) => used.add(row.key));
+    groups.push(group);
+  }
+
+  const leftover = rows.filter((row) => !used.has(row.key));
+  if (!leftover.length) return groups;
+  if (sectionKey === "macro" || sectionKey === "micro") {
+    leftover.forEach((row) => groups.push([row]));
+    return groups;
+  }
+  groups.push(...chunkPairs(leftover));
+  return groups;
 }
 
 function chunkPairs(rows) {
@@ -108,6 +163,25 @@ function MetricsVisibilityControl({ rows, enabledKeys, onChange }) {
   );
 }
 
+function ShuffleDistributionRow({ row }) {
+  const tone = valueTone(row);
+  const signedRail = row.pctTone !== "bad";
+  return (
+    <DistributionMetricRow
+      label={row.label}
+      value={formatDisplayValue(row)}
+      valueClassName={tone}
+      percentile={row.originalPct}
+      original={row.original}
+      min={row.min}
+      median={row.median}
+      mean={row.mean}
+      max={row.max}
+      formatRail={(value) => formatRailValue(value, row.format, { signed: signedRail })}
+    />
+  );
+}
+
 function SummaryMetricBlock({ row, nRuns, paired = false }) {
   const hasOriginal = row.original != null && row.original !== "";
 
@@ -177,7 +251,8 @@ export function SummarySectionCard({ section, open, onToggle, nRuns, className }
     [section.rows, enabledKeys],
   );
 
-  const isPaired = PAIRED_SECTION_KEYS.has(section.key);
+  const isDistribution = section.variant === DISTRIBUTION_VARIANT;
+  const isPaired = !isDistribution && PAIRED_SECTION_KEYS.has(section.key);
   const rowGroups = useMemo(
     () => (isPaired ? chunkPairs(visibleRows) : visibleRows.map((row) => [row])),
     [visibleRows, isPaired],
@@ -185,7 +260,12 @@ export function SummarySectionCard({ section, open, onToggle, nRuns, className }
 
   return (
     <div className={cx(CARD, className)}>
-      <div className="flex w-full items-center justify-between gap-2 border-b border-[rgba(60,40,80,0.3)] bg-[#161022] px-3 py-2">
+      <div className={cx(
+        "flex w-full items-center justify-between gap-2 px-4 py-3",
+        isDistribution
+          ? "border-b border-[rgba(60,40,80,0.22)]"
+          : "border-b border-[rgba(60,40,80,0.3)] bg-[#161022]",
+      )}>
         <button
           type="button"
           onClick={onToggle}
@@ -197,14 +277,27 @@ export function SummarySectionCard({ section, open, onToggle, nRuns, className }
               open && "rotate-180",
             )}
           />
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-200">
+          <span className={cx(
+            "font-semibold uppercase",
+            isDistribution
+              ? "text-[11px] tracking-[0.14em] text-[#9bb0e8]"
+              : "text-[10px] tracking-wide text-violet-200",
+          )}>
             {section.title}
           </span>
         </button>
 
         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-          <span className={cx("text-[9px] uppercase tracking-wide", ui.textSubtle)}>
-            {enabledKeys.size}/{section.rows.length}
+          <span
+            className={cx(
+              isDistribution
+                ? "text-[11px] normal-case tracking-normal text-[#7a7488]"
+                : cx("text-[9px] uppercase tracking-wide", ui.textSubtle),
+            )}
+          >
+            {isDistribution
+              ? `original vs ${fmtInt(nRuns)} runs · ${enabledKeys.size}/${section.rows.length}`
+              : `${enabledKeys.size}/${section.rows.length}`}
           </span>
           <MetricsVisibilityControl
             rows={section.rows}
@@ -215,7 +308,26 @@ export function SummarySectionCard({ section, open, onToggle, nRuns, className }
       </div>
 
       {open ? (
-        rowGroups.length ? (
+        isDistribution ? (
+          visibleRows.length ? (
+            pairDistributionRows(visibleRows, section.key).map((rowGroup) => (
+              <div
+                key={rowGroup.map((row) => row.key).join("-")}
+                className={cx(
+                  "border-b border-[rgba(60,40,80,0.16)] last:border-b-0",
+                  rowGroup.length > 1 &&
+                    "grid grid-cols-1 divide-y divide-[rgba(60,40,80,0.16)] xl:grid-cols-2 xl:divide-x xl:divide-y-0",
+                )}
+              >
+                {rowGroup.map((row) => (
+                  <ShuffleDistributionRow key={row.key} row={row} />
+                ))}
+              </div>
+            ))
+          ) : (
+            <div className={cx("px-3 py-4 text-center text-[11px]", ui.textSubtle)}>No metrics selected</div>
+          )
+        ) : rowGroups.length ? (
           rowGroups.map((rowGroup) => (
             <div
               key={rowGroup.map((row) => row.key).join("-")}

@@ -301,11 +301,11 @@ export function buildShuffleTotalSummary(run, opts = {}) {
   return {
     simulations,
     stopped,
-    generalSections: [{ key: "general", title: "GENERAL", rows: general }],
+    generalSections: [{ key: "general", title: "GENERAL", variant: "distribution", rows: general }],
     recoverySections: [
-      { key: "recoveryPeriods", title: "RECOVERY PERIODS", rows: recoveryPeriods },
-      { key: "macro", title: "MACRO RECOVERY", rows: macro },
-      { key: "micro", title: "MICRO RECOVERY", rows: micro },
+      { key: "recoveryPeriods", title: "RECOVERY PERIODS", variant: "distribution", rows: recoveryPeriods },
+      { key: "macro", title: "MACRO RECOVERY", variant: "distribution", rows: macro },
+      { key: "micro", title: "MICRO RECOVERY", variant: "distribution", rows: micro },
     ],
     sections: [
       { key: "general", title: "GENERAL", rows: general },

@@ -21,9 +21,11 @@
 
 ## Graphify (граф зависимостей)
 
+Официальный CLI: пакет PyPI [`graphifyy`](https://pypi.org/project/graphifyy/) (команда `graphify`), репозиторий [Graphify-Labs/graphify](https://github.com/Graphify-Labs/graphify). Это **не** npm-пакет `graphify` — `npx graphify` ставит другой проект.
+
 `graphify-out/` генерируется **локально** и не коммитится (добавлено в `.gitignore`).  
 Для просмотра: `npm run graphify:view`.  
-Для обновления после изменений кода: `npx graphify update .`
+Для обновления после изменений кода: `graphify update .` (если команда не в PATH: `py -m graphify update .`).
 
 ## Язык / TypeScript
 

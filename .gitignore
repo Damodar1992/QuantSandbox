@@ -27,5 +27,5 @@ dist-ssr
 .cursor/*.log
 
 # Graphify — generated locally by `graphify update .` / `npm run graphify:view`
-# Do not commit; regenerate with `npx graphify update .` in the project root.
+# Do not commit; regenerate with `graphify update .` (or `py -m graphify update .`).
 graphify-out/

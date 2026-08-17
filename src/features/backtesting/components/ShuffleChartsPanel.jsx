@@ -147,9 +147,9 @@ function BalanceChart({ model, filter }) {
 
   return (
     <div className="w-full">
-      <div className="h-[248px] w-full">
+      <div className="h-[248px] w-full min-w-0">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 12, right: 72, left: 56, bottom: 4 }}>
+          <LineChart data={data} margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid stroke="rgba(60,40,80,0.35)" strokeDasharray="3 3" vertical={false} />
             <XAxis
               dataKey="x"
@@ -199,27 +199,12 @@ function BalanceChart({ model, filter }) {
               isAnimationActive={false}
             />
             <ReferenceDot
-              x={0}
-              y={startY}
-              r={3}
-              fill="#93c5fd"
-              stroke="#bfdbfe"
-              strokeWidth={1}
-              label={{
-                value: `Start ${fmtMoney(startY)}`,
-                position: "left",
-                fill: "#93c5fd",
-                fontSize: 10,
-                offset: 8,
-              }}
-            />
-            <ReferenceDot
               x={finalX}
               y={finalY}
               r={0}
               label={{
                 value: `Final ${fmtMoney(finalY)}`,
-                position: "right",
+                position: "top",
                 fill: "#93c5fd",
                 fontSize: 10,
                 offset: 8,
@@ -270,7 +255,7 @@ function DrawdownChart({ model, filter }) {
     <div className="w-full">
       <div className="h-[228px] w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 16, right: 56, left: 4, bottom: 4 }}>
+          <LineChart data={data} margin={{ top: 16, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid stroke="rgba(60,40,80,0.35)" strokeDasharray="3 3" vertical={false} />
             <XAxis
               dataKey="x"
@@ -370,7 +355,7 @@ function DensityChart({ model, polarity }) {
     <div className="w-full">
       <div className="h-[228px] w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: 20, right: 16, left: 4, bottom: 4 }}>
+          <ComposedChart data={data} margin={{ top: 20, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid stroke="rgba(60,40,80,0.35)" strokeDasharray="3 3" vertical={false} />
             <XAxis
               type="number"
@@ -434,20 +419,6 @@ function DensityChart({ model, polarity }) {
             />
           </ComposedChart>
         </ResponsiveContainer>
-      </div>
-      <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 px-1">
-        {keys.map((key) => (
-          <LegendItem
-            key={key}
-            color={SHUFFLE_CHART_COLORS[key] || SHUFFLE_CHART_COLORS.random}
-            label={`${key === "random" ? "Shuffle" : key} · μ ${fmtPct(model.means[key])}`}
-          />
-        ))}
-        <LegendItem
-          color="#f87171"
-          label={`Original · ${fmtPct(model.original.maxDd)}`}
-          dashed
-        />
       </div>
     </div>
   );
