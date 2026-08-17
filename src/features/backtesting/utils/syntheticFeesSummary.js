@@ -45,26 +45,27 @@ function distAround(rnd, original) {
   };
 }
 
-function metricRow(key, label, tipKey, original, rnd) {
+function metricRow(key, label, tipKey, original, rnd, { statsUnavailable = false } = {}) {
   const na = original == null;
-  const stats = na ? null : distAround(rnd, original);
+  const stats = na || statsUnavailable ? null : distAround(rnd, original);
   return {
     key,
     label,
     tipKey,
     original: na ? null : original,
-    percentile: na ? null : stats.percentile,
-    min: na ? null : stats.min,
-    median: na ? null : stats.median,
-    mean: na ? null : stats.mean,
-    max: na ? null : stats.max,
+    percentile: stats?.percentile ?? null,
+    min: stats?.min ?? null,
+    median: stats?.median ?? null,
+    mean: stats?.mean ?? null,
+    max: stats?.max ?? null,
     na,
+    statsUnavailable: statsUnavailable || na,
   };
 }
 
 /**
  * Synthetic fees summary — 6 metric rows matching the reference layout.
- * Maker fees are typically N/A (market orders), matching the demo screenshot.
+ * Maker fees without maker orders show 0 USDT; distribution stats stay N/A in that case.
  */
 export function buildSyntheticFeesSummary(run, parent) {
   if (run?.result?.syntheticFees?.rows?.length) {
@@ -83,20 +84,25 @@ export function buildSyntheticFeesSummary(run, parent) {
   const total = base.total || base.rows?.[0] || {};
   const rnd = mulberry32(strHash(`sy-fees|${run?.id || "demo"}`));
 
-  // Force maker N/A for synthetic demo (aligned with reference); keep taker + totals.
   const openTaker = total.openTaker ?? null;
   const closeTaker = total.closeTaker ?? null;
-  const openMaker = null;
-  const closeMaker = null;
-  const totalOpen = openTaker;
-  const totalClose = closeTaker;
+  const openMakerRaw = total.openMaker ?? null;
+  const closeMakerRaw = total.closeMaker ?? null;
+  const openMaker = openMakerRaw ?? 0;
+  const closeMaker = closeMakerRaw ?? 0;
+  const totalOpen = openTaker == null ? null : round(openTaker + openMaker, 2);
+  const totalClose = closeTaker == null ? null : round(closeTaker + closeMaker, 2);
 
   const rows = [
     metricRow("openTaker", "Open taker fee", "openTaker", openTaker, rnd),
-    metricRow("openMaker", "Open maker fee", "openMaker", openMaker, rnd),
+    metricRow("openMaker", "Open maker fee", "openMaker", openMaker, rnd, {
+      statsUnavailable: openMakerRaw == null,
+    }),
     metricRow("totalOpen", "Total open fee", null, totalOpen, rnd),
     metricRow("closeTaker", "Close taker fee", "closeTaker", closeTaker, rnd),
-    metricRow("closeMaker", "Close maker fee", "closeMaker", closeMaker, rnd),
+    metricRow("closeMaker", "Close maker fee", "closeMaker", closeMaker, rnd, {
+      statsUnavailable: closeMakerRaw == null,
+    }),
     metricRow("totalClose", "Total close fee", null, totalClose, rnd),
   ];
 

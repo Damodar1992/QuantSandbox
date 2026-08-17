@@ -5,16 +5,12 @@ import { BT_INFO_DIALOG_FULLSCREEN_CLASS } from "./btInfoDialogClass";
 import { ExportExcelMenu } from "./ExportExcelMenu";
 import { PerformanceSummaryTab } from "./PerformanceSummaryTab";
 import { TemporalSummaryTab } from "./TemporalSummaryTab";
-import { FeesSummaryTab } from "./FeesSummaryTab";
-import { SettingsSummaryTab } from "./SettingsSummaryTab";
 import { TradesSummaryTab } from "./TradesSummaryTab";
 
 const INFO_TABS = [
   { value: "performance", label: "Performance" },
   { value: "temporal", label: "Temporal" },
-  { value: "fees", label: "Fees" },
   { value: "trades", label: "Trades" },
-  { value: "settings", label: "Settings" },
 ];
 
 function PillTab({ active, children, onClick }) {
@@ -34,7 +30,7 @@ function PillTab({ active, children, onClick }) {
   );
 }
 
-/** Backtesting info: Performance / Temporal / Fees / Settings / Trades. */
+/** Backtesting info: Performance / Temporal / Trades. */
 export const BacktestingInfoModal = memo(function BacktestingInfoModal({
   open,
   run,
@@ -68,8 +64,6 @@ export const BacktestingInfoModal = memo(function BacktestingInfoModal({
       <div className="min-h-0 flex-1 overflow-y-auto pr-1">
         {run && tab === "performance" ? <PerformanceSummaryTab run={run} /> : null}
         {run && tab === "temporal" ? <TemporalSummaryTab run={run} /> : null}
-        {run && tab === "fees" ? <FeesSummaryTab run={run} /> : null}
-        {run && tab === "settings" ? <SettingsSummaryTab run={run} /> : null}
         {run && tab === "trades" ? <TradesSummaryTab run={run} /> : null}
       </div>
     </AppDialog>

@@ -31,8 +31,37 @@ describe("buildSyntheticPerformanceSummary", () => {
       (r) => r.percentile == null || r.min == null || r.mean == null || r.max == null,
     );
 
-    // Only drawdown window timestamps stay text-only.
-    expect(empty.map((r) => r.key).sort()).toEqual(["ddEnd", "ddStart"]);
-    expect(rows.length).toBeGreaterThan(40);
+    const expectancy = rows.find((r) => r.key === "expectancy");
+    expect(expectancy?.textOnly).toBe(false);
+    expect(expectancy?.percentile).toEqual(expect.any(Number));
+    expect(String(expectancy?.original)).toMatch(/^-?\d+\.\d{2} \(-?\d+\.\d{2}\)$/);
+    expect(String(expectancy?.min)).toMatch(/^-?\d+\.\d{2} \(-?\d+\.\d{2}\)$/);
+
+    for (const key of [
+      "maxLossN",
+      "avgLossN",
+      "maxWinN",
+      "avgWinN",
+      "ddHighLow",
+      "ddStart",
+      "ddEnd",
+      "avgDurWinners",
+      "avgDurLosers",
+      "longShortCounts",
+    ]) {
+      const row = rows.find((r) => r.key === key);
+      expect(row?.textOnly, key).toBe(false);
+      expect(row?.percentile, key).toEqual(expect.any(Number));
+      expect(row?.min, key).toBeTruthy();
+      expect(row?.max, key).toBeTruthy();
+    }
+
+    const netPlShort = rows.find((r) => r.key === "netPlShort");
+    expect(netPlShort?.textOnly).toBe(false);
+    expect(String(netPlShort?.original)).toMatch(/^[+-]?\d+\.\d{2}% \/ [+-]/);
+
+    // Short-off placeholders stay text-only when the parent is spot.
+    expect(empty.every((r) => typeof r.original === "string" || r.original == null)).toBe(true);
+    expect(rows.length).toBeGreaterThan(30);
   });
 });

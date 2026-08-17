@@ -16,7 +16,7 @@ import {
   fmtInt,
   percentileTone,
 } from "../utils/format";
-import { BtHeaderWithHelp, BtValueTooltip } from "./BtInfoTooltip";
+import { BtValueTooltip } from "./BtInfoTooltip";
 
 const TH =
   "px-2.5 py-1.5 text-[9px] font-medium uppercase tracking-wide border-b border-[rgba(60,40,80,0.35)] text-[#8c8c8c] whitespace-nowrap";
@@ -29,6 +29,8 @@ const TD_NUM = cx(TD, "text-right");
 const STRIP =
   "flex w-full items-center justify-between gap-2 border-b border-[rgba(60,40,80,0.3)] px-3 py-2 text-left text-[11px] font-medium hover:bg-white/[0.03] transition-colors bg-violet-500/10 text-violet-200";
 const PILL = "rounded-md border border-violet-500/25 bg-violet-500/10 px-1.5 py-0.5 text-[9px] text-violet-100";
+const LABEL_DOTTED =
+  "underline decoration-dotted underline-offset-2 decoration-[#6e6682]";
 
 function barColors(tone) {
   if (tone === BT_POSITIVE) return { fill: "bg-emerald-400", dot: "bg-emerald-400" };
@@ -81,7 +83,6 @@ export const SyntheticCoreResultsPanel = memo(function SyntheticCoreResultsPanel
         label: metric.label,
         description: metric.description,
         formula: metric.formula,
-        star: hit.star || (metric.kind === "drawdown" ? "max" : "none"),
         original: hit.real ?? hit.original ?? null,
         percentile: hit.percentile ?? null,
         min: hit.min ?? null,
@@ -132,9 +133,9 @@ export const SyntheticCoreResultsPanel = memo(function SyntheticCoreResultsPanel
                   <th className={TH_METRIC}>Metric</th>
                   <th className={cx(TH_NUM, "bg-sky-950/50 text-sky-200/90")}>Original</th>
                   <th className={TH_PCT}>
-                    <BtHeaderWithHelp label="Percentile" text={BT_TOOLTIPS.percentile}>
-                      Percentile
-                    </BtHeaderWithHelp>
+                    <BtValueTooltip text={BT_TOOLTIPS.percentile}>
+                      <span className={LABEL_DOTTED}>Percentile</span>
+                    </BtValueTooltip>
                   </th>
                   <th className={TH_NUM}>Min</th>
                   <th className={TH_NUM}>Median</th>
@@ -146,16 +147,9 @@ export const SyntheticCoreResultsPanel = memo(function SyntheticCoreResultsPanel
                 {rows.map((row) => (
                   <tr key={row.key} className={ROW}>
                     <td className="px-2.5 py-1.5 text-left align-middle text-[11px] text-[#faf7fd]">
-                      <span className="inline-flex items-center gap-1">
-                        <BtValueTooltip text={row.description} formula={row.formula}>
-                          <span>{row.label}</span>
-                        </BtValueTooltip>
-                        {row.star === "max" ? (
-                          <span className="text-amber-300" title="Star on Max">
-                            *
-                          </span>
-                        ) : null}
-                      </span>
+                      <BtValueTooltip text={row.description} formula={row.formula}>
+                        <span className={LABEL_DOTTED}>{row.label}</span>
+                      </BtValueTooltip>
                     </td>
                     <td
                       className={cx(

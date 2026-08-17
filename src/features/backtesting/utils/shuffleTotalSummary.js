@@ -46,7 +46,7 @@ function pctOrNa(rnd, invariant, base) {
   return Math.round(between(rnd, 5, 95));
 }
 
-function row(key, label, original, stats, originalPct, format = "num") {
+function row(key, label, original, stats, originalPct, format = "num", pctTone = null) {
   return {
     key,
     label,
@@ -57,6 +57,7 @@ function row(key, label, original, stats, originalPct, format = "num") {
     max: stats.max,
     min: stats.min,
     format,
+    pctTone,
   };
 }
 
@@ -128,52 +129,56 @@ export function buildShuffleTotalSummary(run, opts = {}) {
       "Max Drawdown",
       ddPeak,
       {
-        mean: round(7.34 * stress, 2),
-        median: round(7.1 * stress, 2),
-        max: round(23.1 * stress, 2),
-        min: round(5.08 * Math.min(1, stress), 2),
+        mean: round(7.13 * stress, 2),
+        median: round(4.93 * stress, 2),
+        max: round(21.68 * stress, 2),
+        min: 0,
       },
-      pctOrNa(rnd, false, Math.round(48 / stress)),
+      pctOrNa(rnd, false, 42),
       "pct",
+      "bad",
     ),
     row(
       "maxDdInit",
       "Max Drawdown from initial balance",
       maxDdInit,
       {
-        mean: round(10.42 * stress, 2),
-        median: round(10.2 * stress, 2),
-        max: round(24.8 * stress, 2),
-        min: round(8.8 * Math.min(1, stress), 2),
+        mean: round(9.55 * stress, 2),
+        median: round(9.72 * stress, 2),
+        max: round(21.45 * stress, 2),
+        min: 0,
       },
-      pctOrNa(rnd, false, Math.round(55 / stress)),
+      pctOrNa(rnd, false, 45),
       "pct",
+      "bad",
     ),
     row(
       "mcl",
       "MCL (Max Consec. Losses)",
       mcl,
       {
-        mean: round(6.31 * stress, 2),
-        median: Math.round(6 * stress),
+        mean: round(6.45 * stress, 2),
+        median: round(6.25 * stress, 2),
         max: Math.min(12, Math.round(10 * stress)),
         min: 2,
       },
-      pctOrNa(rnd, false, Math.round(38 / stress)),
+      pctOrNa(rnd, false, 65),
       "num",
+      "good",
     ),
     row(
       "mcw",
       "MCW (Max Consec. Wins)",
       mcw,
       {
-        mean: round(5.34 / stress, 2),
-        median: Math.max(2, Math.round(5 / stress)),
+        mean: round(5.64 / stress, 2),
+        median: round(5.29 / stress, 2),
         max: 10,
         min: 2,
       },
-      pctOrNa(rnd, false, Math.min(95, Math.round(80 * stress))),
+      pctOrNa(rnd, false, 79),
       "num",
+      "good",
     ),
     row(
       "acl",
@@ -181,26 +186,31 @@ export function buildShuffleTotalSummary(run, opts = {}) {
       acl,
       {
         mean: round(2.52 * stress, 2),
-        median: round(2.48 * stress, 2),
-        max: round(3.88 * stress, 2),
-        min: round(1.72, 2),
+        median: round(2.54 * stress, 2),
+        max: round(3.8 * stress, 2),
+        min: round(1.36, 2),
       },
-      pctOrNa(rnd, false, Math.round(47 / stress)),
+      pctOrNa(rnd, false, 57),
       "num",
+      "good",
     ),
     row(
       "acw",
       "ACW (Avg Consec. Wins)",
       acw,
       {
-        mean: round(2.41 / Math.sqrt(stress), 2),
-        median: round(2.35 / Math.sqrt(stress), 2),
+        mean: round(2.51 / Math.sqrt(stress), 2),
+        median: round(2.54 / Math.sqrt(stress), 2),
         max: round(3.8, 2),
-        min: round(1.55, 2),
+        min: round(1.36, 2),
       },
-      pctOrNa(rnd, false, Math.min(95, Math.round(62 * stress))),
+      pctOrNa(rnd, false, 57),
       "num",
+      "good",
     ),
+  ];
+
+  const recoveryPeriods = [
     row(
       "maxRecInit",
       "Max Recovery Period from initial balance",
@@ -291,8 +301,15 @@ export function buildShuffleTotalSummary(run, opts = {}) {
   return {
     simulations,
     stopped,
+    generalSections: [{ key: "general", title: "GENERAL", rows: general }],
+    recoverySections: [
+      { key: "recoveryPeriods", title: "RECOVERY PERIODS", rows: recoveryPeriods },
+      { key: "macro", title: "MACRO RECOVERY", rows: macro },
+      { key: "micro", title: "MICRO RECOVERY", rows: micro },
+    ],
     sections: [
       { key: "general", title: "GENERAL", rows: general },
+      { key: "recoveryPeriods", title: "RECOVERY PERIODS", rows: recoveryPeriods },
       { key: "macro", title: "MACRO RECOVERY", rows: macro },
       { key: "micro", title: "MICRO RECOVERY", rows: micro },
     ],

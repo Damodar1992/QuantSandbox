@@ -68,16 +68,10 @@ export const BacktestTree = memo(function BacktestTree({
   onDeleteBacktest,
   onOpenChildResult,
   onDeleteChild,
-  onToggleShufflerForValidation,
   onOpenShuffleInfo,
   onOpenShufflerParams,
   onOpenSyntheticInfo,
   onOpenSyntheticParams,
-  onToggleSyntheticForValidation,
-  onOpenAnalytics,
-  onSaveAnalytics,
-  onTogglePromote,
-  onDeleteAnalytics,
 }) {
   if (!runs || runs.length === 0) {
     return (
@@ -238,16 +232,10 @@ export const BacktestTree = memo(function BacktestTree({
                         onDeleteChild={onDeleteChild}
                         onRunShuffler={onRunShuffler}
                         onRunSynthetic={onRunSynthetic}
-                        onToggleShufflerForValidation={onToggleShufflerForValidation}
                         onOpenShuffleInfo={onOpenShuffleInfo}
                         onOpenShufflerParams={onOpenShufflerParams}
                         onOpenSyntheticInfo={onOpenSyntheticInfo}
                         onOpenSyntheticParams={onOpenSyntheticParams}
-                        onToggleSyntheticForValidation={onToggleSyntheticForValidation}
-                        onOpenAnalytics={onOpenAnalytics}
-                        onSaveAnalytics={onSaveAnalytics}
-                        onTogglePromote={onTogglePromote}
-                        onDeleteAnalytics={onDeleteAnalytics}
                       />
                     </td>
                   </tr>

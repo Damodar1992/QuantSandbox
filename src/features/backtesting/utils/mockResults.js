@@ -112,6 +112,7 @@ export function buildPerformanceSummary(run, ctx) {
 
   const pair = run.params?.pair || "—";
   const mode = run.params?.mode || "spot";
+  const shortOff = mode === "spot";
   const pairLabel = mode === "futures" || mode === "futures_isolated"
     ? `${pair}:USDT`
     : pair.includes(":")
@@ -120,29 +121,50 @@ export function buildPerformanceSummary(run, ctx) {
 
   const days = Math.max(1, Math.floor(between(rnd, 180, 2800)));
   const annualPlPct = round((roi / days) * 365, 2);
+  const cagrTotal = round(
+    (Math.pow(Math.max(1 + roi / 100, 0.01), 365 / days) - 1) * 100,
+    2,
+  );
+
   const reservedShare = round(between(rnd, 0.05, 0.28), 3);
   const totalBalance = round(startingCapital + pnl * between(rnd, 0.75, 1.05), 2);
   const reserved = round(Math.max(0, (startingCapital + Math.max(pnl, 0)) * reservedShare), 2);
   const tradable = round(totalBalance - reserved, 2);
   const netPlTotal = round(totalBalance - startingCapital, 2);
+  const netPlTotalPct = round((netPlTotal / Math.max(startingCapital, 1e-9)) * 100, 2);
+  const tradablePctOfStart = round((tradable / Math.max(startingCapital, 1e-9) - 1) * 100, 2);
+  const reservedPctOfStart = round((reserved / Math.max(startingCapital, 1e-9)) * 100, 2);
+  const totalPctOfStart = round((totalBalance / Math.max(startingCapital, 1e-9) - 1) * 100, 2);
 
   const takerFee = round(-Math.abs(pnl) * between(rnd, 0.35, 0.55) - between(rnd, 50, 800), 2);
   const makerFee = round(between(rnd, 0, 1) > 0.7 ? between(rnd, -40, -2) : 0, 2);
-  const fundingFees = mode === "spot" ? 0 : round(between(rnd, -80, 40), 2);
+  const fundingFees = mode === "spot" ? round(between(rnd, -5, 15), 2) : round(between(rnd, -80, 40), 2);
   const totalFees = round(makerFee + takerFee + fundingFees, 2);
+  const takerOpen = round(takerFee * between(rnd, 0.48, 0.52), 2);
+  const takerClose = round(takerFee - takerOpen, 2);
+  const tradeVolume = round(Math.abs(startingCapital) * between(rnd, 80, 520), 2);
+
+  const pctOfStart = (abs) =>
+    `${signedPct(round((abs / Math.max(startingCapital, 1e-9)) * 100, 2))} of start`;
 
   const maxDdRealPct = round(maxdd * between(rnd, 0.92, 1.08), 2);
-  const avgDdAccountPct = round(maxdd * between(rnd, 0.08, 0.22), 2);
+  const avgDdAccountPct = round(maxdd * between(rnd, 0.35, 0.85), 2);
   const maxDdRealUsdt = round((startingCapital * maxDdRealPct) / 100, 2);
-  const maxDdAbs = round(maxDdRealPct * between(rnd, 0.97, 1.06), 2);
+  const maxDdAbsUsdt = round(maxDdRealUsdt * between(rnd, 0.97, 1.02), 2);
+
+  const sortino = round(between(rnd, -25, 4), 2);
+  const sharpe = round(between(rnd, -25, 3), 2);
+  const calmar = round(annualPlPct / Math.max(maxDdRealPct, 0.01), 2);
+  const expectancy = round(between(rnd, -1.2, 1.4), 2);
+  const expectancyAlt = round(expectancy * between(rnd, 0.5, 0.85), 2);
 
   const lossRate = round(100 - winrate, 2);
   const avgDaily = round(trades / days, 2);
   const oclClosedPct = round(between(rnd, 0, 8), 1);
   const oclOtherPct = round(100 - oclClosedPct, 1);
-  const oclText = `${fmtNumLocal(oclClosedPct)}% / ${fmtNumLocal(oclOtherPct)}%`;
 
   const pad2 = (n) => String(n).padStart(2, "0");
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const fmtHms = (totalSec) => {
     const s = Math.max(0, Math.floor(totalSec));
     const h = Math.floor(s / 3600);
@@ -159,11 +181,11 @@ export function buildPerformanceSummary(run, ctx) {
     const sec = rem % 60;
     return `${d} days ${pad2(h)}:${pad2(m)}:${pad2(sec)}`;
   };
+  const fmtDay = (y, m, d) => `${d} ${MONTHS[m - 1]} ${y}`;
 
   const durAvg = Math.floor(between(rnd, 900, 3600));
   const durMin = Math.floor(between(rnd, 300, Math.min(900, durAvg)));
   const durMax = Math.floor(between(rnd, durAvg, 20000));
-
   const downAvg = Math.floor(between(rnd, 600, 7200));
   const downMin = Math.floor(between(rnd, 60, Math.min(600, downAvg)));
   const downMax = Math.floor(between(rnd, downAvg, 200000));
@@ -174,19 +196,18 @@ export function buildPerformanceSummary(run, ctx) {
 
   const maxLossCount = Math.max(2, Math.round(between(rnd, 4, 18)));
   const avgLossCount = round(between(rnd, 1.2, 3.5), 2);
-  const maxLossAmount = round(-Math.abs(startingCapital) * between(rnd, 0.15, 0.55), 2);
+  const maxLossAmount = round(-Math.abs(startingCapital) * between(rnd, 0.015, 0.08), 2);
   const avgLossAmount = round(maxLossAmount * between(rnd, 0.05, 0.2), 2);
   const maxWinCount = Math.max(2, Math.round(between(rnd, 3, 14)));
   const avgWinCount = round(between(rnd, 1.2, 3.2), 2);
-  const maxWinAmount = round(startingCapital * between(rnd, 0.08, 0.45), 2);
+  const maxWinAmount = round(startingCapital * between(rnd, 0.005, 0.04), 2);
   const avgWinAmount = round(maxWinAmount * between(rnd, 0.08, 0.25), 2);
 
-  const longCount = Math.floor(trades * between(rnd, 0.45, 0.62));
-  const shortCount = trades - longCount;
-  const netPlLongPct = round(roi * between(rnd, 0.4, 0.6), 2);
-  const netPlShortPct = round(roi - netPlLongPct, 2);
+  const longCount = shortOff ? trades : Math.floor(trades * between(rnd, 0.45, 0.62));
+  const shortCount = shortOff ? 0 : trades - longCount;
+  const netPlLongPct = shortOff ? roi : round(roi * between(rnd, 0.4, 0.6), 2);
+  const netPlShortPct = shortOff ? null : round(roi - netPlLongPct, 2);
   const netPlLongUsdt = round((startingCapital * netPlLongPct) / 100, 2);
-  const netPlShortUsdt = round((startingCapital * netPlShortPct) / 100, 2);
 
   const minBalance = round(startingCapital * between(rnd, 0.05, 0.4), 2);
   const maxBalance = round(startingCapital * between(rnd, 0.95, 1.4), 2);
@@ -195,367 +216,464 @@ export function buildPerformanceSummary(run, ctx) {
   const year = 2019 + Math.floor(between(rnd, 0, 5));
   const month = 1 + Math.floor(between(rnd, 0, 11));
   const day = 1 + Math.floor(between(rnd, 0, 27));
-  const endDay = Math.min(28, day + Math.floor(between(rnd, 5, 40)));
-  const pad = (n) => String(n).padStart(2, "0");
-  const ddStart = `${year} ${pad(month)} ${pad(day)} ${pad(Math.floor(between(rnd, 0, 23)))}:${pad(Math.floor(between(rnd, 0, 59)))}:00`;
-  const ddEnd = `${year} ${pad(Math.min(12, month + 1))} ${pad(Math.min(28, endDay))} ${pad(Math.floor(between(rnd, 0, 23)))}:${pad(Math.floor(between(rnd, 0, 59)))}:00`;
+  const endMonth = Math.min(12, month + Math.floor(between(rnd, 1, 8)));
+  const endDay = Math.min(28, day + Math.floor(between(rnd, 0, 20)));
+  const endYear = endMonth < month ? year + 1 : year;
+  const ddDays = Math.max(1, Math.floor(between(rnd, 30, 400)));
+  const ddRange = `${fmtDay(year, month, day)} → ${fmtDay(endYear, endMonth, endDay)}`;
+  const ddHigh = round(-between(rnd, 0.1, 5), 2);
+  const ddLow = round(-maxDdAbsUsdt * between(rnd, 0.98, 1.05), 2);
 
-  const cell = (value) => ({ pair: value, total: value });
+  const winDays = Math.floor(between(rnd, 10, 80));
+  const drawDays = Math.floor(between(rnd, 0, 5));
+  const loseDays = Math.floor(between(rnd, 40, 400));
+  const bestDayPct = round(between(rnd, 1, 25), 2);
+  const worstDayPct = round(-between(rnd, 5, 90), 2);
+  const bestTradePct = round(between(rnd, 2, 40), 2);
+  const worstTradePct = round(-between(rnd, 5, 50), 2);
+  const avgDurWinnersMin = Math.floor(durAvg / 60) + 20;
+  const avgDurLosersMin = Math.max(5, Math.floor(durAvg / 60) - 10);
 
-  return {
-    pairLabel,
-    sections: [
-      {
-        key: "result",
-        title: "RESULT",
-        hint: "What the run produced overall, after every cost.",
-        rows: [
-          { key: "netPlPct", label: "Net P/L tradable, %", ...cell(roi), tone: "signed" },
-          { key: "netPlUsdt", label: "Net P/L tradable, USDT", ...cell(pnl), tone: "money", unit: "USDT" },
-          { key: "annualPl", label: "Annual P/L, %", ...cell(annualPlPct), tone: "signed" },
-          { key: "netPlTotal", label: "Net P/L total, USDT", ...cell(netPlTotal), tone: "money", unit: "USDT" },
-        ],
-      },
-      {
-        key: "costs",
-        title: "COSTS",
-        hint: "What trading cost — exchange fees and funding.",
-        rows: [
-          { key: "maker", label: "Maker fee", ...cell(makerFee), tone: "money", unit: "USDT" },
-          { key: "taker", label: "Taker fee", ...cell(takerFee), tone: "money", unit: "USDT" },
-          { key: "funding", label: "Funding fees", ...cell(fundingFees), tone: "money", unit: "USDT" },
-          {
-            key: "totalFees",
-            label: "Total fees (maker + taker + funding)",
-            ...cell(totalFees),
-            tone: "money",
-            unit: "USDT",
-          },
-        ],
-      },
-      {
-        key: "drawdown",
-        title: "DRAWDOWN",
-        hint: "How deep the account went under water — and how deep the open positions went (real).",
-        rows: [
-          {
-            key: "maxDdAccount",
-            label: "Max drawdown, account %",
-            ...cell(maxdd),
-            tone: "drawdown-pct",
-          },
-          {
-            key: "avgDd",
-            label: "Avg drawdown, %",
-            ...cell(avgDdAccountPct),
-            tone: "drawdown-pct",
-          },
-          {
-            key: "maxDdRealPct",
-            label: "Max drawdown, real %",
-            ...cell(maxDdRealPct),
-            tone: "drawdown-pct",
-          },
-          {
-            key: "maxDdRealUsdt",
-            label: "Max drawdown, real USDT",
-            ...cell(maxDdRealUsdt),
-            tone: "drawdown-money",
-            unit: "USDT",
-          },
-          {
-            key: "maxDdAbs",
-            label: "Max drawdown, ABS",
-            ...cell(maxDdAbs),
-            tone: "drawdown-pct",
-          },
-        ],
-      },
-      {
-        key: "trades",
-        title: "TRADES",
-        hint: "Sample size and how it splits by outcome.",
-        rows: [
-          { key: "days", label: "Backtesting days", ...cell(days), tone: "int" },
-          { key: "trades", label: "Total trades", ...cell(trades), tone: "int" },
-          { key: "avgDaily", label: "Avg daily trades", ...cell(avgDaily), tone: "num" },
-          {
-            key: "winrate",
-            label: "Win rate (wins / losses)",
-            pair: `${fmtNumLocal(winrate)}% / ${fmtNumLocal(lossRate)}%`,
-            total: `${fmtNumLocal(winrate)}% / ${fmtNumLocal(lossRate)}%`,
-            tone: "neutral-text",
-          },
-          {
-            key: "ccl",
-            label: "Trades closed by CCL",
-            pair: oclText,
-            total: oclText,
-            tone: "neutral-text",
-          },
-        ],
-      },
-      {
-        key: "duration",
-        title: "TRADE DURATION",
-        hint: "How long a position is held — from entry to exit.",
-        rows: [
-          { key: "durAvg", label: "Trade duration · Avg", ...cell(fmtHms(durAvg)), tone: "neutral-text" },
-          { key: "durMin", label: "Trade duration · Min", ...cell(fmtHms(durMin)), tone: "neutral-text" },
-          { key: "durMax", label: "Trade duration · Max", ...cell(fmtHms(durMax)), tone: "neutral-text" },
-        ],
-      },
-      {
-        key: "downtime",
-        title: "DOWNTIME BETWEEN TRADES",
-        hint: "Idle time with no position open.",
-        rows: [
-          {
-            key: "downAvg",
-            label: "Downtime · Avg",
-            ...cell(fmtDaysHms(downAvg)),
-            tone: "neutral-text",
-          },
-          {
-            key: "downMin",
-            label: "Downtime · Min",
-            ...cell(fmtDaysHms(downMin)),
-            tone: "neutral-text",
-          },
-          {
-            key: "downMax",
-            label: "Downtime · Max",
-            ...cell(fmtDaysHms(downMax)),
-            tone: "neutral-text",
-          },
-        ],
-      },
-      {
-        key: "size",
-        title: "TRADE SIZE",
-        hint: "Notional value of a position at entry (stake × leverage).",
-        rows: [
-          {
-            key: "sizeAvg",
-            label: "Trade size · Avg",
-            ...cell(sizeAvg),
-            tone: "money-unsigned",
-            unit: "USDT",
-          },
-          {
-            key: "sizeMin",
-            label: "Trade size · Min",
-            ...cell(sizeMin),
-            tone: "money-unsigned",
-            unit: "USDT",
-          },
-          {
-            key: "sizeMax",
-            label: "Trade size · Max",
-            ...cell(sizeMax),
-            tone: "money-unsigned",
-            unit: "USDT",
-          },
-        ],
-      },
-      {
-        key: "streaks",
-        title: "CONSECUTIVE STREAKS",
-        hint: "What a live account would have to sit through.",
-        rows: [
-          { key: "maxLossN", label: "Losses, max count", ...cell(maxLossCount), tone: "int-neg" },
-          { key: "avgLossN", label: "Losses, avg count", ...cell(avgLossCount), tone: "num-neg" },
-          {
-            key: "maxLossAmt",
-            label: "Losses, max amount",
-            ...cell(maxLossAmount),
-            tone: "money",
-            unit: "USDT",
-          },
-          {
-            key: "avgLossAmt",
-            label: "Losses, avg amount",
-            ...cell(avgLossAmount),
-            tone: "money",
-            unit: "USDT",
-          },
-          { key: "maxWinN", label: "Wins, max count", ...cell(maxWinCount), tone: "int-pos" },
-          { key: "avgWinN", label: "Wins, avg count", ...cell(avgWinCount), tone: "num-pos" },
-          {
-            key: "maxWinAmt",
-            label: "Wins, max amount",
-            ...cell(maxWinAmount),
-            tone: "money",
-            unit: "USDT",
-          },
-          {
-            key: "avgWinAmt",
-            label: "Wins, avg amount",
-            ...cell(avgWinAmount),
-            tone: "money",
-            unit: "USDT",
-          },
-        ],
-      },
-      {
-        key: "balances",
-        title: "BALANCES AT THE END OF THE RUN",
-        hint: "Where the capital ended up.",
-        rows: [
-          { key: "tradable", label: "Tradable amount", ...cell(tradable), tone: "money-unsigned", unit: "USDT" },
-          { key: "reserved", label: "Reserved amount", ...cell(reserved), tone: "money-unsigned", unit: "USDT" },
-          { key: "totalBal", label: "Total balance", ...cell(totalBalance), tone: "money-unsigned", unit: "USDT" },
-          {
-            key: "ratio",
-            label: "Ratio",
-            ...cell(round(reserved / Math.max(tradable, 1e-9), 3)),
-            tone: "num",
-          },
-        ],
-      },
-    ],
-    cards: [
-      {
-        key: "risk",
-        title: "Risk-adjusted ratios",
-        rows: [
-          { key: "cagr", label: "CAGR total", value: annualPlPct, tone: "signed", suffix: "%" },
-          { key: "sortino", label: "Sortino", value: round(between(rnd, -25, 4), 2), tone: "signed" },
-          { key: "sharpe", label: "Sharpe", value: round(between(rnd, -25, 3), 2), tone: "signed" },
-          { key: "calmar", label: "Calmar", value: round(between(rnd, -2, 1.5), 2), tone: "signed" },
-          {
-            key: "expectancy",
-            label: "Expectancy (ratio)",
-            value: round(between(rnd, 0.2, 1.4), 2),
-            tone: "num",
-          },
-          { key: "profitFactor", label: "Profit factor", value: pf, tone: "pf" },
-        ],
-      },
-      {
-        key: "outcome",
-        title: "Outcome split",
-        rows: [
-          {
-            key: "outcomeCounts",
-            label: "Wins / draws / losses",
-            text: `${wins.toLocaleString("en-US")} / 0 / ${losses.toLocaleString("en-US")}`,
-            tone: "neutral-text",
-          },
-          {
-            key: "outcomeDays",
-            label: "Winning / draw / losing days",
-            text: `${Math.floor(between(rnd, 10, 80))} / ${Math.floor(between(rnd, 0, 5))} / ${Math.floor(between(rnd, 40, 400))}`,
-            tone: "neutral-text",
-          },
-          {
-            key: "avgDurWinners",
-            label: "Avg duration, winners",
-            text: `${Math.floor(durAvg / 60) + 20}m`,
-            tone: "neutral-text",
-          },
-          {
-            key: "avgDurLosers",
-            label: "Avg duration, losers",
-            text: `${Math.max(5, Math.floor(durAvg / 60) - 10)}m`,
-            tone: "neutral-text",
-          },
-        ],
-      },
-      {
-        key: "extremes",
-        title: "Best and worst",
-        rows: [
-          {
-            key: "bestDay",
-            label: "Best day",
-            text: `${signedPct(round(between(rnd, 1, 25), 2))} / ${signedMoney(round(between(rnd, 50, 900), 2))} USDT`,
-            tone: "pos-text",
-          },
-          {
-            key: "worstDay",
-            label: "Worst day",
-            text: `${signedPct(round(-between(rnd, 5, 90), 2))} / ${signedMoney(round(-between(rnd, 200, 5000), 2))} USDT`,
-            tone: "neg-text",
-          },
-          {
-            key: "bestTrade",
-            label: "Best single trade",
-            text: `${signedPct(round(between(rnd, 2, 40), 2))} / ${signedMoney(round(between(rnd, 80, 1200), 2))} USDT`,
-            tone: "pos-text",
-          },
-          {
-            key: "worstTrade",
-            label: "Worst single trade",
-            text: `${signedPct(round(-between(rnd, 5, 50), 2))} / ${signedMoney(round(-between(rnd, 100, 2000), 2))} USDT`,
-            tone: "neg-text",
-          },
-        ],
-      },
-      {
-        key: "direction",
-        title: "Direction split",
-        rows: [
-          {
-            key: "longShortCounts",
-            label: "Long / short trades",
-            text: `${longCount.toLocaleString("en-US")} / ${shortCount.toLocaleString("en-US")}`,
-            tone: "neutral-text",
-          },
-          {
-            key: "netPlLong",
-            label: "Net P/L long",
-            text: `${signedPct(netPlLongPct)} / ${signedMoney(netPlLongUsdt)} USDT`,
-            tone: netPlLongPct >= 0 ? "pos-text" : "neg-text",
-          },
-          {
-            key: "netPlShort",
-            label: "Net P/L short",
-            text: `${signedPct(netPlShortPct)} / ${signedMoney(netPlShortUsdt)} USDT`,
-            tone: netPlShortPct >= 0 ? "pos-text" : "neg-text",
-          },
-        ],
-      },
-      {
-        key: "balanceRange",
-        title: "Balance range and market",
-        rows: [
-          {
-            key: "minBalance",
-            label: "Min balance",
-            text: `${fmtNumLocal(minBalance)} USDT`,
-            tone: "neutral-text",
-          },
-          {
-            key: "maxBalance",
-            label: "Max balance",
-            text: `${fmtNumLocal(maxBalance)} USDT`,
-            tone: "neutral-text",
-          },
-          {
-            key: "marketChange",
-            label: "Market change",
-            text: signedPct(marketChangePct),
-            tone: marketChangePct >= 0 ? "pos-text" : "neg-text",
-          },
-        ],
-      },
-      {
-        key: "ddWindow",
-        title: "Drawdown window",
-        rows: [
-          {
-            key: "ddHighLow",
-            label: "Drawdown high | low",
-            text: `${fmtNumLocal(maxBalance)} / ${fmtNumLocal(minBalance)}`,
-            tone: "drawdown-text",
-          },
-          { key: "ddStart", label: "Drawdown start", text: ddStart, tone: "neutral-text" },
-          { key: "ddEnd", label: "Drawdown end", text: ddEnd, tone: "neutral-text" },
-        ],
-      },
-    ],
-  };
+  // Synthetic direction split — always long + short with pct / USDT pairs (reference layout).
+  const synthLongShare = between(rnd, 0.52, 0.58);
+  const synthLongCount = Math.max(1, Math.round(trades * synthLongShare));
+  const synthShortCount = Math.max(0, trades - synthLongCount);
+  const synthNetPlLongPct = round(roi * between(rnd, 0.45, 0.55), 2);
+  const synthNetPlShortPct = round(roi - synthNetPlLongPct, 2);
+  const synthNetPlLongUsdt = round((startingCapital * synthNetPlLongPct) / 100, 2);
+  const synthNetPlShortUsdt = round((startingCapital * synthNetPlShortPct) / 100, 2);
+  const pctUsdtPair = (pct, usdt) => `${signedPct(pct)} / ${signedMoney(usdt)} USDT`;
+
+  const metric = (key, label, total, tone, extra = {}) => ({
+    key,
+    label,
+    total,
+    tone,
+    ...extra,
+  });
+
+  const hero = [
+    {
+      key: "netPlTotalPct",
+      label: "Net P/L total, %",
+      value: netPlTotalPct,
+      tone: "signed",
+      suffix: "%",
+      sub: `${signedMoney(netPlTotal)} USDT · tradable + reserved`,
+    },
+    {
+      key: "marketChange",
+      label: "Market change",
+      value: marketChangePct,
+      tone: "signed",
+      suffix: "%",
+      sub: "benchmark over the same period",
+    },
+    {
+      key: "cagr",
+      label: "CAGR total",
+      value: cagrTotal,
+      tone: "signed",
+      suffix: "%",
+      sub: "annualized compounded",
+    },
+    {
+      key: "maxDdRealPct",
+      label: "Max drawdown, real %",
+      value: maxDdRealPct,
+      tone: "drawdown-pct",
+      suffix: "%",
+      sub: `${fmtNumLocal(maxDdRealUsdt)} USDT · relative real equity`,
+    },
+    {
+      key: "calmar",
+      label: "Calmar",
+      value: calmar,
+      tone: "signed",
+      sub: "return per unit of drawdown",
+    },
+    {
+      key: "profitFactor",
+      label: "Profit factor",
+      value: pf,
+      tone: "pf",
+      sub: "gross profit ÷ gross loss",
+    },
+  ];
+
+  const columns = [
+    {
+      key: "left",
+      sections: [
+        {
+          key: "returns",
+          title: "RETURNS",
+          hint: "P/L split by tradable balance and direction.",
+          rows: [
+            metric("netPlPct", "Net P/L tradable, %", signedPct(roi), roi >= 0 ? "pos-text" : "neg-text", {
+              sub: `${signedMoney(pnl)} USDT`,
+            }),
+            metric(
+              "netPlLong",
+              "Net P/L long",
+              signedPct(netPlLongPct),
+              netPlLongPct >= 0 ? "pos-text" : "neg-text",
+              { sub: `${signedMoney(netPlLongUsdt)} USDT` },
+            ),
+            metric(
+              "netPlShort",
+              shortOff ? "Net P/L short [SHORT OFF]" : "Net P/L short",
+              shortOff ? "—" : signedPct(netPlShortPct),
+              shortOff ? "neutral-text" : netPlShortPct >= 0 ? "pos-text" : "neg-text",
+            ),
+            metric(
+              "longShortCounts",
+              shortOff ? "Long / short trades [SHORT OFF]" : "Long / short trades",
+              shortOff
+                ? `${longCount.toLocaleString("en-US")} / —`
+                : `${longCount.toLocaleString("en-US")} / ${shortCount.toLocaleString("en-US")}`,
+              "neutral-text",
+            ),
+            metric("annualPl", "Annual P/L, %", signedPct(annualPlPct), annualPlPct >= 0 ? "pos-text" : "neg-text"),
+          ],
+        },
+        {
+          key: "risk",
+          title: "RISK",
+          hint: "Drawdowns and risk-adjusted ratios.",
+          rows: [
+            metric("maxDdAccount", "Max drawdown, account %", `${fmtNumLocal(maxdd)}%`, "drawdown-text"),
+            metric("avgDd", "Avg drawdown, %", `${fmtNumLocal(avgDdAccountPct)}%`, "drawdown-text"),
+            metric("ddDuration", "Drawdown duration", `${ddDays} days`, "neutral-text", { sub: ddRange }),
+            metric(
+              "minMaxBalance",
+              "Min / max balance",
+              `${fmtNumLocal(minBalance)} / ${fmtNumLocal(maxBalance)} USDT`,
+              "neutral-text",
+            ),
+            metric("sortino", "Sortino", fmtNumLocal(sortino), sortino >= 0 ? "pos-text" : "neg-text"),
+            metric("sharpe", "Sharpe", fmtNumLocal(sharpe), sharpe >= 0 ? "pos-text" : "neg-text"),
+            metric("maxDdAbs", "Max drawdown, ABS", `${fmtNumLocal(maxDdAbsUsdt)} USDT`, "drawdown-text"),
+            metric(
+              "ddHighLow",
+              "Drawdown high | low",
+              `${signedMoney(ddHigh)} / ${signedMoney(ddLow)} USDT`,
+              "neg-text",
+            ),
+          ],
+        },
+      ],
+    },
+    {
+      key: "middle",
+      sections: [
+        {
+          key: "capital",
+          title: "CAPITAL",
+          hint: "Where the capital ended up after the run.",
+          rows: [
+            metric("tradable", "Tradable amount", `${fmtNumLocal(tradable)} USDT`, "neutral-text", {
+              sub: `${signedPct(tradablePctOfStart)} of start`,
+            }),
+            metric("reserved", "Reserved amount", `${fmtNumLocal(reserved)} USDT`, "neutral-text", {
+              sub: `${signedPct(reservedPctOfStart)} of start`,
+            }),
+            metric("totalBal", "Total balance", `${fmtNumLocal(totalBalance)} USDT`, "neutral-text", {
+              sub: `${signedPct(totalPctOfStart)} of start · ${fmtNumLocal(tradable)} + ${fmtNumLocal(reserved)}`,
+            }),
+            metric(
+              "ratio",
+              "Ratio",
+              fmtNumLocal(round(reserved / Math.max(tradable, 1e-9), 4), 4),
+              "neutral-text",
+            ),
+          ],
+        },
+        {
+          key: "tradeEdge",
+          title: "TRADE EDGE",
+          hint: "Edge per trade — win rate, expectancy, extremes.",
+          rows: [
+            metric(
+              "winrate",
+              "Win rate (wins / losses)",
+              `${fmtNumLocal(winrate)}% / ${fmtNumLocal(lossRate)}%`,
+              "neutral-text",
+              {
+                sub: `wins / losses of ${trades.toLocaleString("en-US")}: ${wins.toLocaleString("en-US")} / ${losses.toLocaleString("en-US")} trades`,
+              },
+            ),
+            metric(
+              "expectancy",
+              "Expectancy (ratio)",
+              `${fmtNumLocal(expectancy)} (${fmtNumLocal(expectancyAlt)})`,
+              expectancy >= 0 ? "pos-text" : "neg-text",
+            ),
+            metric(
+              "avgDurWinnersLosers",
+              "Avg duration, winners / losers",
+              `${avgDurWinnersMin} min / ${avgDurLosersMin} min`,
+              "neutral-text",
+            ),
+            metric(
+              "bestWorstTrade",
+              "Best / worst single trade",
+              `${signedPct(bestTradePct)} / ${signedPct(worstTradePct)}`,
+              "neutral-text",
+            ),
+          ],
+        },
+        {
+          key: "consistency",
+          title: "CONSISTENCY",
+          hint: "Day-level outcome and consecutive streaks.",
+          rows: [
+            metric(
+              "outcomeDays",
+              "Winning / draw / losing days",
+              `${winDays} / ${drawDays} / ${loseDays}`,
+              "neutral-text",
+            ),
+            metric(
+              "bestWorstDay",
+              "Best / worst day",
+              `${signedPct(bestDayPct)} / ${signedPct(worstDayPct)}`,
+              "neutral-text",
+            ),
+            metric("maxLossN", "Losses, max count", `${maxLossCount} trades`, "neg-text", {
+              sub: `${signedMoney(maxLossAmount)} USDT`,
+            }),
+            metric("avgLossN", "Losses, avg count", `${fmtNumLocal(avgLossCount)} trades`, "neg-text", {
+              sub: `${signedMoney(avgLossAmount)} USDT`,
+            }),
+            metric("maxWinN", "Wins, max count", `${maxWinCount} trades`, "pos-text", {
+              sub: `${signedMoney(maxWinAmount)} USDT`,
+            }),
+            metric("avgWinN", "Wins, avg count", `${fmtNumLocal(avgWinCount)} trades`, "pos-text", {
+              sub: `${signedMoney(avgWinAmount)} USDT`,
+            }),
+          ],
+        },
+      ],
+    },
+    {
+      key: "right",
+      sections: [
+        {
+          key: "costs",
+          title: "COSTS",
+          hint: "What trading cost — exchange fees and funding.",
+          rows: [
+            metric(
+              "totalFees",
+              "Total fees (maker + taker + funding)",
+              `${signedMoney(totalFees)} USDT`,
+              "neg-text",
+              { sub: pctOfStart(totalFees) },
+            ),
+            metric(
+              "tradeVolume",
+              "Total trade volume",
+              `${fmtNumLocal(tradeVolume)} USDT`,
+              "neutral-text",
+            ),
+            metric("taker", "Taker fee", `${signedMoney(takerFee)} USDT`, "neg-text", {
+              sub: `${pctOfStart(takerFee)} · OPEN: ${signedMoney(takerOpen)} · CLOSE: ${signedMoney(takerClose)}`,
+            }),
+            metric("maker", "Maker fee", `${signedMoney(makerFee)} USDT`, makerFee < 0 ? "neg-text" : "neutral-text", {
+              sub: pctOfStart(makerFee),
+            }),
+            metric(
+              "funding",
+              "Funding fees",
+              `${signedMoney(fundingFees)} USDT`,
+              fundingFees >= 0 ? "pos-text" : "neg-text",
+              { sub: pctOfStart(fundingFees) },
+            ),
+          ],
+        },
+        {
+          key: "mechanics",
+          title: "SAMPLE AND MECHANICS",
+          hint: "Sample size, trade size, duration and downtime.",
+          rows: [
+            metric("trades", "Total trades", trades.toLocaleString("en-US"), "neutral-text", {
+              sub: `over ${days.toLocaleString("en-US")} days`,
+            }),
+            metric("avgDaily", "Avg daily trades", fmtNumLocal(avgDaily), "neutral-text"),
+            metric("sizeAvg", "Trade size · Avg", `${fmtNumLocal(sizeAvg)} USDT`, "neutral-text", {
+              sub: `MIN ${fmtNumLocal(sizeMin)} · MAX ${fmtNumLocal(sizeMax)} USDT`,
+            }),
+            metric("durAvg", "Trade duration · Avg", fmtHms(durAvg), "neutral-text", {
+              sub: `MIN ${fmtHms(durMin)} · MAX ${fmtHms(durMax)}`,
+            }),
+            metric("downAvg", "Downtime · Avg", fmtDaysHms(downAvg), "neutral-text", {
+              sub: `MIN ${fmtDaysHms(downMin)} · MAX ${fmtDaysHms(downMax)}`,
+            }),
+            metric(
+              "ccl",
+              "Trades closed by CCL",
+              `${fmtNumLocal(oclClosedPct)}% / ${fmtNumLocal(oclOtherPct)}%`,
+              "neutral-text",
+            ),
+          ],
+        },
+      ],
+    },
+  ];
+
+  // Flattened shape for Excel export + Synthetic distribution table.
+  const sections = columns.flatMap((col) => col.sections);
+  const cards = [
+    {
+      key: "hero",
+      title: "Overview",
+      rows: hero.map((h) => ({
+        key: h.key,
+        label: h.label,
+        value: h.value,
+        text: h.sub,
+        tone: h.tone,
+        suffix: h.suffix,
+      })),
+    },
+  ];
+
+  const drawTrades = Math.max(0, trades - wins - losses);
+  const ddStart = fmtDay(year, month, day);
+  const ddEnd = fmtDay(endYear, endMonth, endDay);
+
+  const syntheticRows = [
+    metric("netPlPct", "Net P/L tradable, %", signedPct(roi), roi >= 0 ? "pos-text" : "neg-text"),
+    metric("netPlUsdt", "Net P/L tradable, USDT", `${signedMoney(pnl)} USDT`, pnl >= 0 ? "pos-text" : "neg-text"),
+    metric("annualPl", "Annual P/L, %", signedPct(annualPlPct), annualPlPct >= 0 ? "pos-text" : "neg-text"),
+    metric(
+      "netPlTotal",
+      "Net P/L total, USDT",
+      `${signedMoney(netPlTotal)} USDT`,
+      netPlTotal >= 0 ? "pos-text" : "neg-text",
+    ),
+    metric("maxDdAccount", "Max drawdown, account %", `${fmtNumLocal(maxdd)}%`, "drawdown-text"),
+    metric("avgDd", "Avg drawdown, %", `${fmtNumLocal(avgDdAccountPct)}%`, "drawdown-text"),
+    metric("maxDdRealPct", "Max drawdown, real %", `${fmtNumLocal(maxDdRealPct)}%`, "drawdown-text"),
+    metric("maxDdRealUsdt", "Max drawdown, real USDT", `${fmtNumLocal(maxDdRealUsdt)} USDT`, "drawdown-text"),
+    metric("maxDdAbs", "Max drawdown, ABS", `${fmtNumLocal(maxDdAbsUsdt)} USDT`, "drawdown-text"),
+    metric("tradable", "Tradable amount", `${fmtNumLocal(tradable)} USDT`, "neutral-text"),
+    metric("reserved", "Reserved amount", `${fmtNumLocal(reserved)} USDT`, "neutral-text"),
+    metric("totalBal", "Total balance", `${fmtNumLocal(totalBalance)} USDT`, "neutral-text"),
+    metric(
+      "ratio",
+      "Ratio",
+      fmtNumLocal(round(reserved / Math.max(tradable, 1e-9), 4), 4),
+      "neutral-text",
+    ),
+    metric("minBalance", "Min balance", `${fmtNumLocal(minBalance)} USDT`, "neutral-text"),
+    metric("maxBalance", "Max balance", `${fmtNumLocal(maxBalance)} USDT`, "neutral-text"),
+    metric("marketChange", "Market change", signedPct(marketChangePct), marketChangePct >= 0 ? "pos-text" : "neg-text"),
+    metric("cagr", "CAGR total", signedPct(cagrTotal), cagrTotal >= 0 ? "pos-text" : "neg-text"),
+    metric("sortino", "Sortino", fmtNumLocal(sortino), sortino >= 0 ? "pos-text" : "neg-text"),
+    metric("sharpe", "Sharpe", fmtNumLocal(sharpe), sharpe >= 0 ? "pos-text" : "neg-text"),
+    metric("calmar", "Calmar", fmtNumLocal(calmar), calmar >= 0 ? "pos-text" : "neg-text"),
+    metric(
+      "expectancy",
+      "Expectancy (ratio)",
+      `${fmtNumLocal(expectancy)} (${fmtNumLocal(expectancyAlt)})`,
+      expectancy >= 0 ? "pos-text" : "neg-text",
+    ),
+    metric("profitFactor", "Profit factor", fmtNumLocal(pf), pf >= 1 ? "pos-text" : "neg-text"),
+    metric("maxLossN", "Losses, max count", `${maxLossCount} trades`, "neg-text"),
+    metric("avgLossN", "Losses, avg count", `${fmtNumLocal(avgLossCount)} trades`, "neg-text"),
+    metric("maxLossAmt", "Losses, max amount", `${signedMoney(maxLossAmount)} USDT`, "neg-text"),
+    metric("avgLossAmt", "Losses, avg amount", `${signedMoney(avgLossAmount)} USDT`, "neg-text"),
+    metric("maxWinN", "Wins, max count", `${maxWinCount} trades`, "pos-text"),
+    metric("avgWinN", "Wins, avg count", `${fmtNumLocal(avgWinCount)} trades`, "pos-text"),
+    metric("maxWinAmt", "Wins, max amount", `${signedMoney(maxWinAmount)} USDT`, "pos-text"),
+    metric("avgWinAmt", "Wins, avg amount", `${signedMoney(avgWinAmount)} USDT`, "pos-text"),
+    metric(
+      "ddHighLow",
+      "Drawdown high | low",
+      `${signedMoney(ddHigh)} / ${signedMoney(ddLow)} USDT`,
+      "neg-text",
+    ),
+    metric("ddStart", "Drawdown start", ddStart, "neutral-text"),
+    metric("ddEnd", "Drawdown end", ddEnd, "neutral-text"),
+    metric("days", "Backtesting days", days.toLocaleString("en-US"), "neutral-text"),
+    metric("trades", "Total trades", trades.toLocaleString("en-US"), "neutral-text"),
+    metric("avgDaily", "Avg daily trades", fmtNumLocal(avgDaily), "neutral-text"),
+    metric(
+      "winrate",
+      "Win rate (wins / losses)",
+      `${fmtNumLocal(winrate)}% / ${fmtNumLocal(lossRate)}%`,
+      "neutral-text",
+    ),
+    metric(
+      "ccl",
+      "Trades closed by CCL",
+      `${fmtNumLocal(oclClosedPct)}% / ${fmtNumLocal(oclOtherPct)}%`,
+      "neutral-text",
+    ),
+    metric(
+      "outcomeCounts",
+      "Wins / draws / losses",
+      `${wins.toLocaleString("en-US")} / ${drawTrades.toLocaleString("en-US")} / ${losses.toLocaleString("en-US")}`,
+      "neutral-text",
+    ),
+    metric(
+      "outcomeDays",
+      "Winning / draw / losing days",
+      `${winDays} / ${drawDays} / ${loseDays}`,
+      "neutral-text",
+    ),
+    metric("avgDurWinners", "Avg duration, winners", `${avgDurWinnersMin} min`, "neutral-text"),
+    metric("avgDurLosers", "Avg duration, losers", `${avgDurLosersMin} min`, "neutral-text"),
+    metric("bestDay", "Best day", signedPct(bestDayPct), "pos-text"),
+    metric("worstDay", "Worst day", signedPct(worstDayPct), "neg-text"),
+    metric("bestTrade", "Best single trade", signedPct(bestTradePct), "pos-text"),
+    metric("worstTrade", "Worst single trade", signedPct(worstTradePct), "neg-text"),
+    metric("maker", "Maker fee", `${signedMoney(makerFee)} USDT`, makerFee < 0 ? "neg-text" : "neutral-text"),
+    metric("taker", "Taker fee", `${signedMoney(takerFee)} USDT`, "neg-text"),
+    metric(
+      "funding",
+      "Funding fees",
+      `${signedMoney(fundingFees)} USDT`,
+      fundingFees >= 0 ? "pos-text" : "neg-text",
+    ),
+    metric(
+      "totalFees",
+      "Total fees (maker + taker + funding)",
+      `${signedMoney(totalFees)} USDT`,
+      "neg-text",
+    ),
+    metric("sizeAvg", "Avg", `${fmtNumLocal(sizeAvg)} USDT`, "neutral-text"),
+    metric("sizeMin", "Min", `${fmtNumLocal(sizeMin)} USDT`, "neutral-text"),
+    metric("sizeMax", "Max", `${fmtNumLocal(sizeMax)} USDT`, "neutral-text"),
+    metric("durAvg", "Avg", fmtHms(durAvg), "neutral-text"),
+    metric("durMin", "Min", fmtHms(durMin), "neutral-text"),
+    metric("durMax", "Max", fmtHms(durMax), "neutral-text"),
+    metric("downAvg", "Avg", fmtDaysHms(downAvg), "neutral-text"),
+    metric("downMin", "Min", fmtDaysHms(downMin), "neutral-text"),
+    metric("downMax", "Max", fmtDaysHms(downMax), "neutral-text"),
+    metric(
+      "longShortCounts",
+      "Long / short trades",
+      `${synthLongCount.toLocaleString("en-US")} / ${synthShortCount.toLocaleString("en-US")}`,
+      "neutral-text",
+    ),
+    metric(
+      "netPlLong",
+      "Net P/L long",
+      pctUsdtPair(synthNetPlLongPct, synthNetPlLongUsdt),
+      synthNetPlLongPct >= 0 ? "pos-text" : "neg-text",
+    ),
+    metric(
+      "netPlShort",
+      "Net P/L short",
+      pctUsdtPair(synthNetPlShortPct, synthNetPlShortUsdt),
+      synthNetPlShortPct >= 0 ? "pos-text" : "neg-text",
+    ),
+  ];
+
+  return { pairLabel, hero, columns, sections, cards, syntheticRows };
 }
 
 function fmtNumLocal(value, decimals = 2) {

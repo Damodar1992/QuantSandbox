@@ -1,14 +1,14 @@
 import React, { memo, useEffect, useMemo, useState } from "react";
-import { ChevronDown, Settings2 } from "lucide-react";
+import { ChevronDown, Eye } from "lucide-react";
 import { cx, ui } from "@/constants/ui";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { BT_MUTED, fmtInt, fmtMoney, fmtNum, fmtPct } from "../utils/format";
+import { PercentileCell } from "./SyntheticCoreResultsPanel";
 
-const TH =
-  "px-2.5 py-1.5 text-left text-[9px] font-medium uppercase tracking-wide border-b border-[rgba(60,40,80,0.35)] text-[#8c8c8c] whitespace-nowrap";
-const TD = "px-2.5 py-1.5 align-middle text-[11px] font-mono tabular-nums whitespace-nowrap";
-const ROW = "border-b border-[rgba(60,40,80,0.18)] last:border-b-0";
+const CARD = cx(ui.radius, "border border-[rgba(60,40,80,0.35)] bg-[#120b20] overflow-hidden");
+const STATS_BOX = "rounded-md border border-[rgba(60,40,80,0.28)] bg-[#161022] px-2 py-1.5";
+const PAIRED_SECTION_KEYS = new Set(["general", "recoveryPeriods"]);
 
 function formatValue(value, format) {
   if (value == null || value === "") return "—";
@@ -20,9 +20,17 @@ function formatValue(value, format) {
   return String(value);
 }
 
-function formatPct(value) {
-  if (value == null) return "N/A";
-  return `${fmtInt(value)}%`;
+function formatStatValue(value, format) {
+  if (value == null || value === "") return "N/A";
+  return formatValue(value, format);
+}
+
+function chunkPairs(rows) {
+  const pairs = [];
+  for (let i = 0; i < rows.length; i += 2) {
+    pairs.push(rows.slice(i, i + 2));
+  }
+  return pairs;
 }
 
 function MetricsVisibilityControl({ rows, enabledKeys, onChange }) {
@@ -55,7 +63,7 @@ function MetricsVisibilityControl({ rows, enabledKeys, onChange }) {
             "text-[9px] uppercase tracking-wide text-[#b8aecc] hover:border-violet-500/40 hover:text-violet-200",
           )}
         >
-          <Settings2 className="h-3.5 w-3.5" />
+          <Eye className="h-3.5 w-3.5" />
           {visible}/{total}
         </button>
       </PopoverTrigger>
@@ -100,7 +108,63 @@ function MetricsVisibilityControl({ rows, enabledKeys, onChange }) {
   );
 }
 
-export function SummarySectionCard({ section, open, onToggle }) {
+function SummaryMetricBlock({ row, nRuns, paired = false }) {
+  const hasOriginal = row.original != null && row.original !== "";
+
+  return (
+    <div
+      className={cx(
+        "px-3 py-2.5",
+        paired ? "min-w-0" : "border-b border-[rgba(60,40,80,0.18)] last:border-b-0",
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 text-[11px] font-medium text-[#faf7fd]">{row.label}</div>
+        <div className="shrink-0 text-right font-mono text-[13px] font-semibold tabular-nums leading-tight text-sky-100">
+          {hasOriginal ? formatValue(row.original, row.format) : <span className={BT_MUTED}>N/A</span>}
+        </div>
+      </div>
+
+      <div className="mt-2 flex items-center justify-between gap-3">
+        <span className={cx("text-[9px] font-medium uppercase tracking-wide", ui.textSubtle)}>
+          Original vs {fmtInt(nRuns)} runs
+        </span>
+        {row.originalPct != null ? (
+          <div className="min-w-[120px] shrink-0">
+            <PercentileCell value={row.originalPct} />
+          </div>
+        ) : (
+          <span className={cx("text-[10px]", BT_MUTED)}>N/A</span>
+        )}
+      </div>
+
+      <div
+        className={cx(
+          STATS_BOX,
+          "mt-2 flex divide-x divide-[rgba(60,40,80,0.45)] text-center",
+        )}
+      >
+        {[
+          { label: "Min", field: "min" },
+          { label: "Median", field: "median" },
+          { label: "Mean", field: "mean" },
+          { label: "Max", field: "max" },
+        ].map(({ label, field }) => (
+          <div key={field} className="min-w-0 flex-1 px-2 first:pl-0 last:pr-0">
+            <div className={cx("text-[9px] font-medium uppercase tracking-wide", ui.textSubtle)}>
+              {label}
+            </div>
+            <div className="mt-0.5 font-mono text-[11px] tabular-nums text-[#d9d9d9]">
+              {formatStatValue(row[field], row.format)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function SummarySectionCard({ section, open, onToggle, nRuns, className }) {
   const allKeys = useMemo(() => section.rows.map((r) => r.key), [section.rows]);
   const [enabledKeys, setEnabledKeys] = useState(() => new Set(allKeys));
 
@@ -108,15 +172,24 @@ export function SummarySectionCard({ section, open, onToggle }) {
     setEnabledKeys(new Set(allKeys));
   }, [allKeys]);
 
-  const visibleRows = section.rows.filter((r) => enabledKeys.has(r.key));
+  const visibleRows = useMemo(
+    () => section.rows.filter((r) => enabledKeys.has(r.key)),
+    [section.rows, enabledKeys],
+  );
+
+  const isPaired = PAIRED_SECTION_KEYS.has(section.key);
+  const rowGroups = useMemo(
+    () => (isPaired ? chunkPairs(visibleRows) : visibleRows.map((row) => [row])),
+    [visibleRows, isPaired],
+  );
 
   return (
-    <div className={cx(ui.radius, "overflow-hidden border border-[rgba(60,40,80,0.35)] bg-[#120b20]")}>
+    <div className={cx(CARD, className)}>
       <div className="flex w-full items-center justify-between gap-2 border-b border-[rgba(60,40,80,0.3)] bg-[#161022] px-3 py-2">
         <button
           type="button"
           onClick={onToggle}
-          className="inline-flex min-w-0 flex-1 items-center gap-2 text-left"
+          className="inline-flex min-w-0 flex-1 items-center gap-2 text-left hover:bg-white/[0.03]"
         >
           <ChevronDown
             className={cx(
@@ -124,66 +197,46 @@ export function SummarySectionCard({ section, open, onToggle }) {
               open && "rotate-180",
             )}
           />
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-violet-200">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-200">
             {section.title}
           </span>
         </button>
 
-        <MetricsVisibilityControl
-          rows={section.rows}
-          enabledKeys={enabledKeys}
-          onChange={setEnabledKeys}
-        />
+        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+          <span className={cx("text-[9px] uppercase tracking-wide", ui.textSubtle)}>
+            {enabledKeys.size}/{section.rows.length}
+          </span>
+          <MetricsVisibilityControl
+            rows={section.rows}
+            enabledKeys={enabledKeys}
+            onChange={setEnabledKeys}
+          />
+        </div>
       </div>
 
       {open ? (
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr>
-                <th className={TH}>Metric</th>
-                <th className={cx(TH, "bg-sky-950/50 text-sky-200/90")}>Original</th>
-                <th className={cx(TH, "bg-emerald-950/40 text-sky-200/90")}>
-                  <span className="text-emerald-300">Percentile</span>
-                </th>
-                <th className={TH}>Mean</th>
-                <th className={TH}>Median</th>
-                <th className={TH}>Max</th>
-                <th className={TH}>Min</th>
-              </tr>
-            </thead>
-            <tbody className="text-[#d9d9d9]">
-              {visibleRows.map((r) => (
-                <tr key={r.key} className={ROW}>
-                  <td className="px-2.5 py-1.5 text-left text-[11px] text-[#faf7fd]">{r.label}</td>
-                  <td className={cx(TD, "bg-sky-950/35 text-right text-sky-100")}>
-                    {formatValue(r.original, r.format)}
-                  </td>
-                  <td
-                    className={cx(
-                      TD,
-                      "bg-emerald-950/30 text-right",
-                      r.originalPct == null ? BT_MUTED : "text-emerald-400",
-                    )}
-                  >
-                    {formatPct(r.originalPct)}
-                  </td>
-                  <td className={cx(TD, "text-right")}>{formatValue(r.mean, r.format)}</td>
-                  <td className={cx(TD, "text-right")}>{formatValue(r.median, r.format)}</td>
-                  <td className={cx(TD, "text-right")}>{formatValue(r.max, r.format)}</td>
-                  <td className={cx(TD, "text-right")}>{formatValue(r.min, r.format)}</td>
-                </tr>
+        rowGroups.length ? (
+          rowGroups.map((rowGroup) => (
+            <div
+              key={rowGroup.map((row) => row.key).join("-")}
+              className={cx(
+                isPaired &&
+                  "grid grid-cols-1 divide-y divide-[rgba(60,40,80,0.18)] border-b border-[rgba(60,40,80,0.18)] last:border-b-0 xl:grid-cols-2 xl:divide-x xl:divide-y-0",
+              )}
+            >
+              {rowGroup.map((row) => (
+                <SummaryMetricBlock
+                  key={row.key}
+                  row={row}
+                  nRuns={nRuns}
+                  paired={isPaired && rowGroup.length > 1}
+                />
               ))}
-              {!visibleRows.length ? (
-                <tr>
-                  <td colSpan={7} className={cx("px-3 py-4 text-center text-[11px]", ui.textSubtle)}>
-                    No metrics selected
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
+            </div>
+          ))
+        ) : (
+          <div className={cx("px-3 py-4 text-center text-[11px]", ui.textSubtle)}>No metrics selected</div>
+        )
       ) : null}
     </div>
   );
@@ -192,10 +245,23 @@ export function SummarySectionCard({ section, open, onToggle }) {
 /** Shared GENERAL / MACRO / MICRO stack. */
 export const ShuffleSummarySections = memo(function ShuffleSummarySections({
   sections,
+  defaultExpanded = true,
+  nRuns = 0,
 }) {
-  const [openSections, setOpenSections] = useState(
-    () => new Set((sections || []).map((s) => s.key)),
+  const sectionKeys = useMemo(
+    () => (sections || []).map((s) => s.key),
+    [sections],
   );
+  const sectionKeySig = sectionKeys.join("\0");
+
+  const [openSections, setOpenSections] = useState(
+    () => new Set(defaultExpanded ? sectionKeys : []),
+  );
+
+  useEffect(() => {
+    if (!defaultExpanded) return;
+    setOpenSections(new Set(sectionKeys));
+  }, [defaultExpanded, sectionKeySig, sectionKeys]);
 
   const toggle = (key) => {
     setOpenSections((prev) => {
@@ -206,16 +272,50 @@ export const ShuffleSummarySections = memo(function ShuffleSummarySections({
     });
   };
 
+  const layoutItems = useMemo(() => {
+    const items = [];
+    const list = sections || [];
+    for (let i = 0; i < list.length; i += 1) {
+      const section = list[i];
+      if (section.key === "macro" && list[i + 1]?.key === "micro") {
+        items.push({ type: "macroMicroRow", sections: [section, list[i + 1]] });
+        i += 1;
+      } else {
+        items.push({ type: "single", section });
+      }
+    }
+    return items;
+  }, [sections]);
+
   return (
     <div className="space-y-3">
-      {(sections || []).map((section) => (
-        <SummarySectionCard
-          key={section.key}
-          section={section}
-          open={openSections.has(section.key)}
-          onToggle={() => toggle(section.key)}
-        />
-      ))}
+      {layoutItems.map((item) =>
+        item.type === "macroMicroRow" ? (
+          <div
+            key="macro-micro-row"
+            className="grid grid-cols-1 gap-3 xl:grid-cols-2 xl:items-start"
+          >
+            {item.sections.map((section) => (
+              <SummarySectionCard
+                key={section.key}
+                section={section}
+                open={openSections.has(section.key)}
+                onToggle={() => toggle(section.key)}
+                nRuns={nRuns}
+                className="min-w-0"
+              />
+            ))}
+          </div>
+        ) : (
+          <SummarySectionCard
+            key={item.section.key}
+            section={item.section}
+            open={openSections.has(item.section.key)}
+            onToggle={() => toggle(item.section.key)}
+            nRuns={nRuns}
+          />
+        ),
+      )}
     </div>
   );
 });

@@ -1,5 +1,5 @@
 import React, { memo, useCallback, useMemo, useState } from "react";
-import { Check, ChevronDown, Copy, Eye, Info, Star, Trash2 } from "lucide-react";
+import { Check, ChevronDown, Copy, Eye, Info, Trash2 } from "lucide-react";
 import { cx, ui } from "@/constants/ui";
 import { AppButton } from "@/components/common/AppButton";
 import {
@@ -11,7 +11,6 @@ import {
   BT_CHILD_TYPE,
   BT_COPY,
   BT_RUN_STATUS,
-  BT_VOLATILITY_LEVELS,
 } from "@/constants/backtesting";
 import {
   BT_MUTED,
@@ -22,10 +21,6 @@ import {
 import { computePessimismGrid } from "../utils/pessimism";
 import { BtFailureBlock, BtStatusCell } from "./BtStatusCell";
 import { CoreMetricsCompareTable } from "./CoreMetricsCompareTable";
-import {
-  CompareAnalyticsMatrix,
-  resolveCompareCombination,
-} from "./CompareAnalyticsMatrix";
 import { SyntheticCoreResultsPanel } from "./SyntheticCoreResultsPanel";
 
 const CARD =
@@ -34,10 +29,7 @@ const CARD =
 const STRIP =
   "flex w-full items-center justify-between gap-2 border-b border-[rgba(60,40,80,0.3)] px-3 py-2 text-left text-[11px] font-medium hover:bg-white/[0.03] transition-colors";
 const TH = "px-3 py-1.5 text-left font-medium border-b border-[rgba(60,40,80,0.3)] whitespace-nowrap";
-const TH_CENTER =
-  "px-3 py-1.5 text-center font-medium border-b border-[rgba(60,40,80,0.3)] whitespace-nowrap";
 const TD = "px-3 py-2 align-middle";
-const TD_CENTER = "px-3 py-2 align-middle text-center";
 const ROW = "border-b border-[rgba(60,40,80,0.22)] hover:bg-[#1a1430]";
 
 const TONES = {
@@ -132,12 +124,10 @@ export const BranchPanel = memo(function BranchPanel({
   onDeleteChild,
   onRunShuffler,
   onRunSynthetic,
-  onToggleShufflerForValidation,
   onOpenShuffleInfo,
   onOpenShufflerParams,
   onOpenSyntheticInfo,
   onOpenSyntheticParams,
-  onToggleSyntheticForValidation,
 }) {
   const isDone = run.status === BT_RUN_STATUS.DONE;
 
@@ -149,9 +139,6 @@ export const BranchPanel = memo(function BranchPanel({
     () => (run.syntheticRuns || []).slice().sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))),
     [run.syntheticRuns],
   );
-
-  const compareCombo = useMemo(() => resolveCompareCombination(run), [run]);
-  const hasCompareLines = Boolean(compareCombo.shufflerRun || compareCombo.syntheticRun);
 
   return (
     <div className="pb-1">
@@ -198,7 +185,6 @@ export const BranchPanel = memo(function BranchPanel({
             parent={run}
             onOpenShuffleInfo={onOpenShuffleInfo}
             onOpenShufflerParams={onOpenShufflerParams}
-            onToggleShufflerForValidation={onToggleShufflerForValidation}
             onDeleteChild={onDeleteChild}
           />
         )}
@@ -233,26 +219,7 @@ export const BranchPanel = memo(function BranchPanel({
             parent={run}
             onOpenSyntheticInfo={onOpenSyntheticInfo}
             onOpenSyntheticParams={onOpenSyntheticParams}
-            onToggleSyntheticForValidation={onToggleSyntheticForValidation}
             onDeleteChild={onDeleteChild}
-          />
-        )}
-      </CollapsibleLevel>
-
-      <CollapsibleLevel
-        toneKey={BT_CHILD_TYPE.ANALYTICS}
-        title="Compare analytics"
-        count={hasCompareLines ? "3 lines" : "—"}
-      >
-        {!isDone ? (
-          <EmptyLevel>{BT_COPY.childrenLocked}</EmptyLevel>
-        ) : !run.result?.core ? (
-          <EmptyLevel>No backtest metrics yet.</EmptyLevel>
-        ) : (
-          <CompareAnalyticsMatrix
-            backtest={run}
-            shufflerRun={compareCombo.shufflerRun}
-            syntheticRun={compareCombo.syntheticRun}
           />
         )}
       </CollapsibleLevel>
@@ -300,7 +267,6 @@ function ShufflerTable({
   parent,
   onOpenShuffleInfo,
   onOpenShufflerParams,
-  onToggleShufflerForValidation,
   onDeleteChild,
 }) {
   const [expanded, setExpanded] = useState(() => new Set());
@@ -326,7 +292,6 @@ function ShufflerTable({
           <th className={TH}>Max DD mean</th>
           <th className={TH}>Status</th>
           <th className={TH}>Created</th>
-          <th className={TH_CENTER}>Compare</th>
           <th className={TH}>Actions</th>
         </tr>
       </thead>
@@ -334,7 +299,6 @@ function ShufflerTable({
         {runs.map((child) => {
           const childDone = child.status === BT_RUN_STATUS.DONE;
           const dynamic = child.config?.simulationMode === "dynamic";
-          const selected = Boolean(child.selectedForValidation);
           const isOpen = expanded.has(child.id);
           return (
             <React.Fragment key={child.id}>
@@ -416,36 +380,6 @@ function ShufflerTable({
                 <td className={cx(TD, "whitespace-nowrap tabular-nums text-[#b8aecc]")}>
                   {fmtDateTime(child.createdAt)}
                 </td>
-                <td className={TD_CENTER}>
-                  <div className="flex justify-center">
-                    <button
-                      type="button"
-                      disabled={!childDone}
-                      onClick={() => onToggleShufflerForValidation?.(parent, child)}
-                      title={
-                        !childDone
-                          ? "Run in progress"
-                          : selected
-                            ? "Unmark for Validation analytics"
-                            : "Mark for Validation analytics"
-                      }
-                      aria-label={
-                        selected ? "Unmark for Validation analytics" : "Mark for Validation analytics"
-                      }
-                      className={cx(
-                        "rounded p-0.5 hover:bg-white/5",
-                        !childDone && "cursor-not-allowed opacity-40",
-                      )}
-                    >
-                      <Star
-                        className={cx(
-                          "h-3.5 w-3.5",
-                          selected ? "fill-amber-300 text-amber-300" : "text-[#6e6682]",
-                        )}
-                      />
-                    </button>
-                  </div>
-                </td>
                 <td className={TD}>
                   <div className="inline-flex items-center gap-1">
                     <AppButton
@@ -475,7 +409,7 @@ function ShufflerTable({
               </tr>
               {isOpen && childDone ? (
                 <tr className="border-b border-[rgba(60,40,80,0.22)] bg-[#0d0818]">
-                  <td colSpan={10} className="px-3 py-2 align-top">
+                  <td colSpan={9} className="px-3 py-2 align-top">
                     <SyntheticCoreResultsPanel run={child} />
                   </td>
                 </tr>
@@ -493,7 +427,6 @@ function SyntheticTable({
   parent,
   onOpenSyntheticInfo,
   onOpenSyntheticParams,
-  onToggleSyntheticForValidation,
   onDeleteChild,
 }) {
   const cell = "px-3 py-2 align-middle";
@@ -514,21 +447,16 @@ function SyntheticTable({
         <tr>
           <th className={cx(TH, "w-8")} aria-label="Expand" />
           <th className={cx(TH, "w-12")}>ID</th>
-          <th className={TH}>Volatility level</th>
           <th className={TH}>Runs</th>
           <th className={TH}>Status</th>
           <th className={TH}>Created</th>
-          <th className={TH_CENTER}>Compare</th>
           <th className={TH}>Actions</th>
         </tr>
       </thead>
       <tbody className="text-[#d9d9d9]">
         {runs.map((child) => {
           const childDone = child.status === BT_RUN_STATUS.DONE;
-          const selected = Boolean(child.selectedForValidation);
           const isOpen = expanded.has(child.id);
-          const volatility =
-            BT_VOLATILITY_LEVELS.find((v) => v.value === child.config?.volatility)?.label ?? "—";
           const progressLabel =
             (child.progress?.generationPct ?? 0) < 100
               ? `Series generation ${Math.round(child.progress?.generationPct ?? 0)}%`
@@ -572,7 +500,6 @@ function SyntheticTable({
                     </AppButton>
                   </div>
                 </td>
-                <td className={cx(cell, "whitespace-nowrap text-[#b8aecc]")}>{volatility}</td>
                 <td className={cx(cell, "font-mono tabular-nums")}>{fmtInt(child.config?.nRuns)}</td>
                 <td className={cell}>
                   <BtStatusCell
@@ -590,38 +517,6 @@ function SyntheticTable({
                 </td>
                 <td className={cx(cell, "whitespace-nowrap tabular-nums text-[#b8aecc]")}>
                   {fmtDateTime(child.createdAt)}
-                </td>
-                <td className={cx(cell, "text-center")}>
-                  <div className="flex justify-center">
-                    <button
-                      type="button"
-                      disabled={!childDone}
-                      onClick={() => onToggleSyntheticForValidation?.(parent, child)}
-                      title={
-                        !childDone
-                          ? "Run in progress"
-                          : selected
-                            ? "Unmark for Validation analytics"
-                            : "Mark for Validation analytics"
-                      }
-                      aria-label={
-                        selected
-                          ? "Unmark for Validation analytics"
-                          : "Mark for Validation analytics"
-                      }
-                      className={cx(
-                        "rounded p-0.5 hover:bg-white/5",
-                        !childDone && "cursor-not-allowed opacity-40",
-                      )}
-                    >
-                      <Star
-                        className={cx(
-                          "h-3.5 w-3.5",
-                          selected ? "fill-amber-300 text-amber-300" : "text-[#6e6682]",
-                        )}
-                      />
-                    </button>
-                  </div>
                 </td>
                 <td className={cell}>
                   <div className="inline-flex items-center gap-1">
@@ -652,7 +547,7 @@ function SyntheticTable({
               </tr>
               {isOpen && childDone ? (
                 <tr className="border-b border-[rgba(60,40,80,0.22)] bg-[#0d0818]">
-                  <td colSpan={8} className="px-3 py-2 align-top">
+                  <td colSpan={6} className="px-3 py-2 align-top">
                     <SyntheticCoreResultsPanel run={child} />
                   </td>
                 </tr>

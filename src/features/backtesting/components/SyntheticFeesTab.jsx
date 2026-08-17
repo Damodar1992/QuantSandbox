@@ -2,31 +2,59 @@ import React, { memo, useEffect, useMemo, useState } from "react";
 import { ChevronDown, Eye } from "lucide-react";
 import { cx, ui } from "@/constants/ui";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { BT_FEES_TOOLTIPS } from "@/constants/backtesting";
 import { BT_MUTED, fmtInt } from "../utils/format";
 import { fmtMoneyUsdt } from "../utils/feesSettingsSummary";
 import { buildSyntheticFeesSummary } from "../utils/syntheticFeesSummary";
-import { BtHeaderWithHelp } from "./BtInfoTooltip";
+import { BtValueTooltip } from "./BtInfoTooltip";
 import { PercentileCell } from "./SyntheticCoreResultsPanel";
 
-const TH =
-  "px-2.5 py-1.5 text-[9px] font-medium uppercase tracking-wide border-b border-[rgba(60,40,80,0.35)] text-[#8c8c8c] whitespace-nowrap";
-const TD = "px-2.5 py-1.5 align-middle text-[11px] font-mono tabular-nums whitespace-nowrap";
-const TH_METRIC = cx(TH, "text-left min-w-[180px]");
-const TH_NUM = cx(TH, "text-right");
-const TH_PCT = cx(TH, "text-left min-w-[140px]");
-const TD_NUM = cx(TD, "text-right");
-const ROW = "border-b border-[rgba(60,40,80,0.18)] last:border-b-0";
+const CARD = cx(ui.radius, "border border-[rgba(60,40,80,0.35)] bg-[#120b20] overflow-hidden");
+const LABEL_DOTTED =
+  "underline decoration-dotted underline-offset-2 decoration-[#6e6682]";
+const STATS_BOX = "rounded-md border border-[rgba(60,40,80,0.28)] bg-[#161022] px-2 py-1.5";
+
+const FEES_LAYOUT = [
+  {
+    key: "fees",
+    title: "FEES FOR OPEN AND CLOSED ORDERS",
+    fullWidth: true,
+    rowPairs: [
+      ["openTaker", "closeTaker"],
+      ["openMaker", "closeMaker"],
+      ["totalOpen", "totalClose"],
+    ],
+  },
+];
+
+function indexRows(rows) {
+  const map = new Map();
+  for (const row of rows || []) {
+    if (!map.has(row.key)) map.set(row.key, row);
+  }
+  return map;
+}
+
+function MetricLabel({ label, tipKey }) {
+  const tip = tipKey ? BT_FEES_TOOLTIPS[tipKey] : null;
+  const tipObj = typeof tip === "string" ? { text: tip } : tip;
+  if (!tipObj?.text && !tipObj?.formula) return label;
+  return (
+    <BtValueTooltip text={tipObj.text} formula={tipObj.formula}>
+      <span className={LABEL_DOTTED}>{label}</span>
+    </BtValueTooltip>
+  );
+}
 
 function formatFee(value) {
   if (value == null) return null;
   return fmtMoneyUsdt(value);
-}
-
-function FeeValue({ value }) {
-  if (value == null) return <span className={BT_MUTED}>N/A</span>;
-  return <span className="text-[#d9d9d9]">{formatFee(value)}</span>;
 }
 
 function MetricsVisibilityControl({ rows, enabledKeys, onChange }) {
@@ -43,8 +71,6 @@ function MetricsVisibilityControl({ rows, enabledKeys, onChange }) {
     }
     onChange(next);
   };
-
-  const selectAll = () => onChange(new Set(rows.map((r) => r.key)));
 
   return (
     <Popover>
@@ -68,52 +94,182 @@ function MetricsVisibilityControl({ rows, enabledKeys, onChange }) {
         className="w-[280px] border-[rgba(60,40,80,0.45)] bg-[#170f29] p-1.5 shadow-[0_16px_40px_rgba(6,3,20,0.55)]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between gap-2 px-2 pb-1 pt-0.5">
-          <span className="text-[10px] uppercase tracking-wide text-[#6e6682]">Metrics</span>
-          <button
-            type="button"
-            onClick={selectAll}
-            className="rounded px-1.5 py-0.5 text-[10px] text-violet-300 hover:bg-[#1a1a1a]"
-          >
-            Select all
-          </button>
-        </div>
         <div className="flex max-h-64 flex-col gap-0.5 overflow-y-auto">
-          {rows.map((row) => {
-            const checked = enabledKeys.has(row.key);
-            return (
-              <label
-                key={row.key}
-                className={cx(
-                  "flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[11px] text-[#d9d9d9] hover:bg-[#1a1a1a]",
-                  checked && "bg-violet-500/10 text-violet-200",
-                )}
-              >
-                <Checkbox
-                  checked={checked}
-                  onCheckedChange={() => toggle(row.key)}
-                  className="size-3.5 border-[#505050]"
-                />
-                <span className="truncate">{row.label}</span>
-              </label>
-            );
-          })}
+          {rows.map((row) => (
+            <label
+              key={row.key}
+              className={cx(
+                "flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[11px] text-[#d9d9d9] hover:bg-[#1a1a1a]",
+                enabledKeys.has(row.key) && "bg-violet-500/10 text-violet-200",
+              )}
+            >
+              <Checkbox
+                checked={enabledKeys.has(row.key)}
+                onCheckedChange={() => toggle(row.key)}
+                className="size-3.5 border-[#505050]"
+              />
+              <span className="truncate">{row.label}</span>
+            </label>
+          ))}
         </div>
       </PopoverContent>
     </Popover>
   );
 }
 
-/** Synthetic info → Fees (Original / Percentile / Min / Median / Mean / Max). */
-export const SyntheticFeesTab = memo(function SyntheticFeesTab({ run, parentRun }) {
-  const fees = useMemo(() => buildSyntheticFeesSummary(run, parentRun), [run, parentRun]);
-  const allKeys = useMemo(() => (fees?.rows || []).map((r) => r.key), [fees]);
-  const [open, setOpen] = useState(true);
+function formatStatFee(value) {
+  if (value == null) return "N/A";
+  return formatFee(value);
+}
+
+function FeeMetricBlock({ row, nRuns, paired = false }) {
+  const hasOriginal = row.original != null;
+
+  return (
+    <div
+      className={cx(
+        "px-3 py-2.5",
+        paired ? "min-w-0" : "border-b border-[rgba(60,40,80,0.18)] last:border-b-0",
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 text-[11px] font-medium text-[#faf7fd]">
+          <MetricLabel label={row.label} tipKey={row.tipKey} />
+        </div>
+        <div className="shrink-0 text-right font-mono text-[13px] font-semibold tabular-nums leading-tight text-[#d9d9d9]">
+          {hasOriginal ? formatFee(row.original) : <span className={BT_MUTED}>N/A</span>}
+        </div>
+      </div>
+
+      <div className="mt-2 flex items-center justify-between gap-3">
+        <span className={cx("text-[9px] font-medium uppercase tracking-wide", ui.textSubtle)}>
+          Original vs {fmtInt(nRuns)} runs
+        </span>
+        {row.percentile != null ? (
+          <div className="min-w-[120px] shrink-0">
+            <PercentileCell value={row.percentile} />
+          </div>
+        ) : (
+          <span className={cx("text-[10px]", BT_MUTED)}>N/A</span>
+        )}
+      </div>
+
+      <div
+        className={cx(
+          STATS_BOX,
+          "mt-2 flex divide-x divide-[rgba(60,40,80,0.45)] text-center",
+        )}
+      >
+        {[
+          { label: "Min", field: "min" },
+          { label: "Median", field: "median" },
+          { label: "Mean", field: "mean" },
+          { label: "Max", field: "max" },
+        ].map(({ label, field }) => (
+          <div key={field} className="min-w-0 flex-1 px-2 first:pl-0 last:pr-0">
+            <div className={cx("text-[9px] font-medium uppercase tracking-wide", ui.textSubtle)}>
+              {label}
+            </div>
+            <div className="mt-0.5 font-mono text-[11px] tabular-nums text-[#d9d9d9]">
+              {formatStatFee(row[field])}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FeesCard({ card, rowsByKey, nRuns, subtitle }) {
+  const flatKeys = useMemo(() => card.rowPairs.flat(), [card.rowPairs]);
+  const rows = useMemo(
+    () => flatKeys.map((key) => rowsByKey.get(key)).filter(Boolean),
+    [flatKeys, rowsByKey],
+  );
+  const allKeys = useMemo(() => rows.map((r) => r.key), [rows]);
+  const [open, setOpen] = useState(card.defaultOpen !== false);
   const [enabledKeys, setEnabledKeys] = useState(() => new Set(allKeys));
 
   useEffect(() => {
     setEnabledKeys(new Set(allKeys));
   }, [allKeys]);
+
+  const visibleMetricRows = useMemo(
+    () =>
+      card.rowPairs
+        .map((keys) =>
+          keys
+            .map((key) => rowsByKey.get(key))
+            .filter((row) => row && enabledKeys.has(row.key)),
+        )
+        .filter((rowGroup) => rowGroup.length),
+    [card.rowPairs, rowsByKey, enabledKeys],
+  );
+
+  if (!rows.length) return null;
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className={CARD}>
+      <CollapsibleTrigger
+        type="button"
+        className="flex w-full items-center justify-between gap-2 border-b border-[rgba(60,40,80,0.3)] bg-[#161022] px-3 py-2 text-left hover:bg-white/[0.03]"
+      >
+        <span className="inline-flex min-w-0 items-center gap-2">
+          <ChevronDown
+            className={cx(
+              "h-3.5 w-3.5 shrink-0 text-[#8c8c8c] transition-transform",
+              open && "rotate-180",
+            )}
+          />
+          <span className="min-w-0">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-200">
+              {card.title}
+            </span>
+            {subtitle ? (
+              <span className={cx("mt-0.5 block text-[10px] font-normal normal-case", ui.textSubtle)}>
+                {subtitle}
+              </span>
+            ) : null}
+          </span>
+        </span>
+        <div className="inline-flex shrink-0 items-center gap-2" onClick={(e) => e.stopPropagation()}>
+          <span className={cx("text-[9px] uppercase tracking-wide", ui.textSubtle)}>
+            {enabledKeys.size}/{rows.length}
+          </span>
+          <MetricsVisibilityControl rows={rows} enabledKeys={enabledKeys} onChange={setEnabledKeys} />
+        </div>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        {visibleMetricRows.length ? (
+          visibleMetricRows.map((rowGroup) => (
+            <div
+              key={rowGroup.map((row) => row.key).join("-")}
+              className="grid grid-cols-1 divide-y divide-[rgba(60,40,80,0.18)] border-b border-[rgba(60,40,80,0.18)] last:border-b-0 xl:grid-cols-2 xl:divide-x xl:divide-y-0"
+            >
+              {rowGroup.map((row) => (
+                <FeeMetricBlock
+                  key={row.key}
+                  row={row}
+                  nRuns={nRuns}
+                  paired={rowGroup.length > 1}
+                />
+              ))}
+            </div>
+          ))
+        ) : (
+          <div className={cx("px-3 py-4 text-center text-[11px]", ui.textSubtle)}>No metrics selected</div>
+        )}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+/** Synthetic info → Fees (card layout with distribution stats). */
+export const SyntheticFeesTab = memo(function SyntheticFeesTab({ run, parentRun }) {
+  const fees = useMemo(() => buildSyntheticFeesSummary(run, parentRun), [run, parentRun]);
+
+  const rowsByKey = useMemo(() => indexRows(fees?.rows), [fees?.rows]);
+  const nRuns = Number(run?.config?.nRuns) || Number(run?.result?.nValid) || 1000;
 
   if (!fees?.rows?.length) {
     return (
@@ -123,128 +279,27 @@ export const SyntheticFeesTab = memo(function SyntheticFeesTab({ run, parentRun 
     );
   }
 
-  const visibleRows = fees.rows.filter((r) => enabledKeys.has(r.key));
-
   return (
-    <div className="space-y-3">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 text-left"
-      >
-        <ChevronDown
-          className={cx(
-            "h-3.5 w-3.5 shrink-0 text-[#8c8c8c] transition-transform",
-            open && "rotate-180",
-          )}
-        />
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-wide text-[#d9d9d9]">
-            {fees.title}
+            Fees summary
           </div>
-          <div className={cx("text-[10px]", ui.textSubtle)}>
-            {fmtInt(fees.rows.length)} metrics
-          </div>
-        </div>
-      </button>
-
-      {open ? (
-        <div className={cx(ui.radius, "overflow-hidden border border-[rgba(60,40,80,0.35)] bg-[#120b20]")}>
-          <div className="flex items-start justify-between gap-3 border-b border-[rgba(60,40,80,0.3)] bg-[#161022] px-3 py-2">
-            <div className="min-w-0">
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-[#9b8ec4]">
-                Fees for open and closed orders
-              </div>
-              {fees.subtitle ? (
-                <div className={cx("mt-0.5 text-[10px] leading-snug", ui.textSubtle)}>
-                  {fees.subtitle}
-                </div>
-              ) : null}
-            </div>
-            <div className="inline-flex shrink-0 items-center gap-2">
-              <span className={cx("text-[10px] uppercase tracking-wide", ui.textSubtle)}>
-                {enabledKeys.size} metrics
-              </span>
-              <MetricsVisibilityControl
-                rows={fees.rows.map((r) => ({ key: r.key, label: r.label }))}
-                enabledKeys={enabledKeys}
-                onChange={setEnabledKeys}
-              />
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full table-fixed border-collapse">
-              <colgroup>
-                <col className="w-[22%]" />
-                <col className="w-[14%]" />
-                <col className="w-[18%]" />
-                <col className="w-[11.5%]" />
-                <col className="w-[11.5%]" />
-                <col className="w-[11.5%]" />
-                <col className="w-[11.5%]" />
-              </colgroup>
-              <thead>
-                <tr>
-                  <th className={TH_METRIC}>Metric</th>
-                  <th className={cx(TH_NUM, "bg-sky-950/50 text-sky-200/90")}>Original</th>
-                  <th className={TH_PCT}>Percentile</th>
-                  <th className={TH_NUM}>Min</th>
-                  <th className={TH_NUM}>Median</th>
-                  <th className={TH_NUM}>Mean</th>
-                  <th className={TH_NUM}>Max</th>
-                </tr>
-              </thead>
-              <tbody className="text-[#d9d9d9]">
-                {visibleRows.map((row) => (
-                  <tr key={row.key} className={ROW}>
-                    <td className="px-2.5 py-1.5 text-left text-[11px] font-medium text-[#faf7fd]">
-                      {row.tipKey && BT_FEES_TOOLTIPS[row.tipKey] ? (
-                        <BtHeaderWithHelp label={row.label} tip={BT_FEES_TOOLTIPS[row.tipKey]}>
-                          <span className="border-b border-dotted border-[#8c8c8c]/60">
-                            {row.label}
-                          </span>
-                        </BtHeaderWithHelp>
-                      ) : (
-                        row.label
-                      )}
-                    </td>
-                    <td className={cx(TD_NUM, "bg-sky-950/35")}>
-                      <FeeValue value={row.original} />
-                    </td>
-                    <td className={TD}>
-                      {row.na || row.percentile == null ? (
-                        <span className={BT_MUTED}>n/a</span>
-                      ) : (
-                        <PercentileCell value={row.percentile} />
-                      )}
-                    </td>
-                    <td className={TD_NUM}>
-                      <FeeValue value={row.min} />
-                    </td>
-                    <td className={TD_NUM}>
-                      <FeeValue value={row.median} />
-                    </td>
-                    <td className={TD_NUM}>
-                      <FeeValue value={row.mean} />
-                    </td>
-                    <td className={TD_NUM}>
-                      <FeeValue value={row.max} />
-                    </td>
-                  </tr>
-                ))}
-                {!visibleRows.length ? (
-                  <tr>
-                    <td colSpan={7} className={cx("px-3 py-4 text-center text-[11px]", ui.textSubtle)}>
-                      No metrics selected
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
+          <div className={cx("mt-0.5 text-[10px]", ui.textSubtle)}>
+            Entry and exit costs split by order type.
           </div>
         </div>
-      ) : null}
+        <div className={cx("text-[10px] text-right", ui.textSubtle)}>
+          Min, Median, Mean and Max are computed across {fmtInt(nRuns)} runs.
+        </div>
+      </div>
+
+      {FEES_LAYOUT.map((card) => (
+        <div key={card.key} className={card.fullWidth ? "xl:col-span-2" : undefined}>
+          <FeesCard card={card} rowsByKey={rowsByKey} nRuns={nRuns} subtitle={fees.subtitle} />
+        </div>
+      ))}
     </div>
   );
 });

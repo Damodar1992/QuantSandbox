@@ -28,7 +28,7 @@ export const ShuffleInfoModal = memo(function ShuffleInfoModal({ open, run, onCl
       <div className="mb-4 flex shrink-0 flex-wrap justify-start gap-2 border-b border-[rgba(60,40,80,0.35)] pb-3">
         {[
           { value: "charts", label: "Charts" },
-          { value: "sections", label: "Summary by section" },
+          { value: "sections", label: "Summary" },
         ].map((item) => (
           <button
             key={item.value}

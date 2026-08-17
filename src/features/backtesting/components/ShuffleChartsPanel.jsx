@@ -34,6 +34,11 @@ function fmtPct(v) {
   return `${Number(v).toFixed(2)}%`;
 }
 
+function fmtPctLegend(v) {
+  if (v == null || Number.isNaN(Number(v))) return "—";
+  return `${Number(v).toFixed(2)} %`;
+}
+
 function SectionFilter({ value, onChange, available }) {
   const options = SHUFFLE_CHART_FILTERS.filter(
     (f) => f.id === "ALL" || available.includes(f.id),
@@ -76,15 +81,43 @@ function ChartCard({ title, filter, onFilter, available, extra, children }) {
   );
 }
 
-function LegendItem({ color, label, dashed }) {
+function LegendItem({ color, label, dashed, dot }) {
   return (
     <span className="inline-flex items-center gap-1.5 text-[10px] text-[#b8aecc]">
-      <span
-        className={cx("inline-block h-0.5 w-3 rounded", dashed && "border-t border-dashed bg-transparent")}
-        style={dashed ? { borderColor: color, height: 0, width: 12 } : { background: color }}
-      />
+      {dot ? (
+        <span
+          className="inline-block h-2 w-2 shrink-0 rounded-full"
+          style={{ background: color || "#93c5fd" }}
+        />
+      ) : (
+        <span
+          className={cx("inline-block h-0.5 w-3 rounded", dashed && "border-t border-dashed bg-transparent")}
+          style={dashed ? { borderColor: color, height: 0, width: 12 } : { background: color }}
+        />
+      )}
       {label}
     </span>
+  );
+}
+
+const BALANCE_LEGEND_SECTIONS = [
+  { key: "random", label: "Shuffle" },
+  { key: "L2", label: "L2" },
+  { key: "L3", label: "L3" },
+  { key: "L4", label: "L4" },
+];
+
+function meanSectionFinals(series) {
+  const buckets = {};
+  for (const s of series) {
+    if (!buckets[s.section]) buckets[s.section] = [];
+    buckets[s.section].push(s.final);
+  }
+  return Object.fromEntries(
+    Object.entries(buckets).map(([key, finals]) => [
+      key,
+      finals.reduce((sum, v) => sum + v, 0) / finals.length,
+    ]),
   );
 }
 
@@ -104,12 +137,19 @@ function BalanceChart({ model, filter }) {
 
   const finalX = model.original.balance[model.original.balance.length - 1]?.x;
   const finalY = model.original.final;
+  const startY = model.start;
+  const sectionFinals = useMemo(() => meanSectionFinals(model.series), [model.series]);
+
+  const legendSections = useMemo(
+    () => BALANCE_LEGEND_SECTIONS.filter(({ key }) => model.sectionKeys.includes(key)),
+    [model.sectionKeys],
+  );
 
   return (
     <div className="w-full">
       <div className="h-[248px] w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 12, right: 72, left: 4, bottom: 4 }}>
+          <LineChart data={data} margin={{ top: 12, right: 72, left: 56, bottom: 4 }}>
             <CartesianGrid stroke="rgba(60,40,80,0.35)" strokeDasharray="3 3" vertical={false} />
             <XAxis
               dataKey="x"
@@ -159,6 +199,21 @@ function BalanceChart({ model, filter }) {
               isAnimationActive={false}
             />
             <ReferenceDot
+              x={0}
+              y={startY}
+              r={3}
+              fill="#93c5fd"
+              stroke="#bfdbfe"
+              strokeWidth={1}
+              label={{
+                value: `Start ${fmtMoney(startY)}`,
+                position: "left",
+                fill: "#93c5fd",
+                fontSize: 10,
+                offset: 8,
+              }}
+            />
+            <ReferenceDot
               x={finalX}
               y={finalY}
               r={0}
@@ -174,11 +229,18 @@ function BalanceChart({ model, filter }) {
         </ResponsiveContainer>
       </div>
       <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 px-1">
-        <LegendItem color={SHUFFLE_CHART_COLORS.original} label="Original" />
-        <LegendItem color={SHUFFLE_CHART_COLORS.random} label="Shuffle" />
-        <LegendItem color={SHUFFLE_CHART_COLORS.L2} label="L2" />
-        <LegendItem color={SHUFFLE_CHART_COLORS.L3} label="L3" />
-        <LegendItem color={SHUFFLE_CHART_COLORS.L4} label="L4" />
+        <LegendItem dot color="#93c5fd" label={`Start ${fmtMoney(startY)}`} />
+        <LegendItem
+          color={SHUFFLE_CHART_COLORS.original}
+          label={`Original · end ${fmtMoney(finalY)}`}
+        />
+        {legendSections.map(({ key, label }) => (
+          <LegendItem
+            key={key}
+            color={SHUFFLE_CHART_COLORS[key] || SHUFFLE_CHART_COLORS.random}
+            label={`${label} · end ${fmtMoney(sectionFinals[key])}`}
+          />
+        ))}
       </div>
     </div>
   );
@@ -199,6 +261,10 @@ function DrawdownChart({ model, filter }) {
   );
 
   const maxPt = model.original.maxDdPoint;
+  const legendSections = useMemo(
+    () => BALANCE_LEGEND_SECTIONS.filter(({ key }) => model.sectionKeys.includes(key)),
+    [model.sectionKeys],
+  );
 
   return (
     <div className="w-full">
@@ -260,7 +326,7 @@ function DrawdownChart({ model, filter }) {
               stroke="#fecaca"
               strokeWidth={1}
               label={{
-                value: `MAX ${fmtPct(model.original.maxDd)}`,
+                value: `MAX ${fmtPctLegend(model.original.maxDd)}`,
                 position: "top",
                 fill: "#fca5a5",
                 fontSize: 10,
@@ -273,12 +339,15 @@ function DrawdownChart({ model, filter }) {
       <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 px-1">
         <LegendItem
           color={SHUFFLE_CHART_COLORS.original}
-          label={`Original · max ${fmtPct(model.original.maxDd)}`}
+          label={`Original · max ${fmtPctLegend(model.original.maxDd)}`}
         />
-        <LegendItem color={SHUFFLE_CHART_COLORS.random} label="Shuffle" />
-        <LegendItem color={SHUFFLE_CHART_COLORS.L2} label="L2" />
-        <LegendItem color={SHUFFLE_CHART_COLORS.L3} label="L3" />
-        <LegendItem color={SHUFFLE_CHART_COLORS.L4} label="L4" />
+        {legendSections.map(({ key, label }) => (
+          <LegendItem
+            key={key}
+            color={SHUFFLE_CHART_COLORS[key] || SHUFFLE_CHART_COLORS.random}
+            label={`${label} · max ${fmtPctLegend(model.sectionMaxDd?.[key])}`}
+          />
+        ))}
       </div>
     </div>
   );

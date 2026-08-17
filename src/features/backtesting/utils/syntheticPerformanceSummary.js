@@ -105,6 +105,13 @@ function distAround(rnd, original, { decimals = 2, invert = false } = {}) {
   return { mean, median, min, max, percentile };
 }
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function formatOrdinalDate({ day, month, year }) {
+  const monthName = MONTHS[Math.max(0, Math.min(11, month - 1))];
+  return `${Math.max(1, Math.round(day))} ${monthName} ${Math.round(year)}`;
+}
+
 /** Parse formatted performance cell strings into a typed payload we can jitter. */
 function parseMetricText(raw) {
   const text = String(raw ?? "").trim();
@@ -130,6 +137,16 @@ function parseMetricText(raw) {
     };
   }
 
+  // "-2.64 / -2,314.07 USDT" drawdown high | low
+  m = text.match(/^([+-]?[\d,]+(?:\.\d+)?)\s*\/\s*([+-]?[\d,]+(?:\.\d+)?)\s*USDT$/i);
+  if (m) {
+    return {
+      kind: "moneyPair",
+      a: Number(m[1].replace(/,/g, "")),
+      b: Number(m[2].replace(/,/g, "")),
+    };
+  }
+
   // "1,234.56 / 789.00" (drawdown high|low balances)
   m = text.match(/^([\d,]+(?:\.\d+)?)\s*\/\s*([\d,]+(?:\.\d+)?)$/);
   if (m) {
@@ -151,6 +168,15 @@ function parseMetricText(raw) {
     };
   }
 
+  // "120 / —" long count when short is off
+  m = text.match(/^([\d,]+)\s*\/\s*—$/);
+  if (m) {
+    return {
+      kind: "countSingle",
+      a: Number(m[1].replace(/,/g, "")),
+    };
+  }
+
   // "800 / 625" long/short counts
   m = text.match(/^([\d,]+)\s*\/\s*([\d,]+)$/);
   if (m) {
@@ -159,6 +185,37 @@ function parseMetricText(raw) {
       a: Number(m[1].replace(/,/g, "")),
       b: Number(m[2].replace(/,/g, "")),
     };
+  }
+
+  // "11 trades" / "2.58 trades"
+  m = text.match(/^([\d,]+(?:\.\d+)?)\s+trades$/i);
+  if (m) {
+    const rawCount = m[1].replace(/,/g, "");
+    return {
+      kind: "tradeCount",
+      count: Number(rawCount),
+      decimals: rawCount.includes(".") ? 2 : 0,
+    };
+  }
+
+  // "49 min"
+  m = text.match(/^([\d,]+(?:\.\d+)?)\s+min$/i);
+  if (m) {
+    return { kind: "durationMin", min: Number(m[1].replace(/,/g, "")) };
+  }
+
+  // "5 Mar 2022"
+  m = text.match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})$/);
+  if (m) {
+    const monthIdx = MONTHS.findIndex((name) => name.toLowerCase() === m[2].toLowerCase());
+    if (monthIdx >= 0) {
+      return {
+        kind: "ordinalDate",
+        day: Number(m[1]),
+        month: monthIdx + 1,
+        year: Number(m[3]),
+      };
+    }
   }
 
   // "0 days 00:12:30"
@@ -188,6 +245,16 @@ function parseMetricText(raw) {
   m = text.match(/^([+-]?[\d,]+(?:\.\d+)?)\s*USDT$/i);
   if (m) return { kind: "money", money: Number(m[1].replace(/,/g, "")) };
 
+  // "-0.70 (-0.48)" expectancy primary + alt
+  m = text.match(/^([+-]?[\d,]+(?:\.\d+)?)\s*\(([+-]?[\d,]+(?:\.\d+)?)\)$/);
+  if (m) {
+    return {
+      kind: "numParen",
+      a: Number(m[1].replace(/,/g, "")),
+      b: Number(m[2].replace(/,/g, "")),
+    };
+  }
+
   // bare number
   m = text.match(/^([+-]?[\d,]+(?:\.\d+)?)$/);
   if (m) return { kind: "num", value: Number(m[1].replace(/,/g, "")) };
@@ -211,8 +278,29 @@ function formatParsed(parsed) {
   if (parsed.kind === "pctMoney") {
     return `${signedPct(parsed.pct)} / ${signedMoney(parsed.money)} USDT`;
   }
+  if (parsed.kind === "moneyPair") {
+    return `${signedMoney(parsed.a)} / ${signedMoney(parsed.b)} USDT`;
+  }
   if (parsed.kind === "numPair") {
     return `${fmtNumLocal(parsed.a)} / ${fmtNumLocal(parsed.b)}`;
+  }
+  if (parsed.kind === "numParen") {
+    return `${fmtNumLocal(parsed.a)} (${fmtNumLocal(parsed.b)})`;
+  }
+  if (parsed.kind === "tradeCount") {
+    const value = round(parsed.count, parsed.decimals ?? 0);
+    return parsed.decimals > 0
+      ? `${fmtNumLocal(value, parsed.decimals)} trades`
+      : `${Math.round(value).toLocaleString("en-US")} trades`;
+  }
+  if (parsed.kind === "durationMin") {
+    return `${Math.max(0, Math.round(parsed.min))} min`;
+  }
+  if (parsed.kind === "ordinalDate") {
+    return formatOrdinalDate(parsed);
+  }
+  if (parsed.kind === "countSingle") {
+    return `${Math.round(parsed.a).toLocaleString("en-US")} / —`;
   }
   if (parsed.kind === "countPair") {
     return `${Math.round(parsed.a).toLocaleString("en-US")} / ${Math.round(parsed.b).toLocaleString("en-US")}`;
@@ -307,6 +395,112 @@ function expandParsed(rnd, parsed) {
     };
   }
 
+  if (parsed.kind === "durationMin") {
+    const mean = Math.max(1, Math.round(distNumber(rnd, parsed.min, 0)));
+    const median = Math.max(1, Math.round(distNumber(rnd, mean, 0)));
+    const a = Math.max(1, Math.round(distNumber(rnd, parsed.min, 0)));
+    const b = Math.max(1, Math.round(distNumber(rnd, parsed.min, 0)));
+    return {
+      mean: { kind: "durationMin", min: mean },
+      median: { kind: "durationMin", min: median },
+      min: { kind: "durationMin", min: Math.min(a, b, mean, parsed.min) },
+      max: { kind: "durationMin", min: Math.max(a, b, mean, parsed.min) },
+      percentile: pctile(),
+    };
+  }
+
+  if (parsed.kind === "tradeCount") {
+    const decimals = parsed.decimals ?? 0;
+    const mean = distNumber(rnd, parsed.count, decimals);
+    const median = distNumber(rnd, mean, decimals);
+    const a = distNumber(rnd, parsed.count, decimals);
+    const b = distNumber(rnd, parsed.count, decimals);
+    const lo = decimals > 0
+      ? Math.min(a, b, mean, parsed.count)
+      : Math.max(1, Math.round(Math.min(a, b, mean, parsed.count)));
+    const hi = decimals > 0
+      ? Math.max(a, b, mean, parsed.count)
+      : Math.max(1, Math.round(Math.max(a, b, mean, parsed.count)));
+    return {
+      mean: { kind: "tradeCount", count: mean, decimals },
+      median: { kind: "tradeCount", count: median, decimals },
+      min: { kind: "tradeCount", count: lo, decimals },
+      max: { kind: "tradeCount", count: hi, decimals },
+      percentile: pctile(),
+    };
+  }
+
+  if (parsed.kind === "ordinalDate") {
+    const jitterDay = (day) => Math.max(1, Math.min(28, Math.round(day * between(rnd, 0.85, 1.15))));
+    const jitterYear = (year) => Math.max(1970, year + Math.round(between(rnd, -1, 1)));
+    const mean = {
+      kind: "ordinalDate",
+      day: jitterDay(parsed.day),
+      month: parsed.month,
+      year: jitterYear(parsed.year),
+    };
+    const median = {
+      kind: "ordinalDate",
+      day: jitterDay(mean.day),
+      month: parsed.month,
+      year: jitterYear(parsed.year),
+    };
+    const min = {
+      kind: "ordinalDate",
+      day: Math.min(jitterDay(parsed.day), mean.day, parsed.day),
+      month: parsed.month,
+      year: Math.min(jitterYear(parsed.year), parsed.year),
+    };
+    const max = {
+      kind: "ordinalDate",
+      day: Math.max(jitterDay(parsed.day), mean.day, parsed.day),
+      month: parsed.month,
+      year: Math.max(jitterYear(parsed.year), parsed.year),
+    };
+    return { mean, median, min, max, percentile: pctile() };
+  }
+
+  if (parsed.kind === "moneyPair") {
+    const meanA = distNumber(rnd, parsed.a);
+    const meanB = distNumber(rnd, parsed.b);
+    const medA = distNumber(rnd, meanA);
+    const medB = distNumber(rnd, meanB);
+    const a1 = distNumber(rnd, parsed.a);
+    const a2 = distNumber(rnd, parsed.a);
+    const b1 = distNumber(rnd, parsed.b);
+    const b2 = distNumber(rnd, parsed.b);
+    return {
+      mean: { kind: "moneyPair", a: meanA, b: meanB },
+      median: { kind: "moneyPair", a: medA, b: medB },
+      min: {
+        kind: "moneyPair",
+        a: Math.min(a1, a2, meanA, parsed.a),
+        b: Math.min(b1, b2, meanB, parsed.b),
+      },
+      max: {
+        kind: "moneyPair",
+        a: Math.max(a1, a2, meanA, parsed.a),
+        b: Math.max(b1, b2, meanB, parsed.b),
+      },
+      percentile: pctile(),
+    };
+  }
+
+  if (parsed.kind === "countSingle") {
+    const jitter = (v) => Math.max(0, Math.round(Number(v) * between(rnd, 0.85, 1.15)));
+    const mean = jitter(parsed.a);
+    const median = jitter(mean);
+    const a1 = jitter(parsed.a);
+    const a2 = jitter(parsed.a);
+    return {
+      mean: { kind: "countSingle", a: mean },
+      median: { kind: "countSingle", a: median },
+      min: { kind: "countSingle", a: Math.min(a1, a2, mean, parsed.a) },
+      max: { kind: "countSingle", a: Math.max(a1, a2, mean, parsed.a) },
+      percentile: pctile(),
+    };
+  }
+
   if (parsed.kind === "pctPair") {
     const meanA = distNumber(rnd, parsed.a);
     const meanB = round(100 - meanA, 2);
@@ -370,6 +564,32 @@ function expandParsed(rnd, parsed) {
       },
       max: {
         kind: "numPair",
+        a: Math.max(a1, a2, meanA, parsed.a),
+        b: Math.max(b1, b2, meanB, parsed.b),
+      },
+      percentile: pctile(),
+    };
+  }
+
+  if (parsed.kind === "numParen") {
+    const meanA = distNumber(rnd, parsed.a);
+    const meanB = distNumber(rnd, parsed.b);
+    const medA = distNumber(rnd, meanA);
+    const medB = distNumber(rnd, meanB);
+    const a1 = distNumber(rnd, parsed.a);
+    const a2 = distNumber(rnd, parsed.a);
+    const b1 = distNumber(rnd, parsed.b);
+    const b2 = distNumber(rnd, parsed.b);
+    return {
+      mean: { kind: "numParen", a: meanA, b: meanB },
+      median: { kind: "numParen", a: medA, b: medB },
+      min: {
+        kind: "numParen",
+        a: Math.min(a1, a2, meanA, parsed.a),
+        b: Math.min(b1, b2, meanB, parsed.b),
+      },
+      max: {
+        kind: "numParen",
         a: Math.max(a1, a2, meanA, parsed.a),
         b: Math.max(b1, b2, meanB, parsed.b),
       },
@@ -446,6 +666,7 @@ function expandTextMetric(row, original, rnd) {
     label: row.label,
     tone: row.tone || "neutral-text",
     unit: row.unit,
+    sub: row.sub ?? null,
     original: textOnly ? String(original ?? "—") : formatParsed(parsed),
     percentile: textOnly ? null : stats.percentile,
     min: textOnly ? null : formatParsed(stats.min),
@@ -477,6 +698,7 @@ function expandRow(row, rnd) {
     label: row.label,
     tone,
     unit: row.unit,
+    sub: row.sub ?? null,
     original: Number(original),
     ...stats,
     textOnly: false,
@@ -495,6 +717,7 @@ function expandCardRow(row, rnd) {
     label: row.label,
     tone,
     unit: row.suffix === "%" ? null : row.unit,
+    sub: row.sub ?? null,
     original: Number(row.value),
     ...stats,
     textOnly: false,
@@ -575,21 +798,20 @@ export function buildSyntheticPerformanceSummary(run, parent) {
 
   const rowRnd = mulberry32(strHash(`sy-perf-rows|${run?.id || "demo"}`));
 
-  const sections = (base.sections || []).map((section) => ({
-    key: section.key,
-    title: section.title,
-    hint: section.hint,
-    rows: (section.rows || []).map((row) => expandRow(row, rowRnd)),
-  }));
+  const rowDefs = base.syntheticRows?.length ? base.syntheticRows : base.sections.flatMap((s) => s.rows || []);
 
-  (base.cards || []).forEach((card) => {
-    sections.push({
-      key: `card-${card.key}`,
-      title: card.title,
-      hint: null,
-      rows: (card.rows || []).map((row) => expandCardRow(row, rowRnd)),
-    });
-  });
+  const sections = [
+    {
+      key: "synthetic-performance",
+      title: "PERFORMANCE SUMMARY",
+      hint: "Distribution stats over synthetic runs.",
+      rows: rowDefs.map((row) => expandRow(row, rowRnd)),
+    },
+  ];
 
-  return { sections, pairLabel: base.pairLabel };
+  return {
+    sections,
+    pairLabel: base.pairLabel,
+    nRuns: Number(run?.config?.nRuns) || 1000,
+  };
 }

@@ -1,54 +1,83 @@
-import React, { memo, useEffect, useMemo, useState } from "react";
+import React, { memo } from "react";
 import { cx, ui } from "@/constants/ui";
 import { AppButton } from "@/components/common/AppButton";
 import { AppDialog } from "@/components/common/AppDialog";
-import { AppSelect } from "@/components/common/AppSelect";
 import {
   BT_SYNTHETIC_N_DEFAULT,
-  BT_SYNTHETIC_N_PRESETS,
-  BT_VOLATILITY_DEFAULT,
-  BT_VOLATILITY_LEVELS,
+  BT_SYNTHETIC_VOLATILITY_SPLIT,
 } from "@/constants/backtesting";
-import { BT_FORM_CONTROL } from "./formControl";
+import { fmtInt } from "../../utils/format";
+
+/**
+ * Bar = proportional share. Legend = equal columns so L3/L4 stay readable
+ * (aligning long labels to 10%/5% bar slices breaks on real modal widths).
+ */
+function SyntheticRunsFixedPanel() {
+  return (
+    <div className={cx(ui.radius, "border border-[rgba(60,40,80,0.35)] bg-[#120b20] p-4")}>
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-[#d9d9d9]">
+        Synthetic runs – {fmtInt(BT_SYNTHETIC_N_DEFAULT)} · Fixed
+      </div>
+      <p className={cx("mt-1 text-[10px] leading-relaxed", ui.textSubtle)}>
+        Every synthetic run always generates {fmtInt(BT_SYNTHETIC_N_DEFAULT)} datasets, split across
+        volatility levels by a fixed share
+      </p>
+
+      <div
+        className="mt-4 flex h-2.5 overflow-hidden rounded-full bg-[#1a1228]"
+        role="img"
+        aria-label="Fixed volatility split: L0 40%, L1 25%, L2 20%, L3 10%, L4 5%"
+      >
+        {BT_SYNTHETIC_VOLATILITY_SPLIT.map((level) => (
+          <div
+            key={level.key}
+            className="h-full first:rounded-l-full last:rounded-r-full"
+            style={{ width: `${level.pct}%`, backgroundColor: level.color }}
+            title={`${level.label} – ${fmtInt(level.runs)} runs · ${level.pct} %`}
+          />
+        ))}
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+        {BT_SYNTHETIC_VOLATILITY_SPLIT.map((level) => (
+          <div
+            key={level.key}
+            className="min-w-0 overflow-hidden rounded-md border border-[rgba(60,40,80,0.28)] bg-[#161022]/80"
+            style={{ boxShadow: `inset 0 2px 0 0 ${level.color}` }}
+          >
+            <div className="px-2 py-1.5">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <span
+                  className="h-2 w-2 shrink-0 rounded-full"
+                  style={{ backgroundColor: level.color }}
+                  aria-hidden
+                />
+                <span className="truncate text-[10px] font-medium text-[#faf7fd]">{level.label}</span>
+              </div>
+              <div className="mt-1.5 font-mono text-[10px] leading-tight tabular-nums text-[#b8aecc]">
+                {fmtInt(level.runs)} runs · {level.pct} %
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export const RunSyntheticModal = memo(function RunSyntheticModal({
   open,
-  parentRun,
-  snapshotRun = null,
   readOnly = false,
   onClose,
   onSubmit,
 }) {
-  const [volatility, setVolatility] = useState(BT_VOLATILITY_DEFAULT);
-  const [nRuns, setNRuns] = useState(String(BT_SYNTHETIC_N_DEFAULT));
-
-  const nOptions = useMemo(
-    () => BT_SYNTHETIC_N_PRESETS.map((n) => ({ value: String(n), label: String(n) })),
-    [],
-  );
-
-  useEffect(() => {
-    if (!open) return;
-    if (readOnly && snapshotRun?.config) {
-      const cfg = snapshotRun.config;
-      setVolatility(cfg.volatility || BT_VOLATILITY_DEFAULT);
-      setNRuns(String(cfg.nRuns ?? BT_SYNTHETIC_N_DEFAULT));
-      return;
-    }
-    setVolatility(BT_VOLATILITY_DEFAULT);
-    setNRuns(String(BT_SYNTHETIC_N_DEFAULT));
-  }, [open, parentRun, readOnly, snapshotRun]);
-
-  const canRun = !readOnly && Number(nRuns) > 0;
-
   const handleSubmit = () => {
-    if (!canRun) return;
     onSubmit?.({
       source: "inherited",
       customPeriod: null,
       method: "metric_generator",
-      volatility,
-      nRuns: Number(nRuns),
+      nRuns: BT_SYNTHETIC_N_DEFAULT,
+      volatilitySplit: BT_SYNTHETIC_VOLATILITY_SPLIT,
     });
     onClose?.();
   };
@@ -60,59 +89,25 @@ export const RunSyntheticModal = memo(function RunSyntheticModal({
         if (!next) onClose?.();
       }}
       title="Run Synthetic backtest"
-      className="max-w-[520px] max-h-[90vh] overflow-hidden flex flex-col"
+      className="max-w-[720px] max-h-[90vh] overflow-hidden flex flex-col"
     >
-      <div className="min-h-0 flex-1 overflow-auto">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <AppSelect
-            label="Volatility level"
-            value={volatility}
-            onValueChange={setVolatility}
-            options={BT_VOLATILITY_LEVELS}
-            disabled={readOnly}
-            triggerClassName={BT_FORM_CONTROL}
-          />
-          <AppSelect
-            label="Number of synthetic runs (N)"
-            value={nRuns}
-            onValueChange={setNRuns}
-            options={nOptions}
-            disabled={readOnly}
-            triggerClassName={BT_FORM_CONTROL}
-          />
-        </div>
-      </div>
+      <SyntheticRunsFixedPanel />
 
-      <div className="flex items-center justify-between gap-2 pt-2">
-        <div className={cx("text-[10px]", canRun || readOnly ? ui.textSubtle : "text-amber-300")}>
-          {readOnly
-            ? null
-            : canRun
-              ? `Generates ${nRuns} series and backtests each of them.`
-              : "Select a positive N."}
-        </div>
-        <div className="flex gap-2">
-          {readOnly ? (
+      <div className="flex items-center justify-end gap-2 pt-4">
+        {readOnly ? (
+          <AppButton type="button" variant="outline" size="sm" onClick={onClose}>
+            Close
+          </AppButton>
+        ) : (
+          <>
             <AppButton type="button" variant="outline" size="sm" onClick={onClose}>
-              Close
+              Cancel
             </AppButton>
-          ) : (
-            <>
-              <AppButton type="button" variant="outline" size="sm" onClick={onClose}>
-                Cancel
-              </AppButton>
-              <AppButton
-                type="button"
-                variant="default"
-                size="sm"
-                disabled={!canRun}
-                onClick={handleSubmit}
-              >
-                ▶ Run Synthetic
-              </AppButton>
-            </>
-          )}
-        </div>
+            <AppButton type="button" variant="default" size="sm" onClick={handleSubmit}>
+              ▶ Run Synthetic
+            </AppButton>
+          </>
+        )}
       </div>
     </AppDialog>
   );

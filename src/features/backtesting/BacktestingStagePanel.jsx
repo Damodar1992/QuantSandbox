@@ -300,12 +300,6 @@ export const BacktestingStagePanel = memo(function BacktestingStagePanel({
             setModal({ kind: "result", resultKind: type, run: child })
           }
           onDeleteChild={confirmDeleteChild}
-          onToggleShufflerForValidation={(parent, child) =>
-            bt.toggleShufflerForValidation(selectedEpochId, parent.id, child.id)
-          }
-          onToggleSyntheticForValidation={(parent, child) =>
-            bt.toggleSyntheticForValidation(selectedEpochId, parent.id, child.id)
-          }
           onOpenShuffleInfo={(child, parent) =>
             setModal({ kind: "shuffleInfo", backtestId: parent.id, run: child })
           }
@@ -318,14 +312,6 @@ export const BacktestingStagePanel = memo(function BacktestingStagePanel({
           onOpenSyntheticParams={(child, parent) =>
             setModal({ kind: "syntheticParams", backtestId: parent.id, run: child })
           }
-          onOpenAnalytics={(item, run) =>
-            setModal({ kind: "analytics", analyticsId: item.id, backtestId: run.id })
-          }
-          onSaveAnalytics={(item, run) =>
-            setModal({ kind: "analytics", analyticsId: item.id, backtestId: run.id })
-          }
-          onTogglePromote={(item, run) => bt.togglePromote(selectedEpochId, run.id, item.id)}
-          onDeleteAnalytics={confirmDeleteAnalytics}
         />
       </BuilderSectionShell>
 

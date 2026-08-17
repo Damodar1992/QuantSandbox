@@ -11,19 +11,21 @@ import {
   BT_POSITIVE,
 } from "../utils/format";
 import { buildTradesSummary, tradesToCsv } from "../utils/tradesSummary";
-import { BtHeaderWithHelp } from "./BtInfoTooltip";
+import { BtValueTooltip } from "./BtInfoTooltip";
 
 const TH =
   "px-3 py-2 text-left text-[10px] font-medium uppercase tracking-wide border-b border-[rgba(60,40,80,0.35)] text-[#8c8c8c] whitespace-nowrap";
 const TD = "px-3 py-2 align-middle text-[11px] font-mono tabular-nums whitespace-nowrap";
+const LABEL_DOTTED =
+  "underline decoration-dotted underline-offset-2 decoration-[#6e6682]";
 
 function TipHeader({ tipKey, children }) {
   const tip = BT_TRADES_TOOLTIPS[tipKey];
   if (!tip) return children;
   return (
-    <BtHeaderWithHelp label={String(children)} tip={tip}>
-      <span className="border-b border-dotted border-[#8c8c8c]/60">{children}</span>
-    </BtHeaderWithHelp>
+    <BtValueTooltip text={tip.text} formula={tip.formula}>
+      <span className={LABEL_DOTTED}>{children}</span>
+    </BtValueTooltip>
   );
 }
 

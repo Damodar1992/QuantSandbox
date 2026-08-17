@@ -22,11 +22,25 @@ function sheetXml(name, rows) {
 }
 
 function performanceRows(run) {
-  const sections = run?.result?.performance?.sections || [];
-  const rows = [["Section", "Metric", "Total"]];
+  const perf = run?.result?.performance || {};
+  const rows = [["Section", "Metric", "Total", "Detail"]];
+
+  for (const item of perf.hero || []) {
+    const value =
+      item.suffix === "%"
+        ? `${Number(item.value) > 0 ? "+" : ""}${Number(item.value).toFixed(2)}%`
+        : item.value;
+    rows.push(["OVERVIEW", item.label, value, item.sub || ""]);
+  }
+
+  const sections =
+    perf.columns?.length > 0
+      ? perf.columns.flatMap((col) => col.sections || [])
+      : perf.sections || [];
+
   for (const section of sections) {
     for (const row of section.rows || []) {
-      rows.push([section.title, row.label, row.total]);
+      rows.push([section.title, row.label, row.total, row.sub || ""]);
     }
   }
   return rows;

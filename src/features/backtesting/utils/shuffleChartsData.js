@@ -41,7 +41,42 @@ export const SHUFFLE_CHART_FILTERS = [
 ];
 
 const STEPS = 37;
-const START = 900;
+const START = 1000;
+
+/** Reference max drawdown labels for Shuffle-info drawdown chart. */
+const DD_SECTION_MAX = {
+  original: 10.57,
+  random: 15.9,
+  L2: 20.02,
+  L3: 23.41,
+  L4: 23.3,
+};
+
+function scaleDrawdownPath(ddPts, targetMax) {
+  const curMax = Math.max(...ddPts.map((p) => p.y), 0);
+  if (curMax <= 0 || targetMax == null) return ddPts;
+  const scale = targetMax / curMax;
+  return ddPts.map((p) => ({ ...p, y: round(p.y * scale, 2) }));
+}
+
+function scaleSectionSeriesDrawdown(sectionSeries, targetMax) {
+  if (!sectionSeries.length || targetMax == null) return;
+  const worst = sectionSeries.reduce((best, s) => (s.maxDd > best.maxDd ? s : best), sectionSeries[0]);
+  if (worst.maxDd <= 0) return;
+  const scale = targetMax / worst.maxDd;
+  for (const s of sectionSeries) {
+    s.drawdown = s.drawdown.map((p) => ({ ...p, y: round(p.y * scale, 2) }));
+    s.maxDd = round(s.maxDd * scale, 2);
+  }
+}
+
+function maxBySection(series) {
+  const buckets = {};
+  for (const s of series) {
+    buckets[s.section] = Math.max(buckets[s.section] ?? 0, s.maxDd);
+  }
+  return buckets;
+}
 
 function walkBalance(rnd, { steps, start, drift, vol }) {
   const pts = [{ x: 0, y: start }];
@@ -119,8 +154,9 @@ export function buildShuffleChartsModel(run) {
     const t = i / (originalBal.length - 1);
     originalBal[i].y = round(originalBal[i].y * (1 + (scale - 1) * t), 2);
   }
-  const originalDd = toDrawdown(originalBal, start);
-  const originalMaxDd = maxDrawdownPct(originalBal, start);
+  const originalDdRaw = toDrawdown(originalBal, start);
+  const originalDd = scaleDrawdownPath(originalDdRaw, DD_SECTION_MAX.original);
+  const originalMaxDd = DD_SECTION_MAX.original;
   const originalMaxDdPoint = originalDd.reduce(
     (best, p) => (p.y > best.y ? p : best),
     originalDd[0],
@@ -178,6 +214,15 @@ export function buildShuffleChartsModel(run) {
     }
   }
 
+  for (const key of sectionKeys) {
+    scaleSectionSeriesDrawdown(
+      series.filter((s) => s.section === key),
+      DD_SECTION_MAX[key],
+    );
+  }
+
+  const sectionMaxDd = maxBySection(series);
+
   const densityGrid = [];
   for (let x = 0; x <= 32; x += 0.5) densityGrid.push(x);
 
@@ -214,6 +259,7 @@ export function buildShuffleChartsModel(run) {
     },
     series,
     sectionKeys,
+    sectionMaxDd,
     densityPositive: densityBySection,
     densityNegative,
     means,

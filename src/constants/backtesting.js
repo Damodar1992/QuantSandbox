@@ -324,6 +324,15 @@ export const BT_VOLATILITY_DEFAULT = "2_medium";
 export const BT_SYNTHETIC_N_PRESETS = [10, 100, 500, 1000, 2000, 5000];
 export const BT_SYNTHETIC_N_DEFAULT = 1000;
 
+/** Fixed volatility share for every synthetic run (always 1,000 datasets total). */
+export const BT_SYNTHETIC_VOLATILITY_SPLIT = [
+  { key: "0_calm", label: "L0 · calm", runs: 400, pct: 40, color: "#4ade80" },
+  { key: "1_low", label: "L1 · low", runs: 250, pct: 25, color: "#818cf8" },
+  { key: "2_medium", label: "L2 · medium", runs: 200, pct: 20, color: "#fb923c" },
+  { key: "3_high", label: "L3 · high", runs: 100, pct: 10, color: "#c084fc" },
+  { key: "4_extreme", label: "L4 · extreme", runs: 50, pct: 5, color: "#22d3ee" },
+];
+
 export const BT_SYNTHETIC_SOURCES = [
   { value: "inherited", label: "From the backtest" },
   { value: "custom", label: "Custom period" },
@@ -367,14 +376,14 @@ export const BT_MINI_DIFF_FIELDS = [
   { key: "exchange", label: "Exchange", severity: "critical" },
   { key: "mode", label: "Mode", severity: "critical" },
   { key: "leverage", label: "Leverage", severity: "critical" },
-  { key: "stakeMode", label: "Stake mode", severity: "critical" },
-  { key: "profitReserving", label: "Reserve from Profit", severity: "critical" },
   {
     key: "fees",
     label: "Fees",
     severity: "conditional",
     note: "BT — from the exchange config · mini — entered manually; the gap explains part of Δ.",
   },
+  { key: "stakeMode", label: "Stake mode", severity: "critical" },
+  { key: "profitReserving", label: "Reserve from Profit", severity: "critical" },
   { key: "startingCapital", label: "Starting Capital", severity: "conditional" },
 ];
 
