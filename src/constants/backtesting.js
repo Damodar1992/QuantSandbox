@@ -34,6 +34,16 @@ export const BT_STAKE_MODES = [
   { value: "relative", label: "Relative — % of balance" },
 ];
 
+/** Run backtest form — field help (dotted-label tooltips). */
+export const BT_RUN_BACKTEST_TOOLTIPS = {
+  profitReserving: {
+    text: "% of profit moved aside after each winning trade. **Empty = off** — all profit stays tradable.",
+  },
+  fees: {
+    text: "Derived from exchange and trading mode — not entered by hand. Binance spot 0.10/0.10 · futures 0.05/0.02 + funding. HTX spot 0.20/0.20 · futures 0.05/0.02 + funding.",
+  },
+};
+
 export const BT_LEVERAGE_RANGE = { min: 1, max: 125 };
 
 /**

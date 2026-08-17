@@ -8,15 +8,19 @@ import {
   BT_EXCHANGES,
   BT_LEVERAGE_RANGE,
   BT_PAIR_OPTIONS,
+  BT_RUN_BACKTEST_TOOLTIPS,
   BT_STAKE_MODES,
   BT_TIMEFRAMES,
   BT_TRADING_MODES,
   resolveBtFees,
 } from "@/constants/backtesting";
 import { diffAgainstMini } from "../../utils/miniSource";
-import { BtInfoTooltip } from "../BtInfoTooltip";
+import { BtValueTooltip } from "../BtInfoTooltip";
 import { InheritanceBar } from "./InheritanceBar";
 import { BT_FORM_CONTROL } from "./formControl";
+
+const LABEL_DOTTED =
+  "underline decoration-dotted underline-offset-2 decoration-[#6e6682]";
 
 const NO_MINI = "__no_mini__";
 const CONTROL = BT_FORM_CONTROL;
@@ -414,13 +418,9 @@ export const RunBacktestForm = memo(function RunBacktestForm({
 
               <Field
                 label={
-                  <>
-                    <span>Profit Reserving</span>
-                    <BtInfoTooltip
-                      label="Profit Reserving"
-                      text="% taken out of every winning trade · empty = off"
-                    />
-                  </>
+                  <BtValueTooltip text={BT_RUN_BACKTEST_TOOLTIPS.profitReserving.text}>
+                    <span className={LABEL_DOTTED}>Profit Reserving</span>
+                  </BtValueTooltip>
                 }
               >
                 <AppInput
@@ -439,12 +439,10 @@ export const RunBacktestForm = memo(function RunBacktestForm({
 
           {/* FEES */}
           <div className={cx(ui.radius, ui.panelMuted, "space-y-2 p-3")}>
-            <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#9b8ec4]">
-              <span>Fees</span>
-              <BtInfoTooltip
-                label="Fees"
-                text="Binance spot 0.10/0.10 · futures 0.05/0.02 + funding. HTX spot 0.20/0.20 · futures 0.05/0.02 + funding."
-              />
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-[#9b8ec4]">
+              <BtValueTooltip text={BT_RUN_BACKTEST_TOOLTIPS.fees.text}>
+                <span className={LABEL_DOTTED}>Fees</span>
+              </BtValueTooltip>
             </div>
             {derivedFees ? (
               <>
