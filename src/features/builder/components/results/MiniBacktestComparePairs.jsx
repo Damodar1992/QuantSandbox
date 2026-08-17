@@ -76,7 +76,7 @@ function OnlyInBadge({ side }) {
           : "border-violet-500/30 bg-violet-500/10 text-violet-300",
       )}
     >
-      {isMini ? "Mini BT only" : "Hyperopt only"}
+      {isMini ? "Mini BT only" : "Post-processing only"}
     </Badge>
   );
 }
@@ -128,7 +128,7 @@ function CompareValues({ before, after, beforeDim, afterDim, beforeFormula, afte
   return (
     <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-start gap-2">
       <div className="min-w-0">
-        <div className="text-[9px] font-medium uppercase tracking-[0.12em] text-[#6e6682]">Hyperopt</div>
+        <div className="text-[9px] font-medium uppercase tracking-[0.12em] text-violet-300">Post-processing</div>
         <div
           className={cx(
             "mt-1 truncate font-mono text-[20px] font-semibold tabular-nums leading-none",
@@ -143,7 +143,7 @@ function CompareValues({ before, after, beforeDim, afterDim, beforeFormula, afte
         →
       </span>
       <div className="min-w-0 text-right">
-        <div className="text-[9px] font-medium uppercase tracking-[0.12em] text-[#6e6682]">Mini BT</div>
+        <div className="text-[9px] font-medium uppercase tracking-[0.12em] text-teal-400">Mini BT</div>
         <div
           className={cx(
             "mt-1 truncate font-mono text-[20px] font-semibold tabular-nums leading-none",
