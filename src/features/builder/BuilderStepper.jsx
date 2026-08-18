@@ -41,7 +41,9 @@ import {
 import {
   DEFAULT_RISK_STOPLOSS_RANGES,
   DEFAULT_RISK_HYPEROPT_PARAMS,
+  RISK_STOPLOSS_KEYS,
   RISK_STOPLOSS_LABELS,
+  RISK_HYPEROPT_PARAM_DEFS,
   RISK_LOSS_STREAK_LABELS,
   buildDefaultRiskHeatmapConfig,
   riskStoplossMidpoints,
@@ -299,6 +301,7 @@ export const BuilderStepper = memo(function BuilderStepper({
   const [exitBestResults, setExitBestResults] = useState(() => [createDefaultExitFavoriteEpoch()]);
   const [selectedBestResult, setSelectedBestResult] = useState(null);
   const [showBestResultDetailsModal, setShowBestResultDetailsModal] = useState(false);
+  const [showSourceEpochInfoModal, setShowSourceEpochInfoModal] = useState(false);
   const [showAddBestResultModal, setShowAddBestResultModal] = useState(false);
   const [showBestEpochsModal, setShowBestEpochsModal] = useState(false);
   const [bestEpochsContext, setBestEpochsContext] = useState(null);
@@ -1031,6 +1034,210 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
     selectedStageSourceKnownRange?.start || selectedStageSource?.meta?.timeFrameStart || "";
   const selectedStageTimeRangeEnd =
     selectedStageSourceKnownRange?.end || selectedStageSource?.meta?.timeFrameEnd || "";
+  const selectedStageSourceInfo = useMemo(() => {
+    if (!selectedStageSource) return null;
+
+    const labelParts = String(selectedStageSource.label || "")
+      .split("·")
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+    const rawSourceTimeRange = String(selectedStageSource.timeRange || "").trim();
+    const timeframe =
+      selectedStageSource.timeframe ||
+      (TIME_RANGES.includes(rawSourceTimeRange) ? rawSourceTimeRange : "") ||
+      labelParts[2] ||
+      "—";
+    const dateRange =
+      selectedStageTimeRangeStart && selectedStageTimeRangeEnd
+        ? `${selectedStageTimeRangeStart}  ↔  ${selectedStageTimeRangeEnd}`
+        : rawSourceTimeRange.includes("–")
+          ? rawSourceTimeRange
+        : "—";
+
+    const fmtMetric = (value, digits = 3) =>
+      Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : "—";
+    const fmtMaybeInt = (value) =>
+      Number.isFinite(Number(value)) ? String(Math.round(Number(value))) : "—";
+    const seedFrom = (key) =>
+      `${selectedStageSource.id || ""}|${selectedStageSource.label || ""}|${selectedStageSource.epochNumber || 0}|${key}`;
+    const seeded = (key, min, max, digits = 6) => {
+      let hash = 2166136261;
+      const source = seedFrom(key);
+      for (let i = 0; i < source.length; i += 1) {
+        hash ^= source.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+      }
+      const ratio = (hash >>> 0) / 4294967295;
+      const value = min + (max - min) * ratio;
+      return Number(value.toFixed(digits));
+    };
+    const asNum = (value, fallback) => {
+      const num = Number(value);
+      return Number.isFinite(num) ? num : fallback;
+    };
+    const asPct = (value, fallback) => `${asNum(value, fallback).toFixed(2)}%`;
+    const fmtParamValue = (value) => {
+      if (value == null || value === "") return "—";
+      if (typeof value !== "number" || !Number.isFinite(value)) return String(value);
+      return Number.isInteger(value) ? String(value) : value.toFixed(Math.abs(value) >= 10 ? 0 : 3);
+    };
+    const fmtBound = (value) => {
+      if (value == null || value === "") return "—";
+      if (typeof value !== "number" || !Number.isFinite(value)) return String(value);
+      return Number.isInteger(value) ? String(value) : value.toFixed(Math.abs(value) >= 10 ? 0 : 3);
+    };
+
+    const indicatorRows = (selectedStageSource.indicators || []).flatMap((ind) => {
+      const paramsSnapshot =
+        ind?.paramsSnapshot && typeof ind.paramsSnapshot === "object" ? ind.paramsSnapshot : {};
+      const template = getIndicatorTemplate(ind?.type || "");
+      const templateParams = new Map((template?.parameters || []).map((param) => [String(param.name), param]));
+      const alias = ind?.displayName || getDefaultDisplayName(ind?.type || "") || String(ind?.type || "indicator").toLowerCase();
+
+      return Object.entries(paramsSnapshot).map(([key, value]) => {
+        const paramDef = templateParams.get(String(key));
+        return {
+          id: `${ind?.id || alias}-${key}`,
+          indicator: String(ind?.type || "IND"),
+          alias,
+          key,
+          value: fmtParamValue(value),
+          type: String(paramDef?.type || (Number.isInteger(value) ? "INT" : "FLOAT")).toUpperCase(),
+          min: fmtBound(paramDef?.min),
+          max: fmtBound(paramDef?.max),
+          step: fmtBound(paramDef?.step),
+        };
+      });
+    });
+
+    const scoreValue = asNum(selectedStageSource.score, seeded("score", 0.18, 0.38));
+    const mfeValue = asNum(selectedStageSource.mfe, seeded("mfe", 0.32, 0.68));
+    const maeValue = asNum(selectedStageSource.mae, seeded("mae", -0.42, -0.08));
+    const airValue = asNum(selectedStageSource.air, seeded("air", 1.6, 3.4));
+    const stabilityValue = asNum(selectedStageSource.stability, seeded("stability", 0.08, 0.74));
+    const hitRateValue = asNum(selectedStageSource.hitRate, seeded("hitRate", 58, 79, 2));
+    const epochValue = asNum(selectedStageSource.epochNumber, seeded("epoch", 1, 300, 0));
+    const cycleCountValue = Math.max(1, Math.round(seeded("cycle_count", 120, 180, 0)));
+    const roiMedValue = seeded("roi_med", 12.4, 18.1);
+    const totalRoiValue = seeded("total_roi", 34.2, 42.9);
+    const zMfeValue = seeded("z_mfe_med", 0.02, 0.08);
+    const zMaeValue = seeded("z_mae_med", 0, 0.03);
+    const zAirValue = seeded("z_air_med", 0.22, 0.38);
+    const zHrValue = seeded("z_hr_val", 0.72, 1, 0);
+    const sigmoid = (v) => 1 / (1 + Math.exp(-v));
+    const normMfe = sigmoid(seeded("norm_score_mfe_med", 0.02, 0.08));
+    const normMae = sigmoid(seeded("norm_score_mae_med", -0.02, 0.02));
+    const normAir = sigmoid(seeded("norm_score_air_med", 0.22, 0.38));
+    const normHr = sigmoid(seeded("norm_score_hr_val", 0.72, 1.0));
+    const detailLabel = selectedStageSource.meta?.detailLabel || labelParts[3] || "—";
+    const stageLabel = labelParts[4] || "—";
+
+    return {
+      title: selectedStageSource.label || "Source epoch",
+      pair: selectedStagePairs || labelParts[1] || pairs || "—",
+      timeframe,
+      exchange: exchange || "—",
+      tradingMode: tradingMode || "—",
+      dateRange,
+      finalEvaluation: [
+        { label: "Score", value: fmtMetric(scoreValue, 6) },
+        { label: "stability_score", value: fmtMetric(stabilityValue, 6) },
+        { label: "Epoch", value: fmtMaybeInt(epochValue) },
+      ],
+      cyclePerformanceColumns: [
+        [
+          { label: "cycle_count", value: fmtMaybeInt(cycleCountValue) },
+          { label: "mfe_med", value: fmtMetric(mfeValue, 5) },
+          { label: "mae_med", value: fmtMetric(maeValue, 5) },
+          { label: "air_med", value: fmtMetric(airValue, 5) },
+          { label: "hr_val", value: fmtMetric(hitRateValue, 2) },
+          { label: "ret_med", value: fmtMetric(seeded("ret_med", 0.11, 0.19), 5) },
+          { label: "roi_med", value: fmtMetric(roiMedValue, 2) },
+          { label: "dur_med", value: fmtMaybeInt(seeded("dur_med", 8, 14, 0)) },
+        ],
+        [
+          { label: "tt_mfe_med", value: fmtMaybeInt(seeded("tt_mfe_med", 3, 6, 0)) },
+          { label: "tt_mae_med", value: fmtMaybeInt(seeded("tt_mae_med", 1, 3, 0)) },
+          { label: "profit_factor", value: fmtMetric(seeded("profit_factor", 2.8, 8.2), 6) },
+          { label: "profit_capture", value: fmtMetric(seeded("profit_capture", 28, 42), 2) },
+          { label: "max_drawdown", value: fmtMetric(Math.abs(maeValue) * seeded("max_drawdown", 3.8, 4.8), 4) },
+          { label: "total_pnl_gross", value: fmtMaybeInt(seeded("total_pnl_gross", 26000, 42000, 0)) },
+          { label: "total_roi", value: fmtMetric(totalRoiValue, 3) },
+        ],
+      ],
+      finalScoreColumns: [
+        [
+          { label: "z_mfe_med", value: fmtMetric(zMfeValue, 6) },
+          { label: "z_mae_med", value: fmtMetric(zMaeValue, 0) },
+          { label: "z_air_med", value: fmtMetric(zAirValue, 6) },
+          { label: "z_hr_val", value: fmtMetric(zHrValue, 0) },
+          { label: "norm_score_mfe_med", value: fmtMetric(normMfe, 6) },
+          { label: "norm_score_mae_med", value: fmtMetric(0.5, 1) },
+          { label: "norm_score_air_med", value: fmtMetric(normAir, 6) },
+          { label: "norm_score_hr_val", value: fmtMetric(normHr, 6) },
+        ],
+        [
+          { label: "norm_stability", value: fmtMetric(stabilityValue, 6) },
+          { label: "weight_score_mfe_med", value: "20%" },
+          { label: "weight_score_mae_med", value: "20%" },
+          { label: "weight_score_air_med", value: "20%" },
+          { label: "weight_score_hr_val", value: "20%" },
+          { label: "weight_stability", value: "20%" },
+        ],
+      ],
+      stabilityColumns: [
+        [
+          { label: "rel_diff_mfe_med", value: asPct(seeded("rel_diff_mfe_med", -3.5, 2.5), 0) },
+          { label: "rel_diff_mae_med", value: asPct(seeded("rel_diff_mae_med", 8, 22), 0) },
+          { label: "rel_diff_air_med", value: asPct(seeded("rel_diff_air_med", -2.5, 1.5), 0) },
+          { label: "rel_diff_hr_val", value: asPct(seeded("rel_diff_hr_val", -12, -4), 0) },
+          { label: "std_ratio", value: asPct(seeded("std_ratio", 7, 12), 0) },
+          { label: "max_possible_std", value: "1" },
+          { label: "stab_p_low", value: fmtMetric(seeded("stab_p_low", 0.01, 0.05), 2) },
+          { label: "stab_p_high", value: fmtMetric(seeded("stab_p_high", 0.4, 0.7), 1) },
+          { label: "std_ratio_p_low", value: "0" },
+          { label: "std_ratio_p_high", value: "1" },
+        ],
+        [
+          { label: "rel_diff_mfe_p_low", value: "0" },
+          { label: "rel_diff_mfe_p_high", value: "1" },
+          { label: "rel_diff_mae_p_low", value: "0" },
+          { label: "rel_diff_mae_p_high", value: "1" },
+          { label: "rel_diff_air_p_low", value: "0" },
+          { label: "rel_diff_air_p_high", value: "1" },
+          { label: "rel_diff_hr_p_low", value: "0" },
+          { label: "rel_diff_hr_p_high", value: "1" },
+          { label: "intermediate_mae_p_low", value: fmtMetric(-0.001, 3) },
+          { label: "intermediate_mae_p_high", value: fmtMetric(-0.999, 3) },
+        ],
+        [
+          { label: "intermediate_mfe_p_low", value: fmtMetric(0.001, 3) },
+          { label: "intermediate_mfe_p_high", value: fmtMetric(0.999, 3) },
+          { label: "intermediate_air_p_low", value: fmtMetric(0.001, 3) },
+          { label: "intermediate_air_p_high", value: fmtMetric(3, 0) },
+          { label: "intermediate_hr_val_p_low", value: fmtMetric(0.001, 3) },
+          { label: "intermediate_hr_val_p_high", value: fmtMetric(seeded("intermediate_hr_val_p_high", 0.48, 0.62), 2) },
+          { label: "weight_stability_mfe_med", value: "20%" },
+          { label: "weight_stability_mae_med", value: "20%" },
+          { label: "weight_stability_air_med", value: "20%" },
+          { label: "weight_stability_hr_val", value: "20%" },
+          { label: "weight_stability_std_ratio", value: "20%" },
+        ],
+      ],
+      detailLabel,
+      stageLabel,
+      indicatorRows,
+    };
+  }, [
+    selectedStageSource,
+    selectedStagePairs,
+    selectedStageTimeRangeStart,
+    selectedStageTimeRangeEnd,
+    pairs,
+    exchange,
+    tradingMode,
+  ]);
   const totalCandles = 43848;
   const signalFoldSizeValue = Number.parseInt(signalFoldSize, 10);
   const hasValidFoldSize = Number.isFinite(signalFoldSizeValue) && signalFoldSizeValue > 0;
@@ -1662,6 +1869,65 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
       })
       .join(", ");
   }, []);
+  const hyperoptIndicatorSnapshotRows = useMemo(
+    () =>
+      (indicators || [])
+        .filter((ind) => ind?.enabled !== false)
+        .flatMap((ind) => {
+          const params = Array.isArray(ind?.params) ? ind.params : [];
+          const typeLabel = String(ind?.type || "IND").toUpperCase();
+          return params.map((param) => {
+            const type =
+              param?.type ||
+              (Number.isInteger(param?.step) && Number(param.step) >= 1 ? "INT" : "FLOAT");
+            const fmtBound = (value) => {
+              if (value == null || value === "") return "—";
+              const num = Number(value);
+              if (!Number.isFinite(num)) return String(value);
+              return Number.isInteger(num) ? String(num) : num.toFixed(Math.abs(num) >= 10 ? 0 : 3);
+            };
+            return {
+              id: `${ind.id}-${param.key}`,
+              typeLabel,
+              paramLabel: String(param?.label || param?.key || param?.name || "param").toLowerCase(),
+              valueType: String(type).toUpperCase(),
+              min: fmtBound(param?.min),
+              max: fmtBound(param?.max),
+              step: fmtBound(param?.step),
+            };
+          });
+        }),
+    [indicators],
+  );
+  const riskStoplossSnapshotRows = useMemo(
+    () =>
+      RISK_STOPLOSS_KEYS.map((key) => {
+        const fmtPct = (value) => {
+          const n = Number(value);
+          if (!Number.isFinite(n)) return "—";
+          return `${Number((n * 100).toFixed(4))}%`;
+        };
+        return {
+          id: key,
+          label: RISK_STOPLOSS_LABELS[key] || key,
+          min: fmtPct(riskStoplossRanges?.[key]?.min),
+          max: fmtPct(riskStoplossRanges?.[key]?.max),
+          step: fmtPct(riskStoplossRanges?.[key]?.step),
+        };
+      }),
+    [riskStoplossRanges],
+  );
+  const riskCooldownSnapshotRows = useMemo(
+    () =>
+      RISK_HYPEROPT_PARAM_DEFS.map((def) => ({
+        id: def.paramKey,
+        label: def.label,
+        min: riskHyperoptParams?.[def.minKey] ?? "—",
+        max: riskHyperoptParams?.[def.maxKey] ?? "—",
+        step: riskHyperoptParams?.[def.stepKey] ?? "—",
+      })),
+    [riskHyperoptParams],
+  );
 
   const openRangeNarrowingModalForSub = useCallback((rowId, subId) => {
     if (isRiskStage) return;
@@ -3601,17 +3867,27 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                               <td className="px-2 py-2 text-center text-[#8c8c8c]">{row.hyperoptNumber ?? "—"}</td>
                               <td className="px-3 py-2 whitespace-nowrap">{formatHyperoptDateTime(row.date)}</td>
                               {(isEntryStage || isExitStage || isRiskStage) && (
-                                <td
-                                  className="px-3 py-2 max-w-[260px]"
-                                  title={
-                                    selectedStageSource
-                                      ? `${selectedStageSource.label || "Best result"} · S:${formatBestMetric(selectedStageSource.score)} · MFE:${formatBestMetric(selectedStageSource.mfe)} · MAE:${formatBestMetric(selectedStageSource.mae)} · AIR:${formatBestMetric(selectedStageSource.air)} · normStability:${formatBestMetric(selectedStageSource.stability)}`
-                                      : "—"
-                                  }
-                                >
-                                  <div className="truncate">
-                                    {selectedStageSource ? (selectedStageSource.label || "Best result") : "—"}
-                                  </div>
+                                <td className="px-3 py-2 max-w-[260px]">
+                                  {selectedStageSource ? (
+                                    <div
+                                      className="flex items-start gap-2 min-w-0"
+                                      title={`${selectedStageSource.label || "Best result"} · S:${formatBestMetric(selectedStageSource.score)} · MFE:${formatBestMetric(selectedStageSource.mfe)} · MAE:${formatBestMetric(selectedStageSource.mae)} · AIR:${formatBestMetric(selectedStageSource.air)} · normStability:${formatBestMetric(selectedStageSource.stability)}`}
+                                    >
+                                      <AppButton
+                                        type="button"
+                                        variant="outline"
+                                        size="xs"
+                                        className="shrink-0"
+                                        onClick={() => {
+                                          setShowSourceEpochInfoModal(true);
+                                        }}
+                                      >
+                                        Info
+                                      </AppButton>
+                                    </div>
+                                  ) : (
+                                    <div>—</div>
+                                  )}
                                 </td>
                               )}
                               <td className="px-3 py-2">{row.pairs}</td>
@@ -5206,7 +5482,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
         }}
         title={
           hyperoptDetailsModalType === "hyperopt"
-            ? "Indicators snapshot (read-only)"
+            ? "Hyperopt Run Info"
             : "Normalization formulas (read-only)"
         }
         className="max-w-[720px] max-h-[90vh] overflow-hidden flex flex-col"
@@ -5303,34 +5579,97 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
               </div>
               )}
               {hyperoptDetailsModalType === "hyperopt" && (
-              <div className={cx(ui.radius, ui.panelMuted, "p-3")}>
-                <div className="text-[12px] font-medium text-[#d9d9d9] mb-2">Indicators snapshot</div>
-                {(indicators || []).length === 0 ? (
-                  <div className={cx("text-[11px]", ui.textMuted)}>No indicators configured for the current stage.</div>
+              <div className="space-y-4">
+                <div className="grid gap-2 sm:grid-cols-3">
+                  {[
+                    { label: "Exchange", value: exchange || "—" },
+                    { label: "Trading mode", value: tradingMode || "—" },
+                    { label: "Total epochs", value: totalCombinations.toLocaleString("en-US") },
+                  ].map((entry) => (
+                    <div
+                      key={entry.label}
+                      className="rounded-md border border-[rgba(60,40,80,0.35)] bg-[#1c1830] px-3 py-2"
+                    >
+                      <div className="text-[9px] font-medium uppercase tracking-[0.12em] text-[#6e6682]">{entry.label}</div>
+                      <div className="mt-1 text-[12px] font-medium text-[#faf7fd]">{entry.value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {isRiskStage ? (
+                  <div className="grid gap-3">
+                    {[
+                      { title: "Stoplosses", rows: riskStoplossSnapshotRows },
+                      { title: "Cooldowns", rows: riskCooldownSnapshotRows },
+                    ].map((section) => (
+                      <div
+                        key={section.title}
+                        className="rounded-lg border border-[rgba(60,40,80,0.35)] bg-[#171426] p-4"
+                      >
+                        <div className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-violet-200">
+                          {section.title}
+                        </div>
+                        <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+                          {section.rows.map((row) => (
+                            <div
+                              key={row.id}
+                              className="rounded-md border border-[rgba(60,40,80,0.28)] bg-[#1c1830] px-3 py-2 space-y-2"
+                            >
+                              <div className="text-[11px] font-medium text-[#faf7fd]">{row.label}</div>
+                              <div className="grid grid-cols-3 gap-2 text-[10px] uppercase tracking-wide text-[#8c8c8c]">
+                                <div>
+                                  <div>Min</div>
+                                  <div className="mt-1 font-mono text-[11px] normal-case tracking-normal text-[#faf7fd]">
+                                    {row.min}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div>Max</div>
+                                  <div className="mt-1 font-mono text-[11px] normal-case tracking-normal text-[#faf7fd]">
+                                    {row.max}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div>Step</div>
+                                  <div className="mt-1 font-mono text-[11px] normal-case tracking-normal text-[#faf7fd]">
+                                    {row.step}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-[11px] border-collapse">
-                      <thead className="bg-[#1a1a1a] text-[#8c8c8c]">
-                        <tr>
-                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Type</th>
-                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Display name</th>
-                          <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Params</th>
-                        </tr>
-                      </thead>
-                      <tbody className="text-[#d9d9d9]">
-                        {indicators.map((ind) => (
-                          <tr key={ind.id} className="border-b border-[#303030]/60">
-                            <td className="px-3 py-2 align-top">{ind.type || "-"}</td>
-                            <td className="px-3 py-2 align-top">{ind.displayName || getDefaultDisplayName(ind.type || "") || "-"}</td>
-                            <td className="px-3 py-2 align-top">
-                              <code className="text-[10px] bg-[#0f0f0f] px-2 py-1 rounded block overflow-x-auto">
-                                {formatIndicatorRangeParams(ind)}
-                              </code>
-                            </td>
-                          </tr>
+                  <div className="rounded-lg border border-[rgba(60,40,80,0.35)] bg-[#171426] p-4">
+                    <div className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-violet-200">Indicators</div>
+                    {!hyperoptIndicatorSnapshotRows.length ? (
+                      <div className={cx("text-[11px]", ui.textMuted)}>No indicators configured for the current stage.</div>
+                    ) : (
+                      <div className="rounded-lg border border-[rgba(60,40,80,0.28)] overflow-hidden">
+                        {hyperoptIndicatorSnapshotRows.map((row) => (
+                          <div
+                            key={row.id}
+                            className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-[rgba(60,40,80,0.22)] bg-[#1c1830] px-4 py-3 text-[11px] last:border-b-0"
+                          >
+                            <span className="rounded-full bg-[rgba(168,96,240,0.18)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-200">
+                              {row.typeLabel}
+                            </span>
+                            <span className="font-mono text-[#faf7fd]">{row.paramLabel}</span>
+                            <span className="rounded bg-[#332b46] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#d8d0ea]">
+                              {row.valueType}
+                            </span>
+                            <span className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] font-semibold uppercase tracking-wide text-[#b8aecc]">
+                              <span>Min <span className="ml-1 font-mono text-[#faf7fd]">{row.min}</span></span>
+                              <span>Max <span className="ml-1 font-mono text-[#faf7fd]">{row.max}</span></span>
+                              <span>Step <span className="ml-1 font-mono text-[#faf7fd]">{row.step}</span></span>
+                            </span>
+                          </div>
                         ))}
-                      </tbody>
-                    </table>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -5344,7 +5683,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                   size="sm"
                   onClick={() => setShowHyperoptDetailsModal(false)}
                 >
-                  Apply ranges to strategy
+                  Reuse indicators and hyperopt parameters
                 </AppButton>
               ) : (
                 <AppButton
@@ -5357,6 +5696,157 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                 </AppButton>
               )}
             </div>
+      </AppDialog>
+      <AppDialog
+        open={Boolean(showSourceEpochInfoModal && selectedStageSourceInfo)}
+        onOpenChange={(next) => {
+          if (!next) {
+            setShowSourceEpochInfoModal(false);
+          }
+        }}
+        title="Source epoch info"
+        description={selectedStageSourceInfo?.title}
+        className="max-w-[980px] max-h-[92vh] overflow-hidden flex flex-col"
+      >
+        {selectedStageSourceInfo ? (
+          <>
+            <div className="overflow-auto space-y-5 min-h-0 flex-1">
+              <div className="space-y-2">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-[#6e6682]">Dataset</div>
+                <div className="rounded-lg border border-[rgba(60,40,80,0.35)] bg-[#171426] p-3">
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                    {[
+                      { label: "Pair", value: selectedStageSourceInfo.pair },
+                      { label: "Timeframe", value: selectedStageSourceInfo.timeframe },
+                      { label: "Exchange", value: selectedStageSourceInfo.exchange },
+                      { label: "Trading mode", value: selectedStageSourceInfo.tradingMode },
+                    ].map((entry) => (
+                      <div key={entry.label} className="rounded-md border border-[rgba(60,40,80,0.35)] bg-[#1c1830] px-3 py-2">
+                        <div className="text-[9px] font-medium uppercase tracking-[0.12em] text-[#6e6682]">{entry.label}</div>
+                        <div className="mt-1 text-[12px] font-medium text-[#faf7fd]">{entry.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-2 rounded-md border border-[rgba(60,40,80,0.35)] bg-[#1c1830] px-3 py-2">
+                    <div className="text-[9px] font-medium uppercase tracking-[0.12em] text-[#6e6682]">Date range</div>
+                    <div className="mt-1 text-[12px] font-medium text-[#faf7fd]">{selectedStageSourceInfo.dateRange}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-[#6e6682]">Metrics</div>
+                <div className="space-y-2 rounded-lg border border-[rgba(60,40,80,0.35)] bg-[#171426] p-3">
+                  <div className="space-y-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-violet-200">
+                      Final evaluation
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                      {selectedStageSourceInfo.finalEvaluation.map((entry) => (
+                        <div
+                          key={entry.label}
+                          className="rounded-md border border-[rgba(60,40,80,0.35)] bg-[#1c1830] px-3 py-2"
+                        >
+                          <div className="text-[9px] font-medium uppercase tracking-[0.12em] text-[#6e6682]">
+                            {entry.label}
+                          </div>
+                          <div className="mt-1 font-mono text-[20px] font-semibold tabular-nums leading-none text-[#faf7fd]">
+                            {entry.value}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2 xl:grid-cols-2">
+                    {[
+                      { title: "Cycle performance", columns: selectedStageSourceInfo.cyclePerformanceColumns },
+                      { title: "Final score", columns: selectedStageSourceInfo.finalScoreColumns },
+                      { title: "Stability", columns: selectedStageSourceInfo.stabilityColumns, fullWidth: true },
+                    ].map((section) => (
+                      <div
+                        key={section.title}
+                        className={cx(
+                          "rounded-lg border border-[rgba(60,40,80,0.35)] bg-[#120b20] p-3 space-y-2",
+                          section.fullWidth && "xl:col-span-2",
+                        )}
+                      >
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-violet-200">
+                          {section.title}
+                        </div>
+                        <div
+                          className={cx(
+                            "grid gap-3",
+                            section.columns.length === 3 ? "xl:grid-cols-3" : "sm:grid-cols-2",
+                          )}
+                        >
+                          {section.columns.map((column, columnIdx) => (
+                            <div
+                              key={`${section.title}-${columnIdx}`}
+                              className="space-y-0 rounded-md border border-[rgba(60,40,80,0.28)] bg-[#171426] overflow-hidden"
+                            >
+                              {column.map((entry) => (
+                                <div
+                                  key={entry.label}
+                                  className="flex items-start justify-between gap-3 border-b border-[rgba(60,40,80,0.22)] px-3 py-2 text-[11px] last:border-b-0"
+                                >
+                                  <span className="text-[#b8aecc]">{entry.label}</span>
+                                  <span className="font-mono tabular-nums text-[#faf7fd] text-right">{entry.value}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-[#6e6682]">Indicators</div>
+                <div className="rounded-lg border border-[rgba(60,40,80,0.35)] bg-[#171426] p-3">
+                  {!selectedStageSourceInfo.indicatorRows.length ? (
+                    <div className={cx("text-[11px]", ui.textMuted)}>No indicators captured for this source epoch.</div>
+                  ) : (
+                    <div className="space-y-2">
+                      {selectedStageSourceInfo.indicatorRows.map((row) => (
+                        <div
+                          key={row.id}
+                          className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-[rgba(60,40,80,0.35)] bg-[#1c1830] px-3 py-2 text-[11px]"
+                        >
+                          <span className="rounded bg-[rgba(168,96,240,0.18)] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-violet-200">
+                            {row.indicator}
+                          </span>
+                          <span className="font-medium text-[#faf7fd]">{row.key}</span>
+                          <span className="rounded border border-[rgba(60,40,80,0.35)] bg-[#251f3a] px-1.5 py-0.5 text-[9px] font-medium text-[#b8aecc]">
+                            {row.type}
+                          </span>
+                          <span className="rounded bg-[#2a2440] px-2 py-0.5 font-mono tabular-nums text-[#faf7fd]">{row.value}</span>
+                          <span className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-[#8c8c8c]">
+                            <span>Min {row.min}</span>
+                            <span>Max {row.max}</span>
+                            <span>Step {row.step}</span>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <AppButton
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowSourceEpochInfoModal(false)}
+              >
+                Close
+              </AppButton>
+            </div>
+          </>
+        ) : null}
       </AppDialog>
       {/* Best result details modal */}
       <AppDialog
