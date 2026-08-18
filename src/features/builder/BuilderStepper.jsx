@@ -5714,22 +5714,25 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
               <div className="space-y-2">
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-[#6e6682]">Dataset</div>
                 <div className="rounded-lg border border-[rgba(60,40,80,0.35)] bg-[#171426] p-3">
-                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                  <div className="grid grid-cols-6 gap-2">
                     {[
                       { label: "Pair", value: selectedStageSourceInfo.pair },
                       { label: "Timeframe", value: selectedStageSourceInfo.timeframe },
                       { label: "Exchange", value: selectedStageSourceInfo.exchange },
                       { label: "Trading mode", value: selectedStageSourceInfo.tradingMode },
+                      { label: "Date range", value: selectedStageSourceInfo.dateRange, wide: true },
                     ].map((entry) => (
-                      <div key={entry.label} className="rounded-md border border-[rgba(60,40,80,0.35)] bg-[#1c1830] px-3 py-2">
+                      <div
+                        key={entry.label}
+                        className={cx(
+                          "min-w-0 rounded-md border border-[rgba(60,40,80,0.35)] bg-[#1c1830] px-3 py-2",
+                          entry.wide && "col-span-2",
+                        )}
+                      >
                         <div className="text-[9px] font-medium uppercase tracking-[0.12em] text-[#6e6682]">{entry.label}</div>
-                        <div className="mt-1 text-[12px] font-medium text-[#faf7fd]">{entry.value}</div>
+                        <div className="mt-1 truncate text-[12px] font-medium text-[#faf7fd]" title={entry.value}>{entry.value}</div>
                       </div>
                     ))}
-                  </div>
-                  <div className="mt-2 rounded-md border border-[rgba(60,40,80,0.35)] bg-[#1c1830] px-3 py-2">
-                    <div className="text-[9px] font-medium uppercase tracking-[0.12em] text-[#6e6682]">Date range</div>
-                    <div className="mt-1 text-[12px] font-medium text-[#faf7fd]">{selectedStageSourceInfo.dateRange}</div>
                   </div>
                 </div>
               </div>
