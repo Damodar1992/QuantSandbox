@@ -159,7 +159,7 @@ function MetricTooltipContent({ metric }) {
               value={`${formatImprovementPct(metric.q1ImprovementPct)} → ${formatImprovementPct(metric.q3ImprovementPct)}`}
             />
             <TooltipRow
-              label="Typical Range"
+              label="Overall Range"
               value={`${formatImprovementPct(metric.whiskerMinImprovementPct)} → ${formatImprovementPct(metric.whiskerMaxImprovementPct)}`}
             />
           </div>

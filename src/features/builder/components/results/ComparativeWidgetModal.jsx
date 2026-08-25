@@ -36,7 +36,7 @@ const TOOLTIP_FIELD_HELP = [
     text: "Interquartile range of Improvement %: from the 25th to the 75th percentile. Half of the eligible epochs fall in this band. Drawn as the box on the chart.",
   },
   {
-    label: "Typical Range",
+    label: "Overall Range",
     text: "Whisker min → max: the extreme actual Improvement % values that still lie inside the 1.5×IQR fences. Outliers beyond the fences are excluded from the whiskers in MVP.",
   },
   {
