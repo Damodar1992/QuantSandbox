@@ -2265,6 +2265,18 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
     [stageVersions],
   );
 
+  const selectedFinalVersion = useMemo(
+    () => getVersionById(stageVersions, selectedVersionByStage.final),
+    [stageVersions, selectedVersionByStage.final],
+  );
+
+  const handleValidationRetry = useCallback(() => {
+    const compileVersion = stageVersions.find((v) => v.lineageCode === "1.1.1.1.2");
+    if (compileVersion) {
+      handleStageVersionChange("final", compileVersion.id);
+    }
+  }, [stageVersions, handleStageVersionChange]);
+
   const handleAddNewStageVersion = useCallback((stageType) => {
     const label = STAGE_TYPE_LABELS[stageType] ?? stageType;
     alert(`Add new ${label} version (mock — not persisted)`);
@@ -4540,6 +4552,8 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
             riskBestSourceId={riskBestSourceId}
             miniBacktestResults={miniBacktestResults}
             currentUser={MOCK_CURRENT_USER.login}
+            validationVersionLineage={selectedFinalVersion?.lineageCode ?? null}
+            onValidationRetry={handleValidationRetry}
             onOpenMiniBacktest={
               miniBacktestEnabled
                 ? (epoch) => {

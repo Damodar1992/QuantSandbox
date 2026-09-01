@@ -178,6 +178,30 @@ function buildEmaBounceTree(strategyId) {
     },
   ]);
 
+  const risk1111Id = `sv-${strategyId}-r-1-1-1-1`;
+  versions.push(
+    node({
+      id: `sv-${strategyId}-f-1-1-1-1-2`,
+      strategyId,
+      stageType: "final",
+      lineageCode: "1.1.1.1.2",
+      parentVersionId: risk1111Id,
+      localVersion: 2,
+      label: "Final v2",
+      tagNames: ["compiling"],
+    }),
+    node({
+      id: `sv-${strategyId}-f-1-1-1-1-3`,
+      strategyId,
+      stageType: "final",
+      lineageCode: "1.1.1.1.3",
+      parentVersionId: risk1111Id,
+      localVersion: 3,
+      label: "Final v3",
+      tagNames: ["error"],
+    }),
+  );
+
   return versions;
 }
 

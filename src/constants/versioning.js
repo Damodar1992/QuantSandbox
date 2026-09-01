@@ -33,3 +33,13 @@ export const PARENT_STAGE_TYPE = {
   risk: "exit",
   final: "risk",
 };
+
+/** Validation (final) version UI modes keyed by lineage code. */
+export const VALIDATION_VERSION_UI = {
+  "1.1.1.1.2": "compiling",
+  "1.1.1.1.3": "error",
+};
+
+export function getValidationVersionUi(lineageCode) {
+  return VALIDATION_VERSION_UI[lineageCode] ?? "ready";
+}

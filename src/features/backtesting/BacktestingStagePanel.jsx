@@ -24,6 +24,11 @@ import { ShuffleInfoModal } from "./components/ShuffleInfoModal";
 import { SyntheticInfoModal } from "./components/SyntheticInfoModal";
 import { RunShufflerModal } from "./components/forms/RunShufflerModal";
 import { RunSyntheticModal } from "./components/forms/RunSyntheticModal";
+import {
+  ValidationCompilingPanel,
+  ValidationErrorPanel,
+} from "./components/ValidationVersionState";
+import { getValidationVersionUi } from "@/constants/versioning";
 
 const CLOSED = { kind: null };
 
@@ -46,6 +51,8 @@ export const BacktestingStagePanel = memo(function BacktestingStagePanel({
   riskBestSourceId = "",
   miniBacktestResults = [],
   currentUser = "quant",
+  validationVersionLineage = null,
+  onValidationRetry,
   onOpenMiniBacktest,
 }) {
   const bt = useBacktestingState({ currentUser });
@@ -239,6 +246,16 @@ export const BacktestingStagePanel = memo(function BacktestingStagePanel({
         {BT_COPY.noEpoch}
       </div>
     );
+  }
+
+  const validationUi = getValidationVersionUi(validationVersionLineage);
+
+  if (validationUi === "compiling") {
+    return <ValidationCompilingPanel />;
+  }
+
+  if (validationUi === "error") {
+    return <ValidationErrorPanel onRetry={onValidationRetry} />;
   }
 
   return (

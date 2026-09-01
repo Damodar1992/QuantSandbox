@@ -6,7 +6,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from "../ui/sheet";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { DragHandleIcon, TrashIcon } from "./Icons";
 import { cx } from "../../constants/ui";
 
@@ -171,43 +170,34 @@ export const QueuePanel = memo(function QueuePanel({
           <SheetTitle className="text-[12px] font-medium">Queue</SheetTitle>
         </SheetHeader>
 
-        <Tabs
-          value={activeTab}
-          onValueChange={setActiveTab}
-          className="flex flex-1 flex-col min-h-0 gap-0 data-horizontal:flex-col"
-        >
-          <TabsList className="w-full shrink-0 rounded-none border-b border-border bg-transparent p-2 h-auto gap-1">
-            {QUEUE_TABS.map((tab) => {
-              const count = (itemsByTab[tab.id] || []).length;
-              return (
-                <TabsTrigger
-                  key={tab.id}
-                  value={tab.id}
-                  className="flex-1 rounded-md px-2 py-1.5 text-[11px] data-active:bg-[rgba(168,96,240,0.16)] data-active:text-[#ddd6fe]"
-                >
-                  {tab.label}
-                  {count > 0 ? (
-                    <span className="ml-1 tabular-nums text-[10px] opacity-70">{count}</span>
-                  ) : null}
-                </TabsTrigger>
-              );
-            })}
-          </TabsList>
+        <div className="flex shrink-0 flex-wrap gap-2 border-b border-[rgba(60,40,80,0.35)] p-3">
+          {QUEUE_TABS.map((tab) => {
+            const count = (itemsByTab[tab.id] || []).length;
+            const active = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={cx(
+                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors",
+                  active
+                    ? "border-violet-500/40 bg-violet-500/15 text-violet-200"
+                    : "border-[rgba(60,40,80,0.35)] text-[#8c8c8c] hover:text-[#d9d9d9]",
+                )}
+              >
+                {tab.label}
+                {count > 0 ? (
+                  <span className="tabular-nums text-[10px] opacity-70">{count}</span>
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
 
-          {QUEUE_TABS.map((tab) => (
-            <TabsContent
-              key={tab.id}
-              value={tab.id}
-              className="flex-1 overflow-auto min-h-0 mt-0"
-            >
-              <QueueList
-                items={itemsByTab[tab.id] || []}
-                tabId={tab.id}
-                {...listProps}
-              />
-            </TabsContent>
-          ))}
-        </Tabs>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <QueueList items={items} tabId={activeTab} {...listProps} />
+        </div>
       </SheetContent>
     </Sheet>
   );

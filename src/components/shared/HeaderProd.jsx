@@ -1,6 +1,5 @@
 import React, { memo, useCallback, useMemo } from "react";
 import { cx, ui } from "../../constants/ui";
-import { useOutsideClose } from "../../hooks/useOutsideClose";
 import { Logo, MenuIcon } from "../common";
 import { PillTabs, ProdButton } from "../prod";
 import { QueueIcon, ReleaseNotesIcon } from "./Icons";
@@ -35,8 +34,6 @@ export const HeaderProd = memo(function HeaderProd({
   storageActive = false,
   onOpenStorage,
 }) {
-  const queueRef = useOutsideClose(queueOpen, onQueueClose);
-
   const navItems = useMemo(() => {
     const items = [];
     for (const item of sections) {
@@ -119,7 +116,7 @@ export const HeaderProd = memo(function HeaderProd({
           />
         </nav>
 
-        <div ref={queueRef} className="relative flex items-center gap-2 justify-self-end">
+        <div className="relative flex items-center gap-2 justify-self-end">
           <AppSelect
             value={hyperoptRun}
             onValueChange={(v) => onHyperoptRunChange?.(v)}

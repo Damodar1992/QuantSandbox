@@ -360,49 +360,53 @@ export const SyntheticTemporalTab = memo(function SyntheticTemporalTab({ run, pa
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-[#d9d9d9]">
-            Temporal metrics summary
+    <div>
+      <div className="sticky top-0 z-10 space-y-4 border-b border-[rgba(60,40,80,0.25)] bg-[#141414] pb-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-[#d9d9d9]">
+              Temporal metrics summary
+            </div>
+            <div className={cx("mt-0.5 text-[10px]", ui.textSubtle)}>{temporal.subtitle}</div>
           </div>
-          <div className={cx("mt-0.5 text-[10px]", ui.textSubtle)}>{temporal.subtitle}</div>
+          <div className={cx("text-[10px] text-right", ui.textSubtle)}>
+            Min, Median, Mean and Max are computed across {fmtInt(nRuns)} runs for the selected period.
+          </div>
         </div>
-        <div className={cx("text-[10px] text-right", ui.textSubtle)}>
-          Min, Median, Mean and Max are computed across {fmtInt(nRuns)} runs for the selected period.
+
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-[#6e6682]">
+            Period
+          </span>
+          {temporal.periods.map((period) => {
+            const active = period.id === periodId;
+            return (
+              <button
+                key={period.id}
+                type="button"
+                onClick={() => setPeriodId(period.id)}
+                className={cx(
+                  "rounded-md border px-2.5 py-1 text-[11px] transition-colors",
+                  active
+                    ? "border-violet-400/50 bg-violet-500/20 text-violet-100"
+                    : "border-[rgba(60,40,80,0.4)] bg-[#120b20] text-[#8c8c8c] hover:border-violet-400/30 hover:text-[#d9d9d9]",
+                )}
+              >
+                {period.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-[#6e6682]">
-          Period
-        </span>
-        {temporal.periods.map((period) => {
-          const active = period.id === periodId;
-          return (
-            <button
-              key={period.id}
-              type="button"
-              onClick={() => setPeriodId(period.id)}
-              className={cx(
-                "rounded-md border px-2.5 py-1 text-[11px] transition-colors",
-                active
-                  ? "border-violet-400/50 bg-violet-500/20 text-violet-100"
-                  : "border-[rgba(60,40,80,0.4)] bg-[#120b20] text-[#8c8c8c] hover:border-violet-400/30 hover:text-[#d9d9d9]",
-              )}
-            >
-              {period.label}
-            </button>
-          );
-        })}
-      </div>
+      <div className="mt-5 space-y-5">
+        {TEMPORAL_LAYOUT.map((group) => (
+          <LayoutGroup key={`${periodId}-${group.key}`} group={group} rowsByKey={rowsByKey} nRuns={nRuns} />
+        ))}
 
-      {TEMPORAL_LAYOUT.map((group) => (
-        <LayoutGroup key={`${periodId}-${group.key}`} group={group} rowsByKey={rowsByKey} nRuns={nRuns} />
-      ))}
-
-      <div className={cx("text-[10px]", BT_MUTED)}>
-        Values shown as Percentage | Absolute where both axes apply.
+        <div className={cx("text-[10px]", BT_MUTED)}>
+          Values shown as Percentage | Absolute where both axes apply.
+        </div>
       </div>
     </div>
   );

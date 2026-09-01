@@ -106,7 +106,7 @@ function SectionAnalyticsFilter({ run, selected, onChange }) {
   const selectAll = () => onChange(new Set(["all"]));
 
   return (
-    <div className="space-y-2 border-b border-[rgba(60,40,80,0.25)] pb-3">
+    <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <span className="text-[10px] font-medium uppercase tracking-wide text-[#8c8c8c]">
           Include in analytics
@@ -203,45 +203,49 @@ export const ShuffleSectionSummaryPanel = memo(function ShuffleSectionSummaryPan
   }, [summary, summaryTab]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        {SUMMARY_TABS.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setSummaryTab(tab.id)}
-            className={cx(
-              "rounded-full border px-4 py-1.5 text-[12px] font-medium transition-colors",
-              summaryTab === tab.id
-                ? "border-violet-500/45 bg-violet-500/15 text-violet-200"
-                : "border-[rgba(60,40,80,0.35)] text-[#8c8c8c] hover:text-[#d9d9d9]",
-            )}
-          >
-            {tab.label}
-          </button>
-        ))}
+    <div>
+      <div className="sticky top-0 z-10 space-y-4 border-b border-[rgba(60,40,80,0.25)] bg-[#141414] pb-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {SUMMARY_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setSummaryTab(tab.id)}
+              className={cx(
+                "rounded-full border px-4 py-1.5 text-[12px] font-medium transition-colors",
+                summaryTab === tab.id
+                  ? "border-violet-500/45 bg-violet-500/15 text-violet-200"
+                  : "border-[rgba(60,40,80,0.35)] text-[#8c8c8c] hover:text-[#d9d9d9]",
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <SectionAnalyticsFilter
+          run={run}
+          selected={selectedSections}
+          onChange={setSelectedSections}
+        />
       </div>
 
-      <SectionAnalyticsFilter
-        run={run}
-        selected={selectedSections}
-        onChange={setSelectedSections}
-      />
+      <div className="mt-4 space-y-4">
+        <ShuffleSummarySections
+          key={summaryTab}
+          sections={visibleSections}
+          defaultExpanded
+          nRuns={summary.simulations}
+        />
 
-      <ShuffleSummarySections
-        key={summaryTab}
-        sections={visibleSections}
-        defaultExpanded
-        nRuns={summary.simulations}
-      />
-
-      {summaryTab === "recovery" ? (
-        <div className={cx("text-[10px] leading-relaxed text-violet-300/80", ui.textSubtle)}>
-          Recovery time is measured by duration, not by calendar dates. After shuffling, trade close
-          dates no longer form an increasing sequence. The length of a recovery phase equals the sum of
-          the durations of the trades that fall inside it.
-        </div>
-      ) : null}
+        {summaryTab === "recovery" ? (
+          <div className={cx("text-[10px] leading-relaxed text-violet-300/80", ui.textSubtle)}>
+            Recovery time is measured by duration, not by calendar dates. After shuffling, trade close
+            dates no longer form an increasing sequence. The length of a recovery phase equals the sum of
+            the durations of the trades that fall inside it.
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 });
