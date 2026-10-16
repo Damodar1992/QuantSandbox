@@ -210,6 +210,10 @@ export const BuilderStepper = memo(function BuilderStepper({
   indicatorTagIdsByKey = {},
   onAddIndicatorTag,
   backtestingEnabled = true,
+  backtestingState,
+  compiledStrategies = [],
+  onSaveCompiledStrategy,
+  onOpenCompiledStrategy,
 }) {
   // Indicators state (separate for Signal and Entry)
   const [signalIndicators, setSignalIndicators] = useState(() => [
@@ -311,7 +315,10 @@ export const BuilderStepper = memo(function BuilderStepper({
   const [entryBestCandidates, setEntryBestCandidates] = useState([]);
   const [exitBestCandidates, setExitBestCandidates] = useState([]);
   // Seeded like stages 1-3: Stage 5 needs at least one promoted epoch to validate.
-  const [riskBestResults, setRiskBestResults] = useState(() => [createDefaultRiskFavoriteEpoch()]);
+  const [riskBestResults, setRiskBestResults] = useState(() => {
+    const initial = createDefaultRiskFavoriteEpoch();
+    return [{ ...initial, id: strategyId === 1 ? initial.id : `${strategyId}-${initial.id}` }];
+  });
   const [riskBestCandidates, setRiskBestCandidates] = useState([]);
   const [entryBestSourceId, setEntryBestSourceId] = useState(DEFAULT_FAVORITE_EPOCH_IDS.signal);
   const [entrySourceDropdownOpen, setEntrySourceDropdownOpen] = useState(false);
@@ -4542,7 +4549,12 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
           </div>
         ) : active.id === 5 ? (
           <BacktestingStagePanel
+            strategyId={strategyId}
             strategyName={strategyName}
+            backtestingState={backtestingState}
+            compiledStrategies={compiledStrategies}
+            onSaveStrategy={onSaveCompiledStrategy}
+            onOpenSavedStrategy={onOpenCompiledStrategy}
             favoriteEpochs={riskBestResults}
             signalBestResults={signalBestResults}
             entryBestResults={entryBestResults}

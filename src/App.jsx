@@ -85,6 +85,9 @@ import { INITIAL_RELEASE_NOTES, normalizeReleaseNotes } from "./constants/releas
 import { BuilderStepper } from "./features/builder/BuilderStepper";
 import { useStorageState } from "./features/storage/hooks/useStorageState";
 import { StoragePage } from "./components/storage";
+import { BotsPage } from "./features/bots/BotsPage";
+import { useBotsMockState } from "./features/bots/useBotsMockState";
+import { useBacktestingState } from "./features/backtesting/hooks/useBacktestingState";
 import { canManageStorage } from "./features/storage/utils/storagePermissions";
 /**
  * Quant Sandbox CRM Mock — Properly structured React app
@@ -125,6 +128,10 @@ export default function App() {
 
   // Navigation
   const [activeSection, setActiveSection] = useState("Strategies");
+  const [botsOpenTarget, setBotsOpenTarget] = useState(null);
+  const botsState = useBotsMockState();
+  const saveCompiledStrategy = botsState.saveStrategy;
+  const backtestingState = useBacktestingState({ currentUser: MOCK_CURRENT_USER.login });
   const [settingsSubSection, setSettingsSubSection] = useState("indicators"); // "indicators" | "formulas"
 
   // Strategies
@@ -1008,6 +1015,19 @@ export default function App() {
     }
   }, []);
 
+  const handleSaveCompiledStrategy = useCallback((snapshot) => {
+    const saved = saveCompiledStrategy(snapshot);
+    setBotsOpenTarget({ id: saved.id });
+    setActiveSection("Bots");
+    setSelected(null);
+  }, [saveCompiledStrategy]);
+
+  const handleOpenCompiledStrategy = useCallback((id) => {
+    setBotsOpenTarget({ id });
+    setActiveSection("Bots");
+    setSelected(null);
+  }, []);
+
   const handleFeatureFlagChange = useCallback((key, value) => {
     setFeatureFlag(key, value);
     if (key === "miniBacktest") setMiniBacktestEnabled(value);
@@ -1245,6 +1265,8 @@ export default function App() {
             <p className={cx("mt-1 text-[12px]", ui.textMuted)}>
               {activeSection === "Users"
                 ? "Manage application users (mock data only)."
+                : activeSection === "Bots"
+                ? "Launch and monitor strategies validated in Stage 5."
                 : activeSection === "Mini Backtest"
                 ? "All mini backtest runs across strategies."
                 : activeSection === "Tags"
@@ -1289,6 +1311,15 @@ export default function App() {
         )}
 
         {/* Strategies list */}
+        {activeSection === "Bots" && (
+          <BotsPage
+            model={botsState}
+            currentUser={MOCK_CURRENT_USER.login}
+            openTarget={botsOpenTarget}
+            onClearOpenTarget={setBotsOpenTarget}
+          />
+        )}
+
         {activeSection === "Strategies" && !selectedStrategy && (
           <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
             <div className={cx("flex items-center gap-3 px-4 py-3", ui.panelMuted, "border-0 border-b", ui.divider)}>
@@ -1484,6 +1515,10 @@ export default function App() {
               <BuilderStepper
                 strategyId={selectedStrategy.s.id}
                 strategyName={selectedStrategy.s.name}
+                backtestingState={backtestingState}
+                compiledStrategies={botsState.strategies}
+                onSaveCompiledStrategy={handleSaveCompiledStrategy}
+                onOpenCompiledStrategy={handleOpenCompiledStrategy}
                 activeStage={builderStage}
                 onStageChange={setBuilderStage}
                 pairs={builderPairs}

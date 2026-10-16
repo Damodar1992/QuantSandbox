@@ -20,6 +20,8 @@ import { CreateAnalyticsModal } from "./components/forms/CreateAnalyticsModal";
 import { RunBacktestForm } from "./components/forms/RunBacktestForm";
 import { BacktestingInfoModal } from "./components/BacktestingInfoModal";
 import { BacktestingRunParamsModal } from "./components/BacktestingRunParamsModal";
+import { SaveStrategyModal } from "./components/SaveStrategyModal";
+import { getBacktestSummary } from "@/features/bots/botsModel";
 import { ShuffleInfoModal } from "./components/ShuffleInfoModal";
 import { SyntheticInfoModal } from "./components/SyntheticInfoModal";
 import { RunShufflerModal } from "./components/forms/RunShufflerModal";
@@ -41,6 +43,7 @@ const CLOSED = { kind: null };
  * on the risk favorite or from the live source-chain favorites.
  */
 export const BacktestingStagePanel = memo(function BacktestingStagePanel({
+  strategyId,
   strategyName,
   favoriteEpochs = [],
   signalBestResults = [],
@@ -54,8 +57,13 @@ export const BacktestingStagePanel = memo(function BacktestingStagePanel({
   validationVersionLineage = null,
   onValidationRetry,
   onOpenMiniBacktest,
+  backtestingState,
+  compiledStrategies = [],
+  onSaveStrategy,
+  onOpenSavedStrategy,
 }) {
-  const bt = useBacktestingState({ currentUser });
+  const localBt = useBacktestingState({ currentUser });
+  const bt = backtestingState || localBt;
   const tree = useBacktestTreeState();
   // Stage 5 owns its own section-collapse state: its section numbering (1-2) is
   // independent from the builder sections of stages 1-4.
@@ -104,6 +112,11 @@ export const BacktestingStagePanel = memo(function BacktestingStagePanel({
     () => (selectedEpochId ? bt.getRuns(selectedEpochId) : []),
     [bt, selectedEpochId],
   );
+  const savedStrategyByRunId = useMemo(() => Object.fromEntries(
+    compiledStrategies
+      .filter((item) => item.sourceStrategyId === strategyId && item.owner === currentUser)
+      .map((item) => [item.sourceBacktestId, item.id]),
+  ), [compiledStrategies, strategyId, currentUser]);
   const savedCombos = useMemo(
     () => (selectedEpochId ? bt.savedCombinations(selectedEpochId) : new Set()),
     [bt, selectedEpochId],
@@ -165,6 +178,7 @@ export const BacktestingStagePanel = memo(function BacktestingStagePanel({
   };
 
   const confirmDeleteBacktest = (run) => {
+    if (savedStrategyByRunId[run.id]) return;
     const saved = (run.analytics || []).filter((a) => a.status === BT_ANALYTICS_STATUS.SAVED);
     const drafts = (run.analytics || []).filter((a) => a.status === BT_ANALYTICS_STATUS.DRAFT);
     const shN = (run.shufflerRuns || []).length;
@@ -306,6 +320,12 @@ export const BacktestingStagePanel = memo(function BacktestingStagePanel({
         </div>
         <BacktestTree
           runs={runs}
+          savedStrategyByRunId={savedStrategyByRunId}
+          onSaveStrategy={(run) => {
+            const savedId = savedStrategyByRunId[run.id];
+            if (savedId) onOpenSavedStrategy?.(savedId);
+            else setModal({ kind: "saveStrategy", backtestId: run.id });
+          }}
           expandedRuns={tree.expandedRuns}
           onToggleRun={tree.toggleRun}
           onOpenInfo={(run) => setModal({ kind: "info", backtestId: run.id })}
@@ -333,6 +353,31 @@ export const BacktestingStagePanel = memo(function BacktestingStagePanel({
       </BuilderSectionShell>
 
       {/* Modals */}
+      <SaveStrategyModal
+        open={modal.kind === "saveStrategy"}
+        run={liveParent}
+        blueprintName={strategyName}
+        onClose={closeModal}
+        onSave={({ name, description }) => {
+          if (!liveParent || !onSaveStrategy) return;
+          onSaveStrategy({
+            name,
+            description,
+            owner: currentUser,
+            sourceStrategyId: strategyId,
+            blueprintName: strategyName,
+            sourceBacktestId: liveParent.id,
+            backtestCreatedAt: liveParent.createdAt,
+            epochId: liveParent.epochId,
+            epochLabel: liveParent.epochLabel,
+            versionLineage: validationVersionLineage || "Stages 1–4",
+            stageConfig: stageConfig ? structuredClone(stageConfig) : null,
+            params: structuredClone(liveParent.params),
+            result: getBacktestSummary(liveParent),
+          });
+          closeModal();
+        }}
+      />
       <BacktestingRunParamsModal
         open={modal.kind === "runParams"}
         run={liveParent}

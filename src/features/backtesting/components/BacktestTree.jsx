@@ -72,6 +72,8 @@ export const BacktestTree = memo(function BacktestTree({
   onOpenShufflerParams,
   onOpenSyntheticInfo,
   onOpenSyntheticParams,
+  onSaveStrategy,
+  savedStrategyByRunId = {},
 }) {
   if (!runs || runs.length === 0) {
     return (
@@ -176,6 +178,16 @@ export const BacktestTree = memo(function BacktestTree({
                     <div className="inline-flex items-center gap-1">
                       <AppButton
                         type="button"
+                        variant={savedStrategyByRunId[run.id] ? "outline" : "default"}
+                        size="sm"
+                        disabled={!isDone}
+                        onClick={() => onSaveStrategy?.(run)}
+                        title={!isDone ? "Available after a successful backtest" : undefined}
+                      >
+                        {savedStrategyByRunId[run.id] ? "Open strategy" : "Save strategy"}
+                      </AppButton>
+                      <AppButton
+                        type="button"
                         variant="outline"
                         size="icon-xs"
                         title="Run parameters and conditions"
@@ -214,6 +226,8 @@ export const BacktestTree = memo(function BacktestTree({
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             variant="destructive"
+                            disabled={Boolean(savedStrategyByRunId[run.id])}
+                            title={savedStrategyByRunId[run.id] ? "This backtest is linked to a saved strategy" : undefined}
                             onSelect={() => onDeleteBacktest?.(run)}
                           >
                             Delete
