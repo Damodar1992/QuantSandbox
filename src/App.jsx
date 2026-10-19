@@ -129,6 +129,7 @@ export default function App() {
   // Navigation
   const [activeSection, setActiveSection] = useState("Strategies");
   const [botsOpenTarget, setBotsOpenTarget] = useState(null);
+  const [botsDetailOpen, setBotsDetailOpen] = useState(false);
   const botsState = useBotsMockState();
   const saveCompiledStrategy = botsState.saveStrategy;
   const backtestingState = useBacktestingState({ currentUser: MOCK_CURRENT_USER.login });
@@ -1134,6 +1135,17 @@ export default function App() {
     [],
   );
 
+  const handleOpenBlueprintStrategy = useCallback(
+    (strategyId) => {
+      const strategy = strategies.find((item) => item.id === strategyId);
+      const version = strategy?.versions?.[strategy.versions.length - 1] ?? strategy?.versions?.[0];
+      if (!strategy || !version) return;
+      setSelected({ strategyId, versionId: version.id });
+      setActiveSection("Strategies");
+    },
+    [strategies],
+  );
+
   const handleOpenListVersionTree = useCallback((strategy) => {
     setVersionTreeListStrategy({ id: strategy.id, name: strategy.name });
   }, []);
@@ -1246,7 +1258,7 @@ export default function App() {
       />
 
       <main className="flex-1 overflow-visible p-6">
-        {!(activeSection === "Strategies" && selectedStrategy) && activeSection !== "Storage" && (
+        {!(activeSection === "Strategies" && selectedStrategy) && activeSection !== "Storage" && !(activeSection === "Bots" && botsDetailOpen) && (
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <h1 className="text-[16px] font-semibold text-[#f5f5f5] flex items-center gap-2">
@@ -1262,11 +1274,10 @@ export default function App() {
                 </span>
               )}
             </h1>
+            {activeSection !== "Bots" ? (
             <p className={cx("mt-1 text-[12px]", ui.textMuted)}>
               {activeSection === "Users"
                 ? "Manage application users (mock data only)."
-                : activeSection === "Bots"
-                ? "Launch and monitor strategies validated in Stage 5."
                 : activeSection === "Mini Backtest"
                 ? "All mini backtest runs across strategies."
                 : activeSection === "Tags"
@@ -1279,6 +1290,7 @@ export default function App() {
                 ? "Manage formulas (Hyperopt Type, Type, SubType)."
                 : "Manage and configure your strategies."}
             </p>
+            ) : null}
           </div>
 
           {activeSection === "Strategies" && !selectedStrategy && (
@@ -1314,9 +1326,12 @@ export default function App() {
         {activeSection === "Bots" && (
           <BotsPage
             model={botsState}
+            backtestingState={backtestingState}
             currentUser={MOCK_CURRENT_USER.login}
             openTarget={botsOpenTarget}
             onClearOpenTarget={setBotsOpenTarget}
+            onDetailChange={setBotsDetailOpen}
+            onOpenBlueprintStrategy={handleOpenBlueprintStrategy}
           />
         )}
 

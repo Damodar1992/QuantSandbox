@@ -370,7 +370,7 @@ export const BacktestingStagePanel = memo(function BacktestingStagePanel({
             backtestCreatedAt: liveParent.createdAt,
             epochId: liveParent.epochId,
             epochLabel: liveParent.epochLabel,
-            versionLineage: validationVersionLineage || "Stages 1–4",
+            versionLineage: validationVersionLineage || "—",
             stageConfig: stageConfig ? structuredClone(stageConfig) : null,
             params: structuredClone(liveParent.params),
             result: getBacktestSummary(liveParent),

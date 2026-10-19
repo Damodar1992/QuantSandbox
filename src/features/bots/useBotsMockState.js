@@ -5,6 +5,7 @@ import {
   INITIAL_EXCHANGE_ACCOUNTS,
   countStrategyBots,
   validateBotLaunch,
+  prepareBotRestart,
 } from "./botsModel";
 
 const makeId = (prefix) => `${prefix}-${globalThis.crypto?.randomUUID?.() ?? Date.now().toString(36)}`;
@@ -111,7 +112,7 @@ export function useBotsMockState() {
       accountId: mode === "Live" ? accountId : null,
       capital: Number(capital), maxOpenTrades: Number(maxOpenTrades), status: "Starting", realizedPnl: 0,
       startedAt, updatedAt: startedAt, stoppedAt: null, stopIntent: null,
-      positions: [], trades: [], closedTradeCount: 0, winRate: null,
+      orders: [], positions: [], trades: [], closedTradeCount: 0, winRate: null,
       events: [{ id: makeId("event"), at: startedAt, text: `Bot launch requested in ${mode} mode.` }],
     };
     commit((prev) => ({ ...prev, bots: [bot, ...prev.bots] }));
@@ -147,5 +148,19 @@ export function useBotsMockState() {
     return null;
   }, [commit, schedule]);
 
-  return { ...data, saveStrategy, editStrategy, setStrategyArchived, connectAccount, launchBot, stopBot };
+  const restartBot = useCallback((id) => {
+    const bot = dataRef.current.bots.find((item) => item.id === id);
+    const strategy = dataRef.current.strategies.find((item) => item.id === bot?.strategyId);
+    const result = prepareBotRestart(bot, strategy, dataRef.current.accounts, now());
+    if (result.error) return result.error;
+    commit((prev) => ({ ...prev, bots: prev.bots.map((item) => item.id === id ? addEvent(result.bot, "Restart requested. Identity, configuration and trade history preserved.") : item) }));
+    schedule(() => commit((prev) => ({
+      ...prev,
+      bots: prev.bots.map((item) => item.id === id && item.status === "Starting"
+        ? addEvent({ ...item, status: "Running" }, "Preview restart complete. No exchange orders are performed.") : item),
+    })), 1400);
+    return null;
+  }, [commit, schedule]);
+
+  return { ...data, saveStrategy, editStrategy, setStrategyArchived, connectAccount, launchBot, stopBot, restartBot };
 }

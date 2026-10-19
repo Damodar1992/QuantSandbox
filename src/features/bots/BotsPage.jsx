@@ -1,46 +1,30 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { AppBadge } from "@/components/common/AppBadge";
 import { AppButton } from "@/components/common/AppButton";
 import { AppDialog } from "@/components/common/AppDialog";
 import { AppInput } from "@/components/common/AppInput";
 import { AppSelect } from "@/components/common/AppSelect";
+import { EyeIcon } from "@/components/common/Icons";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { BacktestingInfoModal } from "@/features/backtesting/components/BacktestingInfoModal";
+import { BotOverview, BotTrades, BotAlerts, DataState, ModeBadge } from "./BotDetails";
+import { date, money, percent, amount, accountName, getBotMetrics, filterAndSortBots, pnlTone } from "./botsDisplay";
 import { cx, ui } from "@/constants/ui";
 import { StrategyTemplatePreview } from "@/features/builder/components/StrategyTemplatePreview";
+import { StageConfigColumns } from "@/features/backtesting/components/EpochContextPanel";
 import { countStrategyBots, getCompatibleAccounts } from "./botsModel";
 
 const PANEL = cx(ui.radius, ui.panel, "p-4");
 const MUTED = ui.textMuted;
 const SUBTLE = ui.textSubtle;
 
-const toOptions = (values) => [
-  { value: "All", label: "All" },
+const toOptions = (values, allLabel = "All") => [
+  { value: "All", label: allLabel },
   ...values.map((value) => ({ value, label: value })),
 ];
 const unique = (items) => [...new Set(items)].sort();
-const date = (value) =>
-  value
-    ? new Date(value).toLocaleString("en-GB", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : "—";
-const money = (value) =>
-  Number(value || 0).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-const percent = (value, signed = false) =>
-  value == null ? "No data" : `${signed && value > 0 ? "+" : ""}${Number(value).toFixed(1)}%`;
-const accountName = (bot, accounts) =>
-  bot.mode === "Dryrun"
-    ? "Virtual wallet"
-    : accounts.find((account) => account.id === bot.accountId)?.name || "Account unavailable";
 
 function PillTabs({ items, value, onChange, className }) {
   return (
@@ -89,7 +73,7 @@ function Status({ value }) {
           : "muted";
   return (
     <AppBadge status={value} variant={variant}>
-      {value}
+      {value === "Active" ? "Ready" : value === "Archive" ? "Archived" : value}
     </AppBadge>
   );
 }
@@ -105,6 +89,35 @@ function InfoGrid({ rows }) {
       ))}
     </dl>
   );
+}
+
+const SECTION_CARD = cx(ui.radius, "border border-[rgba(60,40,80,0.35)] bg-[#120b20] p-3");
+
+function OverviewSectionCard({ title, rows }) {
+  const visibleRows = rows.filter((row) => row && row[1] != null);
+  return (
+    <div className={cx(SECTION_CARD, "h-fit space-y-2")}>
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-[#9b8ec4]">{title}</div>
+      <ul className="space-y-2">
+        {visibleRows.map(([label, value]) => (
+          <li key={label} className="flex items-start justify-between gap-3 text-[11px]">
+            <span className={cx(MUTED, "min-w-0 pt-0.5 leading-snug")}>{label}</span>
+            <span className="min-w-0 shrink-0 text-right text-[#faf7fd]">{value}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function formatStakeLabel(params) {
+  if (params?.stakeValue == null || params?.stakeValue === "") return null;
+  const modeLabel = params.stakeMode === "relative" ? "Relative" : "Fixed";
+  const value =
+    params.stakeMode === "relative"
+      ? `${Number(params.stakeValue)}%`
+      : `${money(params.stakeValue)} USDT`;
+  return `${modeLabel} · ${value}`;
 }
 
 function EmptyCell({ columns, children }) {
@@ -129,6 +142,7 @@ function DataTable({ headers, children }) {
                 className={cx(
                   "py-3 font-medium border-b border-[#303030]",
                   index === 0 ? "px-4" : "px-2",
+                  ["Bot equity", "Total P&L"].includes(label) && "text-right",
                 )}
               >
                 {label}
@@ -146,23 +160,20 @@ function FilterBar({ countLabel, children, action }) {
   return (
     <div
       className={cx(
-        "flex flex-wrap items-center gap-2 px-4 py-3",
+        "space-y-3 px-4 py-3",
         ui.panelMuted,
         "border-0 border-b",
         ui.divider,
       )}
     >
-      <div className={cx("text-[12px]", SUBTLE)}>{countLabel}</div>
-      <div className="ml-auto flex flex-wrap items-center gap-2">
-        {children}
-        {action}
-      </div>
+      <div className="flex items-center justify-between gap-3"><div className={cx("text-[12px]", SUBTLE)}>{countLabel}</div>{action}</div>
+      <div className="flex flex-wrap items-end gap-2">{children}</div>
     </div>
   );
 }
 
 function LaunchModal({ strategy, model, owner, onClose, onLaunched }) {
-  const [name, setName] = useState(`${strategy.name} · Dryrun`);
+  const [name, setName] = useState(strategy.name);
   const [mode, setMode] = useState("Dryrun");
   const [capital, setCapital] = useState(String(strategy.params.startingCapital || 1000));
   const [maxOpenTrades, setMaxOpenTrades] = useState("2");
@@ -171,7 +182,6 @@ function LaunchModal({ strategy, model, owner, onClose, onLaunched }) {
   const accounts = getCompatibleAccounts(strategy, model.accounts, owner);
 
   const changeMode = (next) => {
-    if (name === `${strategy.name} · ${mode}`) setName(`${strategy.name} · ${next}`);
     setMode(next);
     setError("");
   };
@@ -485,12 +495,23 @@ function EditStrategyModal({ strategy, onClose, onSave }) {
   );
 }
 
-export function BotsPage({ model, currentUser = "bogdan", openTarget, onClearOpenTarget }) {
+export function BotsPage({
+  model,
+  backtestingState,
+  currentUser = "bogdan",
+  openTarget,
+  onClearOpenTarget,
+  onDetailChange,
+  onOpenBlueprintStrategy,
+}) {
   const [tab, setTab] = useState("strategies");
   const [detail, setDetail] = useState(null);
   const [detailTab, setDetailTab] = useState("Overview");
   const [modal, setModal] = useState(null);
   const [error, setError] = useState("");
+  const [strategySearch, setStrategySearch] = useState("");
+  const [botSearch, setBotSearch] = useState("");
+  const [botSort, setBotSort] = useState("latest");
   const [strategyFilters, setStrategyFilters] = useState({
     owner: "All",
     status: "All",
@@ -501,7 +522,12 @@ export function BotsPage({ model, currentUser = "bogdan", openTarget, onClearOpe
     mode: "All",
     status: "All",
     owner: "All",
+    account: "All",
   });
+
+  useEffect(() => {
+    onDetailChange?.(Boolean(detail));
+  }, [detail, onDetailChange]);
 
   useEffect(() => {
     if (!openTarget) return;
@@ -515,28 +541,24 @@ export function BotsPage({ model, currentUser = "bogdan", openTarget, onClearOpe
     detail?.kind === "strategy" ? model.strategies.find((item) => item.id === detail.id) : null;
   const bot = detail?.kind === "bot" ? model.bots.find((item) => item.id === detail.id) : null;
   const botStrategy = bot ? model.strategies.find((item) => item.id === bot.strategyId) : null;
+  const strategyBotCounts = strategy ? countStrategyBots(strategy.id, model.bots) : null;
 
   const strategyRows = useMemo(
     () =>
       model.strategies.filter(
         (item) =>
+          (!strategySearch.trim() || [item.name, item.id, item.blueprintName, item.params.pair].join(" ").toLowerCase().includes(strategySearch.trim().toLowerCase())) &&
           (strategyFilters.owner === "All" || item.owner === strategyFilters.owner) &&
           (strategyFilters.status === "All" || item.status === strategyFilters.status) &&
           (strategyFilters.exchange === "All" || item.params.exchange === strategyFilters.exchange),
       ),
-    [model.strategies, strategyFilters],
+    [model.strategies, strategyFilters, strategySearch],
   );
 
   const botRows = useMemo(
     () =>
-      model.bots.filter(
-        (item) =>
-          (botFilters.strategy === "All" || item.strategyId === botFilters.strategy) &&
-          (botFilters.mode === "All" || item.mode === botFilters.mode) &&
-          (botFilters.status === "All" || item.status === botFilters.status) &&
-          (botFilters.owner === "All" || item.owner === botFilters.owner),
-      ),
-    [model.bots, botFilters],
+      filterAndSortBots(model.bots, model.strategies, model.accounts, botFilters, botSearch, botSort),
+    [model.bots, model.strategies, model.accounts, botFilters, botSearch, botSort],
   );
 
   const openStrategy = (id, subtab = "Overview") => {
@@ -565,9 +587,11 @@ export function BotsPage({ model, currentUser = "bogdan", openTarget, onClearOpe
     else closeModal();
   };
   const listTitle = tab === "strategies" ? "Compiled Strategies" : "Bots";
+  const sourceStrategy = modal?.kind === "source" ? model.strategies.find((item) => item.id === modal.id) : null;
+  const sourceRun = sourceStrategy ? backtestingState?.getRuns(sourceStrategy.epochId).find((run) => run.id === sourceStrategy.sourceBacktestId) : null;
   const filtersClearable = Object.values(
     tab === "strategies" ? strategyFilters : botFilters,
-  ).some((value) => value !== "All");
+  ).some((value) => value !== "All") || Boolean((tab === "strategies" ? strategySearch : botSearch).trim());
 
   return (
     <div className="space-y-5">
@@ -609,14 +633,16 @@ export function BotsPage({ model, currentUser = "bogdan", openTarget, onClearOpe
                     size="sm"
                     disabled={!filtersClearable}
                     onClick={() =>
-                      setStrategyFilters({ owner: "All", status: "All", exchange: "All" })
+                      { setStrategyFilters({ owner: "All", status: "All", exchange: "All" }); setStrategySearch(""); }
                     }
                   >
                     Clear filters
                   </AppButton>
                 }
               >
+                <AppInput label="Search" value={strategySearch} onChange={(event) => setStrategySearch(event.target.value)} placeholder="Search name, ID or pair" aria-label="Search compiled strategies" wrapperClassName="w-52" className="h-8 text-[12px]" />
                 <AppSelect
+                  label="Owner"
                   value={strategyFilters.owner}
                   onValueChange={(owner) => setStrategyFilters((prev) => ({ ...prev, owner }))}
                   options={toOptions(unique(model.strategies.map((item) => item.owner)))}
@@ -625,14 +651,16 @@ export function BotsPage({ model, currentUser = "bogdan", openTarget, onClearOpe
                   aria-label="Filter by owner"
                 />
                 <AppSelect
+                  label="Status"
                   value={strategyFilters.status}
                   onValueChange={(status) => setStrategyFilters((prev) => ({ ...prev, status }))}
-                  options={toOptions(["Active", "Archive"])}
+                  options={[{ value: "All", label: "All statuses" }, { value: "Active", label: "Ready" }, { value: "Archive", label: "Archived" }]}
                   className="w-[130px]"
                   triggerClassName="h-8 text-[12px]"
                   aria-label="Filter by status"
                 />
                 <AppSelect
+                  label="Exchange"
                   value={strategyFilters.exchange}
                   onValueChange={(exchange) =>
                     setStrategyFilters((prev) => ({ ...prev, exchange }))
@@ -644,88 +672,29 @@ export function BotsPage({ model, currentUser = "bogdan", openTarget, onClearOpe
                 />
               </FilterBar>
 
-              <DataTable
-                headers={[
-                  "Strategy",
-                  "Market",
-                  "Backtest ROI",
-                  "Max DD",
-                  "Bots",
-                  "Owner",
-                  "Status",
-                  "Source",
-                  "Actions",
-                ]}
-              >
-                {strategyRows.length === 0 ? (
-                  <EmptyCell columns={9}>
-                    No strategies match the current filters. Create one from a successful Stage 5
-                    backtest.
-                  </EmptyCell>
-                ) : null}
+              <DataTable headers={["Strategy", "Trading context", "Created", "Bots", "Owner", "Status", "Actions"]}>
+                {!strategyRows.length ? <EmptyCell columns={7}>No strategies match the current filters.</EmptyCell> : null}
                 {strategyRows.map((item) => {
+                  const related = model.bots.filter((bot) => bot.strategyId === item.id);
                   const counts = countStrategyBots(item.id, model.bots);
-                  return (
-                    <tr key={item.id} className="border-b border-[rgba(60,40,80,0.25)]">
-                      <td className="px-4 py-2.5">
-                        <AppButton
-                          variant="link"
-                          className="h-auto p-0 text-left font-medium text-violet-200"
-                          onClick={() => openStrategy(item.id)}
-                        >
-                          {item.name}
-                        </AppButton>
-                        <div className={cx("text-[11px]", MUTED)}>
-                          {item.params.exchange} · {item.params.pair} · {item.params.timeframe}
-                        </div>
-                      </td>
-                      <td className="px-2 py-2.5">
-                        {item.params.mode} · {item.params.leverage || 1}×
-                      </td>
-                      <td className="px-2 py-2.5 text-green-400">{percent(item.result.roi, true)}</td>
-                      <td className="px-2 py-2.5">{percent(item.result.maxdd)}</td>
-                      <td className="px-2 py-2.5">
-                        <AppButton
-                          variant="link"
-                          className="h-auto p-0 text-violet-200"
-                          onClick={() => openStrategy(item.id, "Bots")}
-                        >
-                          {counts.active} active / {counts.inactive} inactive
-                        </AppButton>
-                      </td>
-                      <td className="px-2 py-2.5">{item.owner}</td>
-                      <td className="px-2 py-2.5">
-                        <Status value={item.status} />
-                      </td>
-                      <td className="px-2 py-2.5">
-                        {item.blueprintName}
-                        <div className={cx("text-[11px]", MUTED)}>
-                          {item.sourceBacktestId} · {item.epochLabel}
-                        </div>
-                      </td>
-                      <td className="px-2 py-2.5">
-                        <div className="flex flex-wrap gap-1">
-                          <AppButton onClick={() => openStrategy(item.id)}>Open</AppButton>
-                          <AppButton
-                            disabled={item.status !== "Active"}
-                            onClick={() => openLaunch(item.id)}
-                          >
-                            Launch
-                          </AppButton>
-                          <AppButton
-                            disabled={item.status === "Active" && counts.active > 0}
-                            onClick={() =>
-                              item.status === "Archive"
-                                ? applyArchive(item.id, false)
-                                : setModal({ kind: "archive", id: item.id })
-                            }
-                          >
-                            {item.status === "Archive" ? "Restore" : "Archive"}
-                          </AppButton>
-                        </div>
-                      </td>
-                    </tr>
-                  );
+                  return <tr key={item.id} className="border-b border-border">
+                    <td className="px-4 py-3"><div className="flex items-center gap-2">
+                      <AppButton size="icon" className="h-8 w-8 shrink-0" aria-label={`View ${item.name}`} onClick={() => openStrategy(item.id)}><EyeIcon /></AppButton>
+                      <div><AppButton variant="link" className="h-auto p-0 text-left font-medium text-violet-200" onClick={() => openStrategy(item.id)}>{item.name}</AppButton><div className="mt-1 text-[11px] text-muted-foreground">{item.blueprintName} · {item.epochLabel}</div></div>
+                    </div></td>
+                    <td className="px-2 py-3"><div>{item.params.exchange} · {item.params.mode}{item.params.mode === "futures" ? ` · ${item.params.leverage}×` : ""}</div><div className="mt-1 text-[11px] text-muted-foreground">{item.params.pair} · {item.params.timeframe}</div></td>
+                    <td className="px-2 py-3 whitespace-nowrap">{date(item.savedAt)}</td>
+                    <td className="px-2 py-3"><AppButton variant="link" className="h-auto p-0 text-violet-200" onClick={() => openStrategy(item.id, "Bots")}>Live: {related.filter((bot) => bot.mode === "Live").length} · Dry-run: {related.filter((bot) => bot.mode === "Dryrun").length}</AppButton><div className="mt-1 text-[11px] text-muted-foreground">{counts.active} active · {counts.inactive} inactive</div></td>
+                    <td className="px-2 py-3">{item.owner}</td>
+                    <td className="px-2 py-3"><Status value={item.status} /></td>
+                    <td className="px-2 py-3"><div className="flex gap-2"><AppButton disabled={item.status !== "Active"} onClick={() => openLaunch(item.id)}>Launch bot</AppButton>
+                      <DropdownMenu><DropdownMenuTrigger asChild><AppButton aria-label={`More actions for ${item.name}`}>⋯</AppButton></DropdownMenuTrigger><DropdownMenuContent align="end">
+                        <DropdownMenuItem onSelect={() => openStrategy(item.id)}>View strategy</DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => setModal({ kind: "edit", id: item.id })}>Edit details</DropdownMenuItem>
+                        <DropdownMenuItem disabled={item.status === "Active" && counts.active > 0} onSelect={() => item.status === "Archive" ? applyArchive(item.id, false) : setModal({ kind: "archive", id: item.id })}>{item.status === "Archive" ? "Restore" : counts.active > 0 ? "Archive · stop active bots first" : "Archive"}</DropdownMenuItem>
+                      </DropdownMenuContent></DropdownMenu>
+                    </div></td>
+                  </tr>;
                 })}
               </DataTable>
             </section>
@@ -738,19 +707,22 @@ export function BotsPage({ model, currentUser = "bogdan", openTarget, onClearOpe
                     size="sm"
                     disabled={!filtersClearable}
                     onClick={() =>
-                      setBotFilters({
+                      { setBotFilters({
                         strategy: "All",
                         mode: "All",
                         status: "All",
                         owner: "All",
-                      })
+                        account: "All",
+                      }); setBotSearch(""); }
                     }
                   >
                     Clear filters
                   </AppButton>
                 }
               >
+                <AppInput label="Search" value={botSearch} onChange={(event) => setBotSearch(event.target.value)} placeholder="Search bots, ID or pair" aria-label="Search bots" wrapperClassName="w-48" className="h-8 text-[12px]" />
                 <AppSelect
+                  label="Strategy"
                   value={botFilters.strategy}
                   onValueChange={(strategyId) =>
                     setBotFilters((prev) => ({ ...prev, strategy: strategyId }))
@@ -764,14 +736,16 @@ export function BotsPage({ model, currentUser = "bogdan", openTarget, onClearOpe
                   aria-label="Filter by strategy"
                 />
                 <AppSelect
+                  label="Mode"
                   value={botFilters.mode}
                   onValueChange={(mode) => setBotFilters((prev) => ({ ...prev, mode }))}
-                  options={toOptions(["Dryrun", "Live"])}
+                  options={[{ value: "All", label: "All modes" }, { value: "Dryrun", label: "Dry-run" }, { value: "Live", label: "Live" }]}
                   className="w-[120px]"
                   triggerClassName="h-8 text-[12px]"
                   aria-label="Filter by mode"
                 />
                 <AppSelect
+                  label="Status"
                   value={botFilters.status}
                   onValueChange={(status) => setBotFilters((prev) => ({ ...prev, status }))}
                   options={toOptions([
@@ -787,6 +761,7 @@ export function BotsPage({ model, currentUser = "bogdan", openTarget, onClearOpe
                   aria-label="Filter by status"
                 />
                 <AppSelect
+                  label="Owner"
                   value={botFilters.owner}
                   onValueChange={(owner) => setBotFilters((prev) => ({ ...prev, owner }))}
                   options={toOptions(unique(model.bots.map((item) => item.owner)))}
@@ -794,75 +769,28 @@ export function BotsPage({ model, currentUser = "bogdan", openTarget, onClearOpe
                   triggerClassName="h-8 text-[12px]"
                   aria-label="Filter by owner"
                 />
+                <AppSelect label="Account" value={botFilters.account} onValueChange={(account) => setBotFilters((prev) => ({ ...prev, account }))} options={[{ value: "All", label: "All accounts" }, { value: "virtual", label: "Virtual wallet" }, ...model.accounts.map((account) => ({ value: account.id, label: account.name }))]} className="w-40" triggerClassName="h-8 text-[12px]" aria-label="Filter by account" />
+                <AppSelect label="Sort" value={botSort} onValueChange={setBotSort} options={[{ value: "latest", label: "Latest start" }, { value: "name", label: "Name A–Z" }, { value: "pnl", label: "P&L high to low" }, { value: "status", label: "Status A–Z" }]} className="w-40" triggerClassName="h-8 text-[12px]" aria-label="Sort bots" />
               </FilterBar>
 
-              <DataTable
-                headers={[
-                  "Bot",
-                  "Strategy",
-                  "Mode / account",
-                  "Status",
-                  "Owner",
-                  "Capital",
-                  "P&L",
-                  "Action",
-                ]}
-              >
-                {botRows.length === 0 ? (
-                  <EmptyCell columns={8}>No bots match the current filters.</EmptyCell>
-                ) : null}
+              <DataTable headers={["Bot / strategy", "Mode / account", "Status / data", "Bot equity", "Total P&L", "Positions / trades", "Owner"]}>
+                {!botRows.length ? <EmptyCell columns={7}>No bots match the current filters.</EmptyCell> : null}
                 {botRows.map((item) => {
                   const source = model.strategies.find((entry) => entry.id === item.strategyId);
-                  const totalPnl =
-                    item.realizedPnl +
-                    item.positions.reduce((sum, position) => sum + position.unrealizedPnl, 0);
-                  return (
-                    <tr key={item.id} className="border-b border-[rgba(60,40,80,0.25)]">
-                      <td className="px-4 py-2.5">
-                        <AppButton
-                          variant="link"
-                          className="h-auto p-0 font-medium text-violet-200"
-                          onClick={() => openBot(item.id)}
-                        >
-                          {item.name}
-                        </AppButton>
-                        <div className={cx("text-[11px]", MUTED)}>
-                          {source?.params.pair} · {date(item.startedAt)}
-                        </div>
-                      </td>
-                      <td className="px-2 py-2.5">
-                        <AppButton
-                          variant="link"
-                          className="h-auto p-0 text-violet-200"
-                          onClick={() => openStrategy(item.strategyId)}
-                        >
-                          {source?.name || "Unavailable"}
-                        </AppButton>
-                      </td>
-                      <td className="px-2 py-2.5">
-                        {item.mode}
-                        <div className={cx("text-[11px]", MUTED)}>
-                          {accountName(item, model.accounts)}
-                        </div>
-                      </td>
-                      <td className="px-2 py-2.5">
-                        <Status value={item.status} />
-                      </td>
-                      <td className="px-2 py-2.5">{item.owner}</td>
-                      <td className="px-2 py-2.5">{money(item.capital)} USDT</td>
-                      <td
-                        className={cx(
-                          "px-2 py-2.5",
-                          totalPnl < 0 ? "text-red-400" : "text-green-400",
-                        )}
-                      >
-                        {money(totalPnl)} USDT
-                      </td>
-                      <td className="px-2 py-2.5">
-                        <AppButton onClick={() => openBot(item.id)}>Open</AppButton>
-                      </td>
-                    </tr>
-                  );
+                  const metrics = getBotMetrics(item);
+                  return <tr key={item.id} className="border-b border-border">
+                    <td className="px-4 py-3"><div className="flex items-start gap-2"><AppButton size="icon" className="h-8 w-8 shrink-0" aria-label={`View ${item.name} ${item.mode}`} onClick={() => openBot(item.id)}><EyeIcon /></AppButton><div>
+                      <AppButton variant="link" className="h-auto p-0 text-left font-medium text-violet-200" onClick={() => openBot(item.id)}>{item.name}</AppButton><div className="text-[10px] text-muted-foreground" title={item.id}>{item.id.length > 20 ? item.id.slice(-12) : item.id}</div>
+                      <AppButton variant="link" className="h-auto p-0 text-[11px] text-violet-200" onClick={() => openStrategy(item.strategyId)}>{source?.name || "Source unavailable"}</AppButton>
+                      <div className="text-[11px] text-muted-foreground">{source?.params.pair} · {source?.params.timeframe}</div>
+                    </div></div></td>
+                    <td className="px-2 py-3"><ModeBadge mode={item.mode} /><div className="mt-1 text-[11px] text-muted-foreground">{accountName(item, model.accounts)}</div></td>
+                    <td className="px-2 py-3"><Status value={item.status} /><DataState bot={item} /></td>
+                    <td className="px-2 py-3 text-right tabular-nums whitespace-nowrap"><div>{amount(metrics.equity)}</div><div className="mt-1 text-[11px] text-muted-foreground">Initial: {amount(item.capital)}</div></td>
+                    <td className="px-2 py-3 text-right tabular-nums whitespace-nowrap"><div className={pnlTone(metrics.totalPnl)}>{amount(metrics.totalPnl, true)} · {percent(metrics.returnPct, true)}</div><div className="mt-1 text-[11px] text-muted-foreground">Realized {money(metrics.realized, true)}</div><div className="text-[11px] text-muted-foreground">Unrealized {money(metrics.unrealized, true)}</div><div className="text-[10px] text-muted-foreground" title={`${date(item.startedAt)} → ${date(item.stoppedAt || item.updatedAt)}`}>Lifetime · USDT</div></td>
+                    <td className="px-2 py-3"><div>{item.positions?.length ?? "No data"} open · {item.closedTradeCount ?? "No data"} closed</div><div className="mt-1 text-[11px] text-muted-foreground">{amount(metrics.committed)} committed</div></td>
+                    <td className="px-2 py-3">{item.owner}</td>
+                  </tr>;
                 })}
               </DataTable>
             </section>
@@ -876,7 +804,7 @@ export function BotsPage({ model, currentUser = "bogdan", openTarget, onClearOpe
             ← {listTitle}
           </AppButton>
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
+            <div className="min-w-0">
               <h2 className="text-[16px] font-semibold text-[#faf7fd]">{strategy.name}</h2>
               <div className={cx("mt-2 flex flex-wrap items-center gap-2 text-[12px]", MUTED)}>
                 <Status value={strategy.status} />
@@ -885,6 +813,10 @@ export function BotsPage({ model, currentUser = "bogdan", openTarget, onClearOpe
                   {strategy.params.exchange} · {strategy.params.pair} · {strategy.params.timeframe}
                 </span>
               </div>
+              <p className={cx("mt-2 max-w-3xl text-[12px]", MUTED)}>
+                Description:{" "}
+                <span className="text-[#faf7fd]">{strategy.description || "—"}</span>
+              </p>
             </div>
             <div className="flex flex-wrap gap-2">
               <AppButton onClick={() => setModal({ kind: "edit", id: strategy.id })}>
@@ -914,9 +846,9 @@ export function BotsPage({ model, currentUser = "bogdan", openTarget, onClearOpe
           </div>
 
           <PillTabs
-            value={detailTab}
+            value={detailTab === "Bots" ? "Bots" : "Overview"}
             onChange={setDetailTab}
-            items={["Overview", "Parameters", "Strategy code", "Bots"].map((item) => ({
+            items={["Overview", "Bots"].map((item) => ({
               value: item,
               label: item,
             }))}
@@ -928,83 +860,68 @@ export function BotsPage({ model, currentUser = "bogdan", openTarget, onClearOpe
             </p>
           ) : null}
 
-          {detailTab === "Overview" ? (
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className={PANEL}>
-                <h3 className="mb-4 text-[12px] font-medium text-[#faf7fd]">Strategy information</h3>
-                <InfoGrid
+          {detailTab !== "Bots" ? (
+            <div className="space-y-4">
+              <div className="grid gap-3 lg:grid-cols-2">
+                <OverviewSectionCard
+                  title="Strategy information"
                   rows={[
-                    ["Description", strategy.description || "—"],
-                    ["Source blueprint", strategy.blueprintName],
-                    ["Version lineage", strategy.versionLineage],
-                    ["Selected epoch", strategy.epochLabel],
                     [
-                      "Stage 5 validation",
-                      <AppButton
-                        key="source-backtest"
-                        variant="link"
-                        className="h-auto p-0 text-violet-200"
-                        onClick={() => setModal({ kind: "source", id: strategy.id })}
-                      >
-                        {strategy.sourceBacktestId} · Success
-                      </AppButton>,
+                      "Strategy",
+                      onOpenBlueprintStrategy && strategy.sourceStrategyId != null ? (
+                        <AppButton
+                          key="strategy-name"
+                          variant="link"
+                          className="h-auto p-0 text-right text-violet-200"
+                          onClick={() => onOpenBlueprintStrategy(strategy.sourceStrategyId)}
+                        >
+                          {strategy.name} · {strategy.versionLineage || "—"}
+                        </AppButton>
+                      ) : (
+                        <span key="strategy-name">
+                          {strategy.name} · {strategy.versionLineage || "—"}
+                        </span>
+                      ),
                     ],
-                    ["Saved on", date(strategy.savedAt)],
-                  ]}
-                />
-              </div>
-              <div className={PANEL}>
-                <h3 className="mb-4 text-[12px] font-medium text-[#faf7fd]">Source backtest</h3>
-                <InfoGrid
-                  rows={[
+                    ["Epoch", strategy.epochLabel],
+                    [
+                      "Backtest",
+                      <span key="backtest" className="inline-flex items-center justify-end gap-2">
+                        <span>{strategy.sourceBacktestId}</span>
+                        <AppButton
+                          size="icon"
+                          className="h-7 w-7 shrink-0"
+                          aria-label={`Open backtest ${strategy.sourceBacktestId}`}
+                          onClick={() => setModal({ kind: "source", id: strategy.id })}
+                        >
+                          <EyeIcon />
+                        </AppButton>
+                      </span>,
+                    ],
                     [
                       "Period",
-                      `${strategy.params.periodFrom || "—"} – ${strategy.params.periodTo || "—"}`,
+                      `${strategy.params.periodFrom || "No data"} → ${strategy.params.periodTo || "No data"}`,
                     ],
-                    ["ROI", percent(strategy.result.roi, true)],
-                    ["Max drawdown", percent(strategy.result.maxdd)],
-                    ["Closed trades", strategy.result.trades ?? "No data"],
+                    [
+                      "ROI / Max DD",
+                      `${percent(strategy.result?.roi, true)} / ${percent(strategy.result?.maxdd)}`,
+                    ],
                     ["Starting capital", `${money(strategy.params.startingCapital)} USDT`],
                     [
                       "Linked bots",
-                      `${countStrategyBots(strategy.id, model.bots).active} active / ${countStrategyBots(strategy.id, model.bots).inactive} inactive`,
+                      <AppButton
+                        key="linked-bots"
+                        variant="link"
+                        className="h-auto p-0 text-violet-200"
+                        onClick={() => setDetailTab("Bots")}
+                      >
+                        {strategyBotCounts.active} active · {strategyBotCounts.inactive} inactive
+                      </AppButton>,
                     ],
                   ]}
                 />
-              </div>
-            </div>
-          ) : null}
-
-          {detailTab === "Parameters" ? (
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className={PANEL}>
-                <h3 className="mb-4 text-[12px] font-medium text-[#faf7fd]">Stage 1–4 parameters</h3>
-                {[1, 2, 3].map((stage) => {
-                  const block = strategy.stageConfig?.[`stage${stage}`];
-                  return (
-                    <div
-                      className={cx(
-                        "flex justify-between border-b border-[rgba(60,40,80,0.35)] py-2 text-[12px]",
-                      )}
-                      key={stage}
-                    >
-                      <span>Stage {stage} · {block?.label || "Frozen configuration"}</span>
-                      <span className={MUTED}>{block?.indicators?.length ?? 0} indicators</span>
-                    </div>
-                  );
-                })}
-                <div className={cx("mt-3 text-[12px]", MUTED)}>
-                  Stage 4 risk:{" "}
-                  {strategy.stageConfig?.stage4?.riskParams
-                    ? Object.entries(strategy.stageConfig.stage4.riskParams)
-                        .map(([key, value]) => `${key}: ${value}`)
-                        .join(" · ")
-                    : "Frozen from selected epoch"}
-                </div>
-              </div>
-              <div className={PANEL}>
-                <h3 className="mb-4 text-[12px] font-medium text-[#faf7fd]">Trading settings</h3>
-                <InfoGrid
+                <OverviewSectionCard
+                  title="Trading configuration"
                   rows={[
                     ["Exchange", strategy.params.exchange],
                     [
@@ -1013,29 +930,46 @@ export function BotsPage({ model, currentUser = "bogdan", openTarget, onClearOpe
                     ],
                     [
                       "Market / leverage",
-                      `${strategy.params.mode} · ${strategy.params.leverage || 1}×`,
+                      strategy.params.mode === "futures"
+                        ? `${strategy.params.mode} · ${strategy.params.leverage || 1}×`
+                        : `${strategy.params.mode} · Not applicable`,
                     ],
-                    ["Backtest capital", `${money(strategy.params.startingCapital)} USDT`],
                     [
                       "Stake",
                       `${strategy.params.stakeMode || "fixed"} · ${money(strategy.params.stakeValue)}${strategy.params.stakeMode === "relative" ? "%" : " USDT"}`,
                     ],
-                    ["Profit reserving", strategy.params.profitReserving ? "On" : "Off"],
                   ]}
                 />
               </div>
-            </div>
-          ) : null}
 
-          {detailTab === "Strategy code" ? (
-            <StrategyTemplatePreview
-              signalIndicators={strategy.stageConfig?.stage1?.indicators || []}
-              entryFormula={strategy.stageConfig?.stage2?.formula || ""}
-              exitFormula={strategy.stageConfig?.stage3?.formula || ""}
-              riskRanges={strategy.stageConfig?.stage4?.riskRanges || {}}
-              riskHyperoptParams={strategy.stageConfig?.stage4?.riskHyperoptParams || {}}
-              timeRange={strategy.params?.timeframe || "1h"}
-            />
+              <div className={cx(SECTION_CARD, "space-y-2")}>
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-[#9b8ec4]">
+                  Strategy indicators
+                </div>
+                {strategy.stageConfig ? (
+                  <StageConfigColumns stageConfig={strategy.stageConfig} />
+                ) : (
+                  <div className={cx("text-[12px]", MUTED)}>
+                    Configuration unavailable for this saved strategy.
+                  </div>
+                )}
+              </div>
+
+              <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
+                <div className={cx("border-b px-3 py-2.5 text-[12px] font-medium text-[#faf7fd]", ui.divider)}>
+                  Strategy Code
+                </div>
+                <StrategyTemplatePreview
+                  signalIndicators={strategy.stageConfig?.stage1?.indicators || []}
+                  entryFormula={strategy.stageConfig?.stage2?.formula || ""}
+                  exitFormula={strategy.stageConfig?.stage3?.formula || ""}
+                  riskRanges={strategy.stageConfig?.stage4?.riskRanges || {}}
+                  riskHyperoptParams={strategy.stageConfig?.stage4?.riskHyperoptParams || {}}
+                  timeRange={strategy.params?.timeframe || "1h"}
+                  height={320}
+                />
+              </div>
+            </div>
           ) : null}
 
           {detailTab === "Bots" ? (
@@ -1043,24 +977,24 @@ export function BotsPage({ model, currentUser = "bogdan", openTarget, onClearOpe
               <div className={cx("px-4 py-3 text-[12px] font-medium", ui.panelMuted, "border-b", ui.divider)}>
                 Linked bots
               </div>
-              <DataTable headers={["Bot", "Mode", "Status", "Owner", "Action"]}>
+              <DataTable headers={["Bot", "Mode / account", "Status / data", "Total P&L", "Positions", "Owner"]}>
                 {model.bots
                   .filter((item) => item.strategyId === strategy.id)
                   .map((item) => (
                     <tr key={item.id} className="border-b border-[rgba(60,40,80,0.25)]">
-                      <td className="px-4 py-2.5">{item.name}</td>
-                      <td className="px-2 py-2.5">{item.mode}</td>
+                      <td className="px-4 py-2.5"><AppButton variant="link" className="h-auto p-0 text-violet-200" onClick={() => openBot(item.id)}>{item.name}</AppButton><div className="text-[11px] text-muted-foreground">{item.id.length > 20 ? item.id.slice(-12) : item.id}</div></td>
+                      <td className="px-2 py-2.5"><ModeBadge mode={item.mode} /><div className="mt-1 text-[11px] text-muted-foreground">{accountName(item, model.accounts)}</div></td>
                       <td className="px-2 py-2.5">
                         <Status value={item.status} />
+                        <DataState bot={item} />
                       </td>
+                      <td className={cx("px-2 py-2.5 text-right tabular-nums", pnlTone(getBotMetrics(item).totalPnl))}>{amount(getBotMetrics(item).totalPnl, true)}<div className="text-[11px]">{percent(getBotMetrics(item).returnPct, true)} · lifetime</div></td>
+                      <td className="px-2 py-2.5">{item.positions?.length ?? "No data"} open</td>
                       <td className="px-2 py-2.5">{item.owner}</td>
-                      <td className="px-2 py-2.5">
-                        <AppButton onClick={() => openBot(item.id)}>Open</AppButton>
-                      </td>
                     </tr>
                   ))}
                 {!model.bots.some((item) => item.strategyId === strategy.id) ? (
-                  <EmptyCell columns={5}>No bots launched from this strategy.</EmptyCell>
+                  <EmptyCell columns={6}>No bots launched from this strategy.</EmptyCell>
                 ) : null}
               </DataTable>
             </div>
@@ -1074,26 +1008,37 @@ export function BotsPage({ model, currentUser = "bogdan", openTarget, onClearOpe
             ← Bots
           </AppButton>
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
+            <div className="min-w-0">
               <h2 className="text-[16px] font-semibold text-[#faf7fd]">{bot.name}</h2>
               <div className={cx("mt-2 flex flex-wrap items-center gap-2 text-[12px]", MUTED)}>
-                <span>{bot.id}</span>
-                <Status value={bot.mode} />
+                <ModeBadge mode={bot.mode} />
                 <Status value={bot.status} />
                 <span>
                   {botStrategy.params.exchange} · {botStrategy.params.pair} ·{" "}
                   {botStrategy.params.timeframe}
+                </span>
+                <span>Account: {accountName(bot, model.accounts)}</span>
+                <span className="inline-flex items-center gap-1">
+                  Strategy:
+                  <AppButton
+                    variant="link"
+                    className="h-auto p-0 text-violet-200"
+                    onClick={() => openStrategy(botStrategy.id)}
+                  >
+                    {botStrategy.name}
+                  </AppButton>
                 </span>
               </div>
             </div>
             <div className="flex gap-2">
               <AppButton
                 variant="default"
-                disabled={bot.status !== "Stopped" || botStrategy.status !== "Active"}
+                disabled={botStrategy.status !== "Active"}
                 onClick={() => openLaunch(botStrategy.id)}
               >
-                New launch
+                Create new bot
               </AppButton>
+              <AppButton disabled={!["Stopped", "Launch failed"].includes(bot.status) || botStrategy.status !== "Active"} onClick={() => { const result = model.restartBot(bot.id); setError(result || ""); }}>Restart bot</AppButton>
               <AppButton
                 variant="destructive"
                 disabled={["Stopped", "Launch failed"].includes(bot.status)}
@@ -1105,11 +1050,11 @@ export function BotsPage({ model, currentUser = "bogdan", openTarget, onClearOpe
           </div>
 
           <PillTabs
-            value={detailTab}
+            value={detailTab === "Settings" ? "Configuration" : detailTab}
             onChange={setDetailTab}
-            items={["Overview", "Trades", "Logs", "Settings"].map((item) => ({
+            items={["Overview", "Trades", "Events", "Configuration"].map((item) => ({
               value: item,
-              label: item === "Trades" ? `Trades ${bot.closedTradeCount}` : item,
+              label: item === "Trades" ? `Closed trades (${bot.closedTradeCount ?? "—"})` : item,
             }))}
           />
 
@@ -1119,63 +1064,94 @@ export function BotsPage({ model, currentUser = "bogdan", openTarget, onClearOpe
             </p>
           ) : null}
 
+          <DataState bot={bot} />
+          <BotAlerts bot={bot} />
+
           {detailTab === "Overview" ? (
-            <BotOverview
-              bot={bot}
-              strategy={botStrategy}
-              accounts={model.accounts}
-              onOpenStrategy={() => openStrategy(botStrategy.id)}
-            />
+            <BotOverview bot={bot} strategy={botStrategy} />
           ) : null}
 
-          {detailTab === "Trades" ? (
-            <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
-              <div className={cx("px-4 py-3 text-[12px] font-medium", ui.panelMuted, "border-b", ui.divider)}>
-                Trade history
-              </div>
-              <DataTable
-                headers={["Instrument", "Direction", "Opened", "Closed", "P&L", "Exit reason"]}
-              >
-                {bot.trades.map((trade) => (
-                  <tr key={trade.id} className="border-b border-[rgba(60,40,80,0.25)]">
-                    <td className="px-4 py-2.5">{trade.pair}</td>
-                    <td className="px-2 py-2.5">{trade.direction}</td>
-                    <td className="px-2 py-2.5">{date(trade.openedAt)}</td>
-                    <td className="px-2 py-2.5">{date(trade.closedAt)}</td>
-                    <td className="px-2 py-2.5">{money(trade.pnl)} USDT</td>
-                    <td className="px-2 py-2.5">{trade.exitReason}</td>
-                  </tr>
-                ))}
-                {bot.trades.length === 0 ? <EmptyCell columns={6}>No trades yet.</EmptyCell> : null}
-              </DataTable>
-            </div>
-          ) : null}
+          {detailTab === "Trades" ? <BotTrades bot={bot} /> : null}
 
-          {detailTab === "Logs" ? (
+          {detailTab === "Events" ? (
             <div className={PANEL}>
-              <h3 className="mb-3 text-[12px] font-medium text-[#faf7fd]">Event log</h3>
-              {bot.events.map((event) => (
+              <h3 className="mb-3 text-[12px] font-medium text-[#faf7fd]">Events and warnings</h3>
+              {!bot.events?.length ? <p className="text-[12px] text-muted-foreground">No events recorded.</p> : null}
+              {bot.events?.map((event) => (
                 <div
                   key={event.id}
                   className="border-t border-[rgba(60,40,80,0.35)] py-3 text-[12px]"
                 >
                   <time className={MUTED}>{date(event.at)}</time>
-                  <p className="mt-1 text-[#faf7fd]">{event.text}</p>
+                  <p className={cx("mt-1", event.level === "error" ? "text-red-300" : event.level === "warning" ? "text-amber-200" : "text-foreground")}>{event.level ? `${event.level.toUpperCase()} · ` : ""}{event.text}</p>
                 </div>
               ))}
             </div>
           ) : null}
 
-          {detailTab === "Settings" ? (
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className={PANEL}>
-                <h3 className="mb-4 text-[12px] font-medium text-[#faf7fd]">Launch settings</h3>
-                <InfoGrid
+          {detailTab === "Configuration" || detailTab === "Settings" ? (
+            <div className="space-y-4">
+              {(() => {
+                const botCapitalKnown = bot.capital != null && bot.capital !== "";
+                const backtestCapitalKnown =
+                  botStrategy.params?.startingCapital != null &&
+                  botStrategy.params.startingCapital !== "";
+                const capitalsDiffer =
+                  botCapitalKnown &&
+                  backtestCapitalKnown &&
+                  Number(bot.capital) !== Number(botStrategy.params.startingCapital);
+                if (!capitalsDiffer) return null;
+                return (
+                  <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-[12px] text-amber-200">
+                    Bot capital: {amount(bot.capital)} · Backtest capital:{" "}
+                    {amount(botStrategy.params.startingCapital)}
+                  </p>
+                );
+              })()}
+
+              <div className="grid items-start gap-3 lg:grid-cols-2">
+                <OverviewSectionCard
+                  title="Bot configuration"
+                  rows={[
+                    ["Mode", bot.mode === "Dryrun" ? "Dry-run" : bot.mode === "Live" ? "Live" : bot.mode || null],
+                    [
+                      "Funding source / Account",
+                      accountName(bot, model.accounts),
+                    ],
+                    ["Bot capital", amount(bot.capital)],
+                    [
+                      "Max open trades",
+                      bot.maxOpenTrades != null && bot.maxOpenTrades !== ""
+                        ? `${bot.maxOpenTrades} max open trades`
+                        : null,
+                    ],
+                  ]}
+                />
+                <OverviewSectionCard
+                  title="Trading conditions"
+                  rows={[
+                    ["Exchange", botStrategy.params.exchange || null],
+                    ["Market", botStrategy.params.mode || null],
+                    ["Pair", botStrategy.params.pair || null],
+                    ["Timeframe", botStrategy.params.timeframe || null],
+                    ["Stake", formatStakeLabel(botStrategy.params)],
+                    botStrategy.params.mode === "futures"
+                      ? [
+                          "Leverage",
+                          botStrategy.params.leverage != null
+                            ? `${botStrategy.params.leverage}×`
+                            : null,
+                        ]
+                      : null,
+                  ]}
+                />
+                <OverviewSectionCard
+                  title="Strategy source"
                   rows={[
                     [
                       "Strategy",
                       <AppButton
-                        key="source-strategy"
+                        key="cfg-strategy"
                         variant="link"
                         className="h-auto p-0 text-violet-200"
                         onClick={() => openStrategy(botStrategy.id)}
@@ -1183,35 +1159,31 @@ export function BotsPage({ model, currentUser = "bogdan", openTarget, onClearOpe
                         {botStrategy.name}
                       </AppButton>,
                     ],
-                    ["Mode", bot.mode],
-                    ["Account", accountName(bot, model.accounts)],
-                    ["Initial capital", `${money(bot.capital)} USDT`],
+                    ["Blueprint", botStrategy.blueprintName || null],
+                    ["Selected epoch", botStrategy.epochLabel || null],
                     [
-                      "Exchange / market",
-                      `${botStrategy.params.exchange} · ${botStrategy.params.mode}`,
+                      "Source backtest",
+                      botStrategy.sourceBacktestId ? (
+                        <AppButton
+                          key="cfg-backtest"
+                          variant="link"
+                          className="h-auto p-0 text-violet-200"
+                          onClick={() => setModal({ kind: "source", id: botStrategy.id })}
+                        >
+                          {botStrategy.sourceBacktestId}
+                        </AppButton>
+                      ) : null,
                     ],
-                    [
-                      "Pair / timeframe",
-                      `${botStrategy.params.pair} · ${botStrategy.params.timeframe}`,
-                    ],
-                    [
-                      "Stake",
-                      `${money(botStrategy.params.stakeValue)}${botStrategy.params.stakeMode === "relative" ? "%" : " USDT"}`,
-                    ],
-                    ["Max open positions", bot.maxOpenTrades],
                   ]}
                 />
-              </div>
-              <div className={PANEL}>
-                <h3 className="mb-4 text-[12px] font-medium text-[#faf7fd]">Source</h3>
-                <InfoGrid
+                <OverviewSectionCard
+                  title="Bot history"
                   rows={[
-                    ["Blueprint", botStrategy.blueprintName],
-                    ["Selected epoch", botStrategy.epochLabel],
-                    ["Source backtest", botStrategy.sourceBacktestId],
-                    ["Owner", bot.owner],
-                    ["Started", date(bot.startedAt)],
-                    ["Stopped", date(bot.stoppedAt)],
+                    ["Owner", bot.owner || null],
+                    ["First started", date(bot.startedAt) !== "No data" ? date(bot.startedAt) : null],
+                    bot.stoppedAt
+                      ? ["Stopped", date(bot.stoppedAt)]
+                      : null,
                   ]}
                 />
               </div>
@@ -1279,163 +1251,25 @@ export function BotsPage({ model, currentUser = "bogdan", openTarget, onClearOpe
           </div>
         </AppDialog>
       ) : null}
-      {modal?.kind === "source" ? (
+      {sourceRun ? <BacktestingInfoModal open run={sourceRun} onClose={closeModal} /> : null}
+      {sourceStrategy && !sourceRun ? (
         <AppDialog
           open
           onOpenChange={(open) => !open && closeModal()}
-          title="Source backtest"
+          title="Source backtest · saved snapshot"
           description={model.strategies.find((item) => item.id === modal.id)?.sourceBacktestId}
         >
           <div className="space-y-4 text-[12px]">
             <p className={MUTED}>
-              This saved snapshot contains the validated epoch, trading settings and summary shown
-              in the strategy details.
+              The original run is unavailable in this preview. These are the saved backtest values; a full report cannot be reconstructed from this snapshot.
             </p>
+            <InfoGrid rows={[["Backtest", sourceStrategy.sourceBacktestId], ["Created", date(sourceStrategy.backtestCreatedAt)], ["Period", `${sourceStrategy.params.periodFrom || "No data"} → ${sourceStrategy.params.periodTo || "No data"}`], ["ROI", percent(sourceStrategy.result?.roi, true)], ["Max drawdown", percent(sourceStrategy.result?.maxdd)], ["Closed trades", sourceStrategy.result?.trades ?? "No data"], ["Initial capital", amount(sourceStrategy.params.startingCapital)]]} />
             <div className="flex justify-end">
               <AppButton onClick={closeModal}>Close</AppButton>
             </div>
           </div>
         </AppDialog>
       ) : null}
-    </div>
-  );
-}
-
-function BotOverview({ bot, strategy, accounts, onOpenStrategy }) {
-  const unrealized = bot.positions.reduce((sum, position) => sum + position.unrealizedPnl, 0);
-  const committed = bot.positions.reduce((sum, position) => sum + position.stake, 0);
-  const totalPnl = bot.realizedPnl + unrealized;
-  const equity = bot.capital + totalPnl;
-  const samples = [0, 0.12, -0.08, 0.31, 0.2, 0.44, 0.38, 0.72, 0.86, 1].map((share, index) => ({
-    label: String(index + 1),
-    value: bot.capital + totalPnl * share,
-  }));
-
-  return (
-    <div className="space-y-4">
-      {bot.status === "Stopping" ? (
-        <div className="rounded-md border-l-2 border-amber-400 bg-amber-500/10 p-3 text-[12px] text-amber-200">
-          New entries are disabled.{" "}
-          {bot.stopIntent === "wait"
-            ? "The strategy is managing existing positions until exit."
-            : "Position closing and order clearance are in progress."}
-        </div>
-      ) : null}
-      {bot.mode === "Dryrun" ? (
-        <p className="text-[12px] text-violet-300">Simulated results · virtual funds</p>
-      ) : null}
-
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {[
-          ["Equity", `${money(equity)} USDT`, `Initial: ${money(bot.capital)} USDT`],
-          [
-            "P&L",
-            `${money(totalPnl)} USDT`,
-            `${percent((totalPnl / bot.capital) * 100, true)} return`,
-          ],
-          [
-            "Closed trades",
-            bot.closedTradeCount,
-            `Win rate: ${bot.winRate == null ? "No data" : percent(bot.winRate)}`,
-          ],
-          [
-            "Open positions",
-            bot.positions.length,
-            `${money(committed)} USDT committed`,
-          ],
-        ].map(([label, value, note]) => (
-          <div className={PANEL} key={label}>
-            <div className={cx("text-[11px]", MUTED)}>{label}</div>
-            <div className="mt-2 text-[18px] font-semibold tabular-nums text-[#faf7fd]">{value}</div>
-            <div className={cx("mt-1 text-[11px]", MUTED)}>{note}</div>
-          </div>
-        ))}
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className={PANEL}>
-          <h3 className="mb-2 text-[12px] font-medium text-[#faf7fd]">Equity · illustrative</h3>
-          <div className="h-44">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={samples}>
-                <CartesianGrid stroke="rgba(184,174,204,0.15)" vertical={false} />
-                <XAxis dataKey="label" tick={false} axisLine={false} />
-                <Tooltip
-                  contentStyle={{
-                    background: "#170f29",
-                    border: "1px solid rgba(60,40,80,.35)",
-                    color: "#faf7fd",
-                  }}
-                  formatter={(value) => [`${money(value)} USDT`, "Equity"]}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="value"
-                  stroke="#a78bfa"
-                  fill="rgba(167,139,250,0.14)"
-                  strokeWidth={2}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-        <div className={PANEL}>
-          <h3 className="mb-4 text-[12px] font-medium text-[#faf7fd]">Capital and configuration</h3>
-          <InfoGrid
-            rows={[
-              [
-                "Available for entries",
-                `${money(bot.capital + bot.realizedPnl - committed)} USDT`,
-              ],
-              ["In positions", `${money(committed)} USDT`],
-              ["Realized P&L", `${money(bot.realizedPnl)} USDT`],
-              ["Unrealized P&L", `${money(unrealized)} USDT`],
-              [
-                "Strategy",
-                <AppButton
-                  key="source-strategy"
-                  variant="link"
-                  className="h-auto p-0 text-violet-200"
-                  onClick={onOpenStrategy}
-                >
-                  {strategy.name}
-                </AppButton>,
-              ],
-              ["Account", accountName(bot, accounts)],
-              ["Epoch / backtest", `${strategy.epochLabel} · ${strategy.sourceBacktestId}`],
-              ["Last update", date(bot.updatedAt)],
-            ]}
-          />
-        </div>
-      </div>
-
-      <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
-        <div className={cx("px-4 py-3 text-[12px] font-medium", ui.panelMuted, "border-b", ui.divider)}>
-          Open positions · {bot.positions.length}
-        </div>
-        <DataTable headers={["Instrument", "Direction", "Margin / stake", "Unrealized P&L"]}>
-          {bot.positions.map((position) => (
-            <tr key={position.id} className="border-b border-[rgba(60,40,80,0.25)]">
-              <td className="px-4 py-2.5">{position.pair}</td>
-              <td className="px-2 py-2.5">
-                {position.direction} · {position.leverage}×
-              </td>
-              <td className="px-2 py-2.5">{money(position.stake)} USDT</td>
-              <td
-                className={cx(
-                  "px-2 py-2.5",
-                  position.unrealizedPnl < 0 ? "text-red-400" : "text-green-400",
-                )}
-              >
-                {money(position.unrealizedPnl)} USDT
-              </td>
-            </tr>
-          ))}
-          {bot.positions.length === 0 ? (
-            <EmptyCell columns={4}>No open positions.</EmptyCell>
-          ) : null}
-        </DataTable>
-      </div>
     </div>
   );
 }

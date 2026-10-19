@@ -76,6 +76,34 @@ function RiskColumn({ risk }) {
   );
 }
 
+/** Signal / Entry / Exit / Risk columns — shared by Stage 5 and Bots. */
+export function StageConfigColumns({ stageConfig, riskParams }) {
+  const risk = riskParams || stageConfig?.stage4?.riskParams || {};
+  const columns = [
+    { key: "signal", title: "Signal", indicators: stageConfig?.stage1?.indicators },
+    { key: "entry", title: "Entry", indicators: stageConfig?.stage2?.indicators },
+    { key: "exit", title: "Exit", indicators: stageConfig?.stage3?.indicators },
+    { key: "risk", title: "Risk", risk: true },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 gap-y-4 lg:grid-cols-4 lg:divide-x lg:divide-[rgba(60,40,80,0.3)]">
+      {columns.map((col) => (
+        <div key={col.key} className="min-w-0 space-y-2 px-0 lg:px-3 first:lg:pl-0 last:lg:pr-0">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-[#d9d9d9]">
+            {col.title}
+          </div>
+          {col.risk ? (
+            <RiskColumn risk={risk} />
+          ) : (
+            <IndicatorColumn indicators={col.indicators} />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /**
  * Favorite-epoch selector + collapsible Epoch Details (Stages 1–4 columns).
  */
@@ -103,13 +131,6 @@ export const EpochContextPanel = memo(function EpochContextPanel({
 
   const epoch = (epochs || []).find((e) => String(e.id) === String(selectedEpochId)) || null;
   const risk = stageConfig?.stage4?.riskParams || epoch?.riskParams || {};
-
-  const columns = [
-    { key: "signal", title: "Signal", indicators: stageConfig?.stage1?.indicators },
-    { key: "entry", title: "Entry", indicators: stageConfig?.stage2?.indicators },
-    { key: "exit", title: "Exit", indicators: stageConfig?.stage3?.indicators },
-    { key: "risk", title: "Risk", risk: true },
-  ];
 
   return (
     <div className="space-y-3">
@@ -144,20 +165,7 @@ export const EpochContextPanel = memo(function EpochContextPanel({
 
             <CollapsibleContent>
               <div className="border-t border-[rgba(60,40,80,0.35)] px-3 py-3">
-                <div className="grid grid-cols-2 gap-y-4 lg:grid-cols-4 lg:divide-x lg:divide-[rgba(60,40,80,0.3)]">
-                  {columns.map((col) => (
-                    <div key={col.key} className="min-w-0 space-y-2 px-0 lg:px-3 first:lg:pl-0 last:lg:pr-0">
-                      <div className="text-[11px] font-semibold uppercase tracking-wider text-[#d9d9d9]">
-                        {col.title}
-                      </div>
-                      {col.risk ? (
-                        <RiskColumn risk={risk} />
-                      ) : (
-                        <IndicatorColumn indicators={col.indicators} />
-                      )}
-                    </div>
-                  ))}
-                </div>
+                <StageConfigColumns stageConfig={stageConfig} riskParams={risk} />
               </div>
             </CollapsibleContent>
           </div>

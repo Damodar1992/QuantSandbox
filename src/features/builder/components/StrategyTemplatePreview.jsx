@@ -13,6 +13,7 @@ export const StrategyTemplatePreview = memo(function StrategyTemplatePreview({
   riskRanges,
   riskHyperoptParams,
   timeRange,
+  height,
 }) {
   const code = useMemo(
     () =>
@@ -29,7 +30,7 @@ export const StrategyTemplatePreview = memo(function StrategyTemplatePreview({
 
   return (
     <Suspense fallback={<LoadingFallback />}>
-      <MonacoPythonEditor value={code} readOnly />
+      <MonacoPythonEditor value={code} readOnly height={height} />
     </Suspense>
   );
 });
