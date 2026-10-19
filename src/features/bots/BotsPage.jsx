@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { BacktestingInfoModal } from "@/features/backtesting/components/BacktestingInfoModal";
 import { BotOverview, BotTrades, BotAlerts, DataState, ModeBadge } from "./BotDetails";
+import { BotNotifications } from "./BotNotifications";
 import { date, money, percent, amount, accountName, getBotMetrics, filterAndSortBots, pnlTone } from "./botsDisplay";
 import { cx, ui } from "@/constants/ui";
 import { StrategyTemplatePreview } from "@/features/builder/components/StrategyTemplatePreview";
@@ -1052,7 +1053,7 @@ export function BotsPage({
           <PillTabs
             value={detailTab === "Settings" ? "Configuration" : detailTab}
             onChange={setDetailTab}
-            items={["Overview", "Trades", "Events", "Configuration"].map((item) => ({
+            items={["Overview", "Trades", "Events", "Configuration", "Notifications"].map((item) => ({
               value: item,
               label: item === "Trades" ? `Closed trades (${bot.closedTradeCount ?? "—"})` : item,
             }))}
@@ -1087,6 +1088,10 @@ export function BotsPage({
                 </div>
               ))}
             </div>
+          ) : null}
+
+          {detailTab === "Notifications" ? (
+            <BotNotifications bot={bot} model={model} owner={currentUser} />
           ) : null}
 
           {detailTab === "Configuration" || detailTab === "Settings" ? (

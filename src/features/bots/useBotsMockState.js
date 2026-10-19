@@ -3,6 +3,8 @@ import {
   INITIAL_BOTS,
   INITIAL_COMPILED_STRATEGIES,
   INITIAL_EXCHANGE_ACCOUNTS,
+  INITIAL_NOTIFICATION_DESTINATIONS,
+  INITIAL_NOTIFICATION_LEVELS,
   countStrategyBots,
   validateBotLaunch,
   prepareBotRestart,
@@ -24,6 +26,8 @@ export function useBotsMockState() {
     strategies: INITIAL_COMPILED_STRATEGIES,
     bots: INITIAL_BOTS,
     accounts: INITIAL_EXCHANGE_ACCOUNTS,
+    notificationDestinations: INITIAL_NOTIFICATION_DESTINATIONS.map((item) => ({ ...item })),
+    notificationLevels: structuredClone(INITIAL_NOTIFICATION_LEVELS),
   }));
   const dataRef = useRef(data);
   const timers = useRef(new Set());
@@ -162,5 +166,81 @@ export function useBotsMockState() {
     return null;
   }, [commit, schedule]);
 
-  return { ...data, saveStrategy, editStrategy, setStrategyArchived, connectAccount, launchBot, stopBot, restartBot };
+  const connectTelegramDestination = useCallback(({ botId, owner, name, token, chatType, chatId }) => {
+    const bot = dataRef.current.bots.find((item) => item.id === botId);
+    if (!bot || bot.owner !== owner) return { error: "Only the bot owner can manage notifications." };
+    const trimmedName = name?.trim();
+    const trimmedChatId = chatId?.trim();
+    if (!trimmedName) return { error: "Enter a destination name." };
+    if (!token?.trim()) return { error: "Enter a fictional Telegram bot token for this preview." };
+    if (!["private", "group"].includes(chatType)) return { error: "Select a chat type." };
+    if (!/^-?\d+$/.test(trimmedChatId || "")) return { error: "Enter a numeric Telegram chat ID." };
+    if (dataRef.current.notificationDestinations.some((item) => item.owner === owner && item.name.toLowerCase() === trimmedName.toLowerCase())) {
+      return { error: "Use a distinct destination name." };
+    }
+    // The preview never stores or sends the entered token. A real connection needs a backend secret vault and verification API.
+    const destination = {
+      id: makeId("telegram"), owner, name: trimmedName, type: "Telegram",
+      chatType, chatId: trimmedChatId, status: "Preview connected",
+      lastSuccessAt: null, lastError: null,
+    };
+    commit((prev) => ({
+      ...prev,
+      notificationDestinations: [...prev.notificationDestinations, destination],
+      notificationLevels: {
+        ...prev.notificationLevels,
+        [botId]: { ...prev.notificationLevels[botId], [destination.id]: "Important" },
+      },
+    }));
+    return { destination };
+  }, [commit]);
+
+  const setBotNotificationLevel = useCallback(({ botId, destinationId, owner, level }) => {
+    const bot = dataRef.current.bots.find((item) => item.id === botId);
+    const destination = dataRef.current.notificationDestinations.find((item) => item.id === destinationId);
+    if (!bot || bot.owner !== owner || !destination || destination.owner !== owner) return "Destination unavailable.";
+    if (!["Critical", "Important", "All", "Off"].includes(level)) return "Select a notification level.";
+    commit((prev) => ({
+      ...prev,
+      notificationLevels: {
+        ...prev.notificationLevels,
+        [botId]: { ...prev.notificationLevels[botId], [destinationId]: level },
+      },
+    }));
+    return null;
+  }, [commit]);
+
+  const sendTestNotification = useCallback(({ botId, destinationId, owner }) => {
+    const bot = dataRef.current.bots.find((item) => item.id === botId);
+    const destination = dataRef.current.notificationDestinations.find((item) => item.id === destinationId);
+    if (!bot || bot.owner !== owner || !destination || destination.owner !== owner || destination.status !== "Preview connected") {
+      return "Destination unavailable.";
+    }
+    commit((prev) => ({
+      ...prev,
+      notificationDestinations: prev.notificationDestinations.map((item) => item.id === destinationId
+        ? { ...item, lastSuccessAt: now(), lastError: null }
+        : item),
+    }));
+    return null;
+  }, [commit]);
+
+  const removeNotificationDestination = useCallback(({ destinationId, owner }) => {
+    const destination = dataRef.current.notificationDestinations.find((item) => item.id === destinationId);
+    if (!destination || destination.owner !== owner) return "Destination unavailable.";
+    commit((prev) => {
+      const notificationLevels = Object.fromEntries(Object.entries(prev.notificationLevels).map(([botId, levels]) => {
+        const { [destinationId]: _removed, ...remaining } = levels;
+        return [botId, remaining];
+      }));
+      return {
+        ...prev,
+        notificationDestinations: prev.notificationDestinations.filter((item) => item.id !== destinationId),
+        notificationLevels,
+      };
+    });
+    return null;
+  }, [commit]);
+
+  return { ...data, saveStrategy, editStrategy, setStrategyArchived, connectAccount, launchBot, stopBot, restartBot, connectTelegramDestination, setBotNotificationLevel, sendTestNotification, removeNotificationDestination };
 }

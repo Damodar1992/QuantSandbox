@@ -110,6 +110,58 @@ export const INITIAL_EXCHANGE_ACCOUNTS = [
   { id: "acc-bybit", name: "Bybit Futures", exchange: "bybit", market: "futures", balance: 2800, status: "Ready", owner: "bogdan" },
 ];
 
+/** Preview Telegram destinations (no tokens stored). Owned by user, reused across their bots. */
+export const INITIAL_NOTIFICATION_DESTINATIONS = [
+  {
+    id: "tg-bogdan-private",
+    owner: "bogdan",
+    name: "Bogdan private alerts",
+    type: "Telegram",
+    chatType: "private",
+    chatId: "482019375",
+    status: "Preview connected",
+    lastSuccessAt: "2026-10-13T10:05:00.000Z",
+    lastError: null,
+  },
+  {
+    id: "tg-bogdan-desk",
+    owner: "bogdan",
+    name: "Desk group",
+    type: "Telegram",
+    chatType: "group",
+    chatId: "-1001847293011",
+    status: "Preview connected",
+    lastSuccessAt: "2026-10-12T16:40:00.000Z",
+    lastError: "Preview delivery timeout · no Telegram API call was made",
+  },
+  {
+    id: "tg-anna-private",
+    owner: "anna",
+    name: "Anna trading bot",
+    type: "Telegram",
+    chatType: "private",
+    chatId: "901224178",
+    status: "Preview connected",
+    lastSuccessAt: null,
+    lastError: null,
+  },
+];
+
+/** Per-bot notification level for each destination: Critical | Important | All | Off. */
+export const INITIAL_NOTIFICATION_LEVELS = {
+  "bot-demo-1": {
+    "tg-bogdan-private": "Important",
+    "tg-bogdan-desk": "Critical",
+  },
+  "bot-demo-2": {
+    "tg-bogdan-private": "All",
+    "tg-bogdan-desk": "Off",
+  },
+  "bot-demo-3": {
+    "tg-anna-private": "Important",
+  },
+};
+
 /** Preview equity curve samples for BotOverview charts (`{ at, value }`). */
 function createDemoEquityHistory(points) {
   return points.map(([at, value]) => ({ at, value }));
