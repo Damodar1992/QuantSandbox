@@ -1,5 +1,12 @@
 const STORAGE_KEY = "featureFlags";
 const DEFAULTS = { miniBacktest: true, formulas: false, backtesting: true };
+const ALWAYS_ON = ["miniBacktest", "backtesting"];
+
+function withLockedFlags(flags) {
+  const next = { ...flags };
+  for (const key of ALWAYS_ON) next[key] = true;
+  return next;
+}
 
 export function getFeatureFlags() {
   if (typeof window !== "undefined") {
@@ -7,13 +14,13 @@ export function getFeatureFlags() {
       const stored = window.localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        return { ...DEFAULTS, ...parsed };
+        return withLockedFlags({ ...DEFAULTS, ...parsed });
       }
     } catch {
       /* ignore */
     }
   }
-  return { ...DEFAULTS };
+  return withLockedFlags({ ...DEFAULTS });
 }
 
 export function setFeatureFlag(key, value) {
@@ -27,14 +34,14 @@ export function setFeatureFlag(key, value) {
 }
 
 export function isMiniBacktestEnabled() {
-  return getFeatureFlags().miniBacktest;
+  return true;
 }
 
 export function isFormulasEnabled() {
   return getFeatureFlags().formulas;
 }
 
-/** Stage 5 — Backtesting. */
+/** Stage 5 — Backtesting. Always available. */
 export function isBacktestingEnabled() {
-  return getFeatureFlags().backtesting;
+  return true;
 }

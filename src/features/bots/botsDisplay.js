@@ -1,6 +1,6 @@
 export const hasNumber = (value) => value != null && value !== "" && Number.isFinite(Number(value));
 export const date = (value) => value != null && value !== "" && Number.isFinite(new Date(value).getTime())
-  ? new Date(value).toLocaleString("en-GB", { timeZone: "Europe/Kyiv", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })
+  ? `${new Date(value).toLocaleString("en-GB", { timeZone: "UTC", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })} UTC`
   : "No data";
 export const money = (value, signed = false) => hasNumber(value)
   ? `${signed && Number(value) > 0 ? "+" : ""}${Number(value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -13,6 +13,16 @@ export const pnlTone = (value) => !hasNumber(value) || Number(value) === 0 ? "te
 export const accountName = (bot, accounts) => bot.mode === "Dryrun" ? "Virtual wallet" : accounts.find((account) => account.id === bot.accountId)?.name || "Account unavailable";
 
 export const ORDER_KIND_LABELS = { entry: "Entry", add: "Add", exit: "Exit" };
+
+/** Prefer the recorded asset quantity; stake/price is valid only for unleveraged Spot. */
+export function formatTradeQuantity(trade, market) {
+  const quantity = hasNumber(trade.quantity) ? Number(trade.quantity)
+    : market === "spot" && Number(trade.leverage || 1) === 1 && hasNumber(trade.stake) && Number(trade.entryPrice) > 0
+      ? Number(trade.stake) / Number(trade.entryPrice) : null;
+  if (quantity == null) return "No data";
+  const asset = trade.pair?.split("/")[0];
+  return `${quantity.toLocaleString("en-US", { maximumFractionDigits: 8 })}${asset ? ` ${asset}` : ""}`;
+}
 
 /** Open duration relative to snapshot time (bot.updatedAt) for stable preview ages. */
 export function formatOpenAge(openedAt, asOf) {
@@ -65,11 +75,13 @@ export function getBotMetrics(bot) {
   const committed = sum("stake");
   const realized = hasNumber(bot.realizedPnl) ? Number(bot.realizedPnl) : null;
   const capital = hasNumber(bot.capital) ? Number(bot.capital) : null;
+  const reserve = hasNumber(bot.profitReserve) ? Number(bot.profitReserve) : 0;
   const totalPnl = realized != null && unrealized != null ? realized + unrealized : null;
   return {
     unrealized, committed, realized, capital, totalPnl,
+    balance: capital != null && realized != null ? capital + realized : null,
     equity: capital != null && totalPnl != null ? capital + totalPnl : null,
-    available: capital != null && realized != null && committed != null ? capital + realized - committed : null,
+    available: capital != null && realized != null && committed != null ? capital + realized - committed - reserve : null,
     returnPct: capital > 0 && totalPnl != null ? totalPnl / capital * 100 : null,
   };
 }

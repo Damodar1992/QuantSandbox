@@ -3,6 +3,7 @@ import { INITIAL_BOTS, INITIAL_COMPILED_STRATEGIES, INITIAL_EXCHANGE_ACCOUNTS, p
 import {
   filterAndSortBots,
   formatOpenAge,
+  formatTradeQuantity,
   getBotMetrics,
   money,
   stopLossDistancePct,
@@ -14,12 +15,15 @@ describe("bot result presentation", () => {
     const result = getBotMetrics(INITIAL_BOTS[0]);
     expect(result.totalPnl).toBeCloseTo(48.6);
     expect(result.equity).toBeCloseTo(1048.6);
+    expect(result.balance).toBeCloseTo(1032.8);
     expect(result.available).toBeCloseTo(632.8);
     expect(result.returnPct).toBeCloseTo(4.86);
     expect(result.committed).toBe(400);
   });
   it("distinguishes missing results and position data from genuine zero", () => {
     expect(getBotMetrics({ capital: 1000, realizedPnl: null, positions: [] }).totalPnl).toBeNull();
+    expect(getBotMetrics({ capital: 1000, realizedPnl: null, positions: [] }).balance).toBeNull();
+    expect(getBotMetrics({ capital: 1000, realizedPnl: 100, profitReserve: 30, positions: [] }).balance).toBe(1100);
     expect(getBotMetrics({ capital: 1000, realizedPnl: 0, positions: null }).equity).toBeNull();
     expect(getBotMetrics({ capital: 1000, realizedPnl: 0, positions: [] }).totalPnl).toBe(0);
     expect(money(null)).toBe("No data");
@@ -36,6 +40,12 @@ describe("bot result presentation", () => {
 });
 
 describe("open position helpers", () => {
+  it("prefers filled quantity and never infers Futures quantity from margin alone", () => {
+    const trade = { pair: "BTC/USDT", stake: 200, entryPrice: 60000 };
+    expect(formatTradeQuantity(trade, "spot")).toBe("0.00333333 BTC");
+    expect(formatTradeQuantity({ ...trade, quantity: 0.002 }, "spot")).toBe("0.002 BTC");
+    expect(formatTradeQuantity({ ...trade, leverage: 3 }, "futures")).toBe("No data");
+  });
   it("formats open age from snapshot time", () => {
     expect(formatOpenAge("2026-10-13T11:15:00.000Z", "2026-10-13T12:42:00.000Z")).toBe("1h 27m open");
   });

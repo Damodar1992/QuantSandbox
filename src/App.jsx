@@ -181,9 +181,9 @@ export default function App() {
   const [activeStrategyTab, setActiveStrategyTab] = useState("builder");
 
   // --- Mini Backtest Analyzer ---
-  const [miniBacktestEnabled, setMiniBacktestEnabled] = useState(() => getFeatureFlags().miniBacktest);
+  const miniBacktestEnabled = true;
   const [formulasEnabled, setFormulasEnabled] = useState(() => getFeatureFlags().formulas);
-  const [backtestingEnabled, setBacktestingEnabled] = useState(() => getFeatureFlags().backtesting);
+  const backtestingEnabled = true;
   const [allMiniBacktestResults, setAllMiniBacktestResults] = useState(() =>
     buildInitialGlobalMiniBacktestResults(),
   );
@@ -1030,10 +1030,9 @@ export default function App() {
   }, []);
 
   const handleFeatureFlagChange = useCallback((key, value) => {
+    if (key === "miniBacktest" || key === "backtesting") return;
     setFeatureFlag(key, value);
-    if (key === "miniBacktest") setMiniBacktestEnabled(value);
     if (key === "formulas") setFormulasEnabled(value);
-    if (key === "backtesting") setBacktestingEnabled(value);
   }, []);
 
   const headerFeatureFlags = useMemo(
@@ -1551,11 +1550,7 @@ export default function App() {
               onDeleteVersionComment={handleDeleteVersionComment}
               backtestingEnabled={backtestingEnabled}
               miniBacktestEnabled={miniBacktestEnabled}
-              onMiniBacktestEnabledChange={(v) => {
-                const value = typeof v === "function" ? v(miniBacktestEnabled) : v;
-                setFeatureFlag("miniBacktest", value);
-                setMiniBacktestEnabled(value);
-              }}
+              onMiniBacktestEnabledChange={() => {}}
               miniBacktestResults={miniBacktestResults}
               miniBacktestExpandedEpochId={miniBacktestExpandedEpochId}
               onMiniBacktestExpandedEpochIdChange={setMiniBacktestExpandedEpochId}

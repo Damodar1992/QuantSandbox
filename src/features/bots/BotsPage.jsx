@@ -7,11 +7,13 @@ import { AppSelect } from "@/components/common/AppSelect";
 import { EyeIcon } from "@/components/common/Icons";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { BacktestingInfoModal } from "@/features/backtesting/components/BacktestingInfoModal";
 import { BotOverview, BotTrades, BotAlerts, DataState, ModeBadge } from "./BotDetails";
 import { BotNotifications } from "./BotNotifications";
-import { date, money, percent, amount, accountName, getBotMetrics, filterAndSortBots, pnlTone } from "./botsDisplay";
+import { date, money, percent, amount, accountName, getBotMetrics, filterAndSortBots, hasNumber, pnlTone } from "./botsDisplay";
+import { closedTrades, performanceSummary } from "./botsAnalytics";
 import { cx, ui } from "@/constants/ui";
 import { StrategyTemplatePreview } from "@/features/builder/components/StrategyTemplatePreview";
 import { StageConfigColumns } from "@/features/backtesting/components/EpochContextPanel";
@@ -111,6 +113,10 @@ function OverviewSectionCard({ title, rows }) {
   );
 }
 
+function CollapsibleEngineInfo({ bot }) {
+  return <Collapsible className={cx(ui.radius, ui.panel, "overflow-hidden")}><CollapsibleTrigger asChild><AppButton variant="ghost" className="h-auto w-full justify-between rounded-none px-4 py-3"><span>Engine information</span><span className="text-muted-foreground">Show details ▾</span></AppButton></CollapsibleTrigger><CollapsibleContent className="border-t border-border p-4"><InfoGrid rows={[["Engine", "Freqtrade"], ["Version", bot.engineVersion || "Not specified"], ["Force entry", bot.forceEntry == null ? "Not specified" : bot.forceEntry ? "Enabled" : "Disabled"], ["Reporting timezone", "UTC"]]} /></CollapsibleContent></Collapsible>;
+}
+
 function formatStakeLabel(params) {
   if (params?.stakeValue == null || params?.stakeValue === "") return null;
   const modeLabel = params.stakeMode === "relative" ? "Relative" : "Fixed";
@@ -131,10 +137,10 @@ function EmptyCell({ columns, children }) {
   );
 }
 
-function DataTable({ headers, children }) {
+function DataTable({ headers, children, className }) {
   return (
     <div className="overflow-auto">
-      <table className="w-full border-collapse text-[12px]">
+      <table className={cx("w-full border-collapse text-[12px]", className)}>
         <thead className="bg-[#1f1f1f] text-left text-[12px] text-[#8c8c8c]">
           <tr>
             {headers.map((label, index) => (
@@ -143,7 +149,7 @@ function DataTable({ headers, children }) {
                 className={cx(
                   "py-3 font-medium border-b border-[#303030]",
                   index === 0 ? "px-4" : "px-2",
-                  ["Bot equity", "Total P&L"].includes(label) && "text-right",
+                  ["Bot equity", "Total P&L", "Equity / Balance", "P&L", "Profit reserve"].includes(label) && "text-right",
                 )}
               >
                 {label}
@@ -508,6 +514,7 @@ export function BotsPage({
   const [tab, setTab] = useState("strategies");
   const [detail, setDetail] = useState(null);
   const [detailTab, setDetailTab] = useState("Overview");
+  const [chartFocus, setChartFocus] = useState(null);
   const [modal, setModal] = useState(null);
   const [error, setError] = useState("");
   const [strategySearch, setStrategySearch] = useState("");
@@ -542,6 +549,11 @@ export function BotsPage({
     detail?.kind === "strategy" ? model.strategies.find((item) => item.id === detail.id) : null;
   const bot = detail?.kind === "bot" ? model.bots.find((item) => item.id === detail.id) : null;
   const botStrategy = bot ? model.strategies.find((item) => item.id === bot.strategyId) : null;
+  const botStats = bot ? performanceSummary(bot) : null;
+  const viewTradeOnOverview = (trade) => {
+    setChartFocus((prev) => ({ ...trade, focusRequest: (prev?.focusRequest || 0) + 1 }));
+    setDetailTab("Overview");
+  };
   const strategyBotCounts = strategy ? countStrategyBots(strategy.id, model.bots) : null;
 
   const strategyRows = useMemo(
@@ -569,6 +581,7 @@ export function BotsPage({
     setError("");
   };
   const openBot = (id) => {
+    setChartFocus(null);
     setTab("bots");
     setDetail({ kind: "bot", id });
     setDetailTab("Overview");
@@ -774,11 +787,17 @@ export function BotsPage({
                 <AppSelect label="Sort" value={botSort} onValueChange={setBotSort} options={[{ value: "latest", label: "Latest start" }, { value: "name", label: "Name A–Z" }, { value: "pnl", label: "P&L high to low" }, { value: "status", label: "Status A–Z" }]} className="w-40" triggerClassName="h-8 text-[12px]" aria-label="Sort bots" />
               </FilterBar>
 
-              <DataTable headers={["Bot / strategy", "Mode / account", "Status / data", "Bot equity", "Total P&L", "Positions / trades", "Owner"]}>
-                {!botRows.length ? <EmptyCell columns={7}>No bots match the current filters.</EmptyCell> : null}
+              <DataTable className="min-w-[1180px]" headers={["Bot / strategy", "Mode / account", "Status / data", "Equity / Balance", "P&L", "Trades / W–L", "Profit reserve", "Owner"]}>
+                {!botRows.length ? <EmptyCell columns={8}>No bots match the current filters.</EmptyCell> : null}
                 {botRows.map((item) => {
                   const source = model.strategies.find((entry) => entry.id === item.strategyId);
                   const metrics = getBotMetrics(item);
+                  const history = closedTrades(item);
+                  const outcomesKnown = Array.isArray(item.trades) && history.every((trade) => hasNumber(trade.pnl));
+                  const wins = history.filter((trade) => Number(trade.pnl) > 0).length;
+                  const losses = history.filter((trade) => Number(trade.pnl) < 0).length;
+                  const reserveEnabled = item.profitReserving === true || source?.params?.profitReserving === true;
+                  const reserve = hasNumber(item.profitReserve) ? Number(item.profitReserve) : reserveEnabled ? null : 0;
                   return <tr key={item.id} className="border-b border-border">
                     <td className="px-4 py-3"><div className="flex items-start gap-2"><AppButton size="icon" className="h-8 w-8 shrink-0" aria-label={`View ${item.name} ${item.mode}`} onClick={() => openBot(item.id)}><EyeIcon /></AppButton><div>
                       <AppButton variant="link" className="h-auto p-0 text-left font-medium text-violet-200" onClick={() => openBot(item.id)}>{item.name}</AppButton><div className="text-[10px] text-muted-foreground" title={item.id}>{item.id.length > 20 ? item.id.slice(-12) : item.id}</div>
@@ -787,9 +806,10 @@ export function BotsPage({
                     </div></div></td>
                     <td className="px-2 py-3"><ModeBadge mode={item.mode} /><div className="mt-1 text-[11px] text-muted-foreground">{accountName(item, model.accounts)}</div></td>
                     <td className="px-2 py-3"><Status value={item.status} /><DataState bot={item} /></td>
-                    <td className="px-2 py-3 text-right tabular-nums whitespace-nowrap"><div>{amount(metrics.equity)}</div><div className="mt-1 text-[11px] text-muted-foreground">Initial: {amount(item.capital)}</div></td>
-                    <td className="px-2 py-3 text-right tabular-nums whitespace-nowrap"><div className={pnlTone(metrics.totalPnl)}>{amount(metrics.totalPnl, true)} · {percent(metrics.returnPct, true)}</div><div className="mt-1 text-[11px] text-muted-foreground">Realized {money(metrics.realized, true)}</div><div className="text-[11px] text-muted-foreground">Unrealized {money(metrics.unrealized, true)}</div><div className="text-[10px] text-muted-foreground" title={`${date(item.startedAt)} → ${date(item.stoppedAt || item.updatedAt)}`}>Lifetime · USDT</div></td>
-                    <td className="px-2 py-3"><div>{item.positions?.length ?? "No data"} open · {item.closedTradeCount ?? "No data"} closed</div><div className="mt-1 text-[11px] text-muted-foreground">{amount(metrics.committed)} committed</div></td>
+                    <td className="px-2 py-3 text-right tabular-nums whitespace-nowrap"><div className="font-medium" title="Equity = balance + open P&L; includes the profit reserve">{amount(metrics.equity)}</div><div className="mt-1 text-[11px] text-muted-foreground" title="Balance = initial bot capital + closed P&L; includes committed funds and profit reserve">Balance {money(metrics.balance)}</div><div className="text-[10px] text-muted-foreground">Initial {money(item.capital)}</div></td>
+                    <td className="px-2 py-3 text-right tabular-nums whitespace-nowrap"><div className={cx("font-medium", pnlTone(metrics.totalPnl))}>{amount(metrics.totalPnl, true)}</div><div className={cx("mt-0.5 text-[11px]", pnlTone(metrics.returnPct))} title="Total P&L / initial bot capital × 100">{percent(metrics.returnPct, true)} on initial capital</div><div className="mt-1 text-[11px]"><span className="text-muted-foreground">Open </span><span className={pnlTone(metrics.unrealized)}>{money(metrics.unrealized, true)}</span><span className="text-muted-foreground"> · Closed </span><span className={pnlTone(metrics.realized)}>{money(metrics.realized, true)}</span></div><div className="text-[10px] text-muted-foreground" title={`${date(item.startedAt)} → ${date(item.stoppedAt || item.updatedAt)}`}>Lifetime · USDT</div></td>
+                    <td className="px-2 py-3 whitespace-nowrap"><div>{item.positions?.length ?? "No data"} open · {item.closedTradeCount ?? "No data"} closed</div><div className="mt-1 text-[11px]" title="Profitable / losing fully closed trades. Breakeven trades are excluded from W/L.">{outcomesKnown ? <><span className="text-green-400">{wins} W</span><span className="text-muted-foreground"> / </span><span className="text-red-400">{losses} L</span></> : <span className="text-muted-foreground">W/L · No data</span>}</div></td>
+                    <td className="px-2 py-3 text-right tabular-nums whitespace-nowrap" title="Profit withheld from new entries; remains part of balance and equity. Separate from funds committed to positions."><div>{amount(reserve)}</div><div className="mt-1 text-[10px] text-muted-foreground">{reserveEnabled ? "Reserving enabled" : "Not enabled"}</div></td>
                     <td className="px-2 py-3">{item.owner}</td>
                   </tr>;
                 })}
@@ -1065,14 +1085,14 @@ export function BotsPage({
             </p>
           ) : null}
 
-          <DataState bot={bot} />
+          <DataState bot={bot} compact />
           <BotAlerts bot={bot} />
 
           {detailTab === "Overview" ? (
-            <BotOverview bot={bot} strategy={botStrategy} />
+            <BotOverview key={bot.id} bot={bot} strategy={botStrategy} focusTrade={chartFocus?.pair === botStrategy.params.pair ? chartFocus : null} onViewChart={viewTradeOnOverview} />
           ) : null}
 
-          {detailTab === "Trades" ? <BotTrades bot={bot} /> : null}
+          {detailTab === "Trades" ? <BotTrades key={bot.id} bot={bot} strategy={botStrategy} onViewChart={viewTradeOnOverview} /> : null}
 
           {detailTab === "Events" ? (
             <div className={PANEL}>
@@ -1182,16 +1202,19 @@ export function BotsPage({
                   ]}
                 />
                 <OverviewSectionCard
-                  title="Bot history"
+                  title="History"
                   rows={[
                     ["Owner", bot.owner || null],
-                    ["First started", date(bot.startedAt) !== "No data" ? date(bot.startedAt) : null],
+                    ["Bot started", date(bot.startedAt)],
+                    ["First trade opened", date(botStats.firstOpened)],
+                    ["Latest trade opened", date(botStats.latestOpened)],
                     bot.stoppedAt
                       ? ["Stopped", date(bot.stoppedAt)]
                       : null,
                   ]}
                 />
               </div>
+              <CollapsibleEngineInfo bot={bot} />
             </div>
           ) : null}
         </section>

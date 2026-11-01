@@ -88,35 +88,45 @@ export const HeaderProd = memo(function HeaderProd({
         "bg-[var(--crm-header)]",
       )}
     >
-      <div className="h-full px-5 grid grid-cols-[1fr_auto_1fr] items-center gap-4">
-        <div className="flex items-center min-w-0 gap-2.5">
-          <Logo className="h-9 w-auto max-w-[180px]" />
-          <span className="truncate text-[16px] font-semibold tracking-tight text-foreground">
+      <div className="grid h-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 sm:px-5">
+        <div className="flex shrink-0 items-center gap-2.5">
+          <Logo className="h-9 w-auto max-w-[140px] shrink-0" />
+          <span className="hidden whitespace-nowrap text-[16px] font-semibold tracking-tight text-foreground xl:inline">
             QuantSandbox
           </span>
         </div>
 
-        <nav className="hidden md:block justify-self-center" aria-label="Primary">
-          <PillTabs
-            items={navItems.map((item) => ({
-              id: item.id,
-              label: item.label,
-              icon: <MenuIcon name={item.label} active={activeNavId === item.id} />,
-            }))}
-            activeId={activeNavId}
-            onChange={handleNavChange}
-            disabledIds={disabledIds}
-            renderBadge={(item) =>
-              item.id === "Strategies" ? (
-                <span className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                  {strategiesCount}
-                </span>
-              ) : null
-            }
+        <div className="relative hidden min-w-0 md:block">
+          <nav
+            className="flex overflow-x-auto [justify-content:safe_center] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            aria-label="Primary"
+          >
+            <PillTabs
+              className="shrink-0"
+              items={navItems.map((item) => ({
+                id: item.id,
+                label: item.label,
+                icon: <MenuIcon name={item.label} active={activeNavId === item.id} />,
+              }))}
+              activeId={activeNavId}
+              onChange={handleNavChange}
+              disabledIds={disabledIds}
+              renderBadge={(item) =>
+                item.id === "Strategies" ? (
+                  <span className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                    {strategiesCount}
+                  </span>
+                ) : null
+              }
+            />
+          </nav>
+          <div
+            className="pointer-events-none absolute inset-y-0 right-0 w-7 bg-gradient-to-l from-[var(--crm-header)] to-transparent"
+            aria-hidden="true"
           />
-        </nav>
+        </div>
 
-        <div className="relative flex items-center gap-2 justify-self-end">
+        <div className="relative flex shrink-0 items-center gap-2">
           <AppSelect
             value={hyperoptRun}
             onValueChange={(v) => onHyperoptRunChange?.(v)}
@@ -150,7 +160,7 @@ export const HeaderProd = memo(function HeaderProd({
           >
             <ReleaseNotesIcon />
           </ProdButton>
-          <span className="hidden sm:inline-flex items-center gap-2 text-[12px] text-muted-foreground">
+          <span className="hidden xl:inline-flex items-center gap-2 text-[12px] text-muted-foreground">
             User: <span className="font-medium text-foreground">bogdan</span>
           </span>
           <ProdButton variant="headerControl" size="lg" onClick={onQueueToggle} title="Queue" aria-label="Open queue">

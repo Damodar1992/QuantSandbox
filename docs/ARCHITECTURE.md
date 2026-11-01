@@ -62,6 +62,12 @@ flowchart TB
 
 ## Данные и моки
 
+### Bots — отображение результатов
+
+`src/features/bots/BotsPage.jsx` управляет навигацией карточки. Основная таблица ботов группирует Equity / Balance, Total/Open/Closed P&L, Trades / W–L и Profit reserve. Balance в `getBotMetrics` = капитал + реализованный P&L; резерв остаётся в Balance и Equity, но исключается из Available. `BotDetails.jsx` собирает единый Overview из четырёх карточек, Balance details, `BotChart`, Open trades и `BotPerformance`; отдельные вкладки Chart/Performance удалены. Также содержит Open trades (Trade ID, Quantity/Stake, Entry/Current, риск, P&L, возраст, ордера и действия) и Closed trades с поиском/фильтром причины выхода, сгруппированными ценами/датами, резервом и длительностью; `BotTradeDetails.jsx` — окно подробностей; риск закрытой сделки — только записанные исторические значения. `formatTradeQuantity` предпочитает фактическое количество с единицей базового актива; не восстанавливает количество Futures из одной маржи. `BotChart.jsx` — свечи/объём Recharts, маркеры входов/выходов, демонстрационные пересчитанные сигналы, zoom и большое окно. `BotChartTrades.jsx` — уникальные сделки в видимом интервале: выбор строки/маркера без модалки и смены масштаба, Focus trade, раскрываемые Details, отдельная прокрутка таблицы. Поля деталей общие с историей через `BotTradeFields`. `BotEquityChart.jsx` — график equity по переключателю Market / Equity внутри `BotChart`. `BotPerformance.jsx` — Days/Weeks/Months, свёрнутые Period details и More statistics. Trades in view свёрнута до ручного раскрытия, выбора маркера или View on chart. Последнее действие возвращает на Overview и включает Market; новая focusRequest обеспечивает повторное фокусирование той же сделки. Даты работы и первого/последнего входа — в Configuration → History. Расчёты и генератор свечей — `botsAnalytics.js`, проверки — `botsAnalytics.test.js`; начальные данные — `botsModel.js`.
+
+Одна пара на бота; весь P&L относится к окончательному закрытию сделки, открытые позиции не входят в Period breakdown. Время UTC, недели с понедельника, процент от начального капитала. Резерв прибыли вычитается из доступных средств, оставаясь в equity. Свечи/сигналы вымышленные, движок и Live API не подключаются.
+
 | Источник | Назначение |
 |----------|------------|
 | `src/constants/app.js` | `INITIAL_STRATEGIES`, `MOCK_OPTIMIZATION_RUNS`, `PAIR_OPTIONS`, `TIME_RANGES`, `SECTIONS`, … |

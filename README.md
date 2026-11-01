@@ -13,6 +13,7 @@
 - **Редактор кода**: Monaco-подобное отображение Python-кода стратегий
 - **Пользователи и настройки**: секции в навигации (mock UI)
 - **Stage 5 «Backtesting»**: валидация favorite-эпохи — иерархия Backtest → Shuffler / Synthetic / Validation analytics, формы запуска, архив эпохи (моки, фича-флаг `backtesting`)
+- **Bots**: Compiled Strategies и запуски Dryrun/Live; единый Overview (сводка, Market / Equity, Open trades, Period breakdown), Closed trades, Events, Configuration и Notifications. Дополнительные сведения свёрнуты. Одна пара на бота; Period breakdown по дате окончательного закрытия сделки, UTC. Свечи/сигналы демонстрационные, API не используется.
 - **Тёмная тема**: Tailwind CSS
 
 ## Технологии

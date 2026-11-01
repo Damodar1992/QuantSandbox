@@ -167,11 +167,24 @@ function createDemoEquityHistory(points) {
   return points.map(([at, value]) => ({ at, value }));
 }
 
+// Illustrative wins and losses with zero combined P&L, preserving the demo's total result.
+const DEMO_EARLY_TRADES = [
+  ["2026-10-05", 8.4, "Exit signal"], ["2026-10-06", -6.2, "Stop loss"],
+  ["2026-10-07", 12.8, "Trailing stop"], ["2026-10-08", -9.4, "Stop loss"],
+  ["2026-10-09", 5.6, "Exit signal"], ["2026-10-10", -11.2, "Stop loss"],
+].map(([day, pnl, exitReason], index) => ({
+  id: `trade-${index + 5}`, pair: "BTC/USDT", direction: "Long", stake: 200,
+  openedAt: `${day}T09:00:00.000Z`, closedAt: `${day}T15:30:00.000Z`,
+  entryPrice: 60000, exitPrice: 60000 * (1 + pnl / 200), quantity: 200 / 60000,
+  pnl, returnPct: pnl / 200 * 100, exitReason, stopLoss: 57000, reservedAmount: 0,
+}));
+
 export const INITIAL_BOTS = [
   {
     id: "bot-demo-1", name: "BTC Momentum", strategyId: "cs-demo-1",
     owner: "bogdan", mode: "Dryrun", accountId: null, status: "Running",
-    capital: 1000, maxOpenTrades: 2, realizedPnl: 32.8, startedAt: "2026-10-13T09:15:00.000Z",
+    capital: 1000, maxOpenTrades: 2, realizedPnl: 32.8, startedAt: "2026-10-05T08:00:00.000Z",
+    engineVersion: "hotfix.3.2.9", forceEntry: false, profitReserve: 0,
     updatedAt: "2026-10-13T12:42:00.000Z", stoppedAt: null, stopIntent: null,
     orders: [
       {
@@ -194,17 +207,25 @@ export const INITIAL_BOTS = [
       },
       {
         id: "pos-2", pair: "BTC/USDT", direction: "Long", stake: 200, leverage: 1,
-        unrealizedPnl: 3.5, openedAt: "2026-10-13T12:00:00.000Z", quantity: 0.00322581,
-        entryPrice: 62000, currentPrice: 63085, priceUpdatedAt: "2026-10-13T12:42:00.000Z",
+        unrealizedPnl: 3.5, openedAt: "2026-10-13T12:00:00.000Z", quantity: 200 / (63690 / 1.0175),
+        entryPrice: 63690 / 1.0175, currentPrice: 63690, priceUpdatedAt: "2026-10-13T12:42:00.000Z",
         returnPct: 1.75, stopLoss: 60760, takeProfit: null, exitRule: "Exit signal",
       },
     ],
     trades: [
+      ...DEMO_EARLY_TRADES,
       { id: "trade-1", pair: "BTC/USDT", direction: "Long", openedAt: "2026-10-13T09:42:00.000Z", closedAt: "2026-10-13T10:35:00.000Z", pnl: 12.4, stake: 200, entryPrice: 60000, exitPrice: 63720, returnPct: 6.2, exitReason: "Exit signal" },
       { id: "trade-2", pair: "BTC/USDT", direction: "Long", openedAt: "2026-10-12T18:10:00.000Z", closedAt: "2026-10-12T21:05:00.000Z", pnl: 20.4, stake: 200, entryPrice: 60000, exitPrice: 66120, returnPct: 10.2, exitReason: "Trailing stop" },
     ],
-    closedTradeCount: 2, winRate: 100,
+    closedTradeCount: 8, winRate: 62.5,
     equityHistory: createDemoEquityHistory([
+      ["2026-10-05T08:00:00.000Z", 1000],
+      ["2026-10-05T15:30:00.000Z", 1008.4],
+      ["2026-10-06T15:30:00.000Z", 1002.2],
+      ["2026-10-07T15:30:00.000Z", 1015],
+      ["2026-10-08T15:30:00.000Z", 1005.6],
+      ["2026-10-09T15:30:00.000Z", 1011.2],
+      ["2026-10-10T15:30:00.000Z", 1000],
       ["2026-10-12T18:00:00.000Z", 1000],
       ["2026-10-12T21:05:00.000Z", 1020.4],
       ["2026-10-13T09:15:00.000Z", 1020.4],
@@ -212,7 +233,7 @@ export const INITIAL_BOTS = [
       ["2026-10-13T11:15:00.000Z", 1040.2],
       ["2026-10-13T12:42:00.000Z", 1048.6],
     ]),
-    events: [{ id: "ev-1", at: "2026-10-13T09:15:00.000Z", text: "Bot started in Dryrun mode." }],
+    events: [{ id: "ev-1", at: "2026-10-05T08:00:00.000Z", text: "Bot started in Dryrun mode." }],
   },
   {
     id: "bot-demo-2", name: "BTC Momentum", strategyId: "cs-demo-1",

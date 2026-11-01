@@ -1,13 +1,11 @@
 import React, { memo } from "react";
-import { cx, ui } from "../../constants/ui";
+import { Settings } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { setFeatureFlag } from "../../constants/featureFlags";
 
 const FEATURES = [
-  { key: "miniBacktest", label: "Mini Backtest" },
   { key: "formulas", label: "Formulas" },
-  { key: "backtesting", label: "Stage 5 Backtesting" },
 ];
 
 export const FeatureFlagsDropdown = memo(function FeatureFlagsDropdown({
@@ -24,15 +22,11 @@ export const FeatureFlagsDropdown = memo(function FeatureFlagsDropdown({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className={cx(
-            ui.input,
-            "h-10 px-2.5 text-[12px] flex items-center gap-1.5 min-w-[80px] w-auto",
-          )}
+          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-[rgba(60,40,80,0.5)] bg-[#170f29] text-[#b8aecc] hover:bg-[#1e1333]"
           title="Feature flags"
           aria-label="Feature flags"
         >
-          <span className="text-[13px]">⚙</span>
-          <span>Features</span>
+          <Settings className="size-4" aria-hidden="true" />
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-56 gap-0 p-1">
