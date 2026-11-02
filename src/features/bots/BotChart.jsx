@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bar, BarChart, Brush, CartesianGrid, ComposedChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, Brush, CartesianGrid, ComposedChart, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ChevronDown, Maximize2 } from "lucide-react";
 import { AppButton } from "@/components/common/AppButton";
 import { AppDialog } from "@/components/common/AppDialog";
@@ -92,13 +92,23 @@ export function BotChart({ bot, strategy, focusTrade }) {
   const step = candles.length > 1 ? candles[1].at - candles[0].at : 3600000;
   const visibleTrades = tradesInWindow(bot, visible[0]?.at ?? 0, (visible.at(-1)?.at ?? 0) + step);
   let selectedSegment = null;
-  if (highlight?.closedAt && candles.length) {
+  let tradeBand = null;
+  if (highlight && candles.length) {
     const entryIndex = Math.floor((Date.parse(highlight.openedAt) - candles[0].at) / step);
-    const exitIndex = Math.floor((Date.parse(highlight.closedAt) - candles[0].at) / step);
+    const exitIndex = highlight.closedAt
+      ? Math.floor((Date.parse(highlight.closedAt) - candles[0].at) / step)
+      : endIndex;
     const from = Math.max(entryIndex, startIndex);
-    const to = Math.min(exitIndex, endIndex);
-    const price = (index) => Number(highlight.entryPrice) + (Number(highlight.exitPrice) - Number(highlight.entryPrice)) * (index - entryIndex) / (exitIndex - entryIndex || 1);
-    if (from <= to) selectedSegment = [{ x: candles[from].at, y: price(from) }, { x: candles[to].at, y: exitIndex === entryIndex ? Number(highlight.exitPrice) : price(to) }];
+    const to = Math.min(exitIndex < 0 ? endIndex : exitIndex, endIndex);
+    const pnl = Number(highlight.closedAt ? highlight.pnl : highlight.unrealizedPnl);
+    const tone = pnl > 0 ? GREEN : pnl < 0 ? RED : PURPLE;
+    if (from <= to) {
+      tradeBand = { x1: candles[from].at, x2: candles[Math.min(to + (from === to ? 1 : 0), candles.length - 1)].at, fill: tone };
+      if (highlight.closedAt) {
+        const price = (index) => Number(highlight.entryPrice) + (Number(highlight.exitPrice) - Number(highlight.entryPrice)) * (index - entryIndex) / (exitIndex - entryIndex || 1);
+        selectedSegment = [{ x: candles[from].at, y: price(from) }, { x: candles[to].at, y: exitIndex === entryIndex ? Number(highlight.exitPrice) : price(to) }];
+      }
+    }
   }
   const control = (id, label, checked, onChange, color) => <label htmlFor={id} className="flex cursor-pointer items-center gap-2 text-[11px] text-muted-foreground"><Checkbox id={id} checked={checked} onCheckedChange={(value) => onChange(value === true)} /><span className="h-2 w-2 rounded-sm" style={{ background: color }} />{label}</label>;
   const content = <div className="space-y-4">
@@ -125,6 +135,7 @@ export function BotChart({ bot, strategy, focusTrade }) {
         {candles.length ? <>
           <div className={fullScreen ? "h-[42vh] min-h-56" : tradesOpen ? "h-64" : "h-80"} aria-label={`${strategy.params.pair} candlestick chart`}>
             <ResponsiveContainer width="100%" height="100%"><ComposedChart data={candles} margin={{ top: 18, right: 10, left: 10, bottom: 0 }}>
+              {tradeBand ? <ReferenceArea x1={tradeBand.x1} x2={tradeBand.x2} fill={tradeBand.fill} fillOpacity={0.16} stroke={tradeBand.fill} strokeOpacity={0.45} ifOverflow="hidden" /> : null}
               <CartesianGrid stroke="rgba(184,174,204,.12)" vertical={false} />
               <XAxis dataKey="at" tickFormatter={tickLabel} tick={{ fill: "#b8aecc", fontSize: 10 }} minTickGap={60} axisLine={false} tickLine={false} />
               <YAxis domain={[(min) => min * 0.998, (max) => max * 1.002]} width={80} tick={{ fill: "#b8aecc", fontSize: 10 }} tickFormatter={(n) => money(n)} axisLine={false} tickLine={false} />
