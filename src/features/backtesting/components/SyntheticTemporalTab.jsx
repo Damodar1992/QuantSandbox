@@ -8,7 +8,6 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { BT_TEMPORAL_TOOLTIPS } from "@/constants/backtesting";
 import {
   BT_DRAWDOWN,
   BT_MUTED,
@@ -18,7 +17,7 @@ import {
   fmtInt,
 } from "../utils/format";
 import { buildSyntheticTemporalSummary } from "../utils/syntheticTemporalSummary";
-import { BtValueTooltip } from "./BtInfoTooltip";
+import { StrategyUiTip } from "./BtInfoTooltip";
 import {
   compactRailLabel,
   DISTRIBUTION_HEADER_CLASS,
@@ -29,8 +28,6 @@ import {
 } from "./DistributionMetricRow";
 
 const CARD = cx(ui.radius, "border border-[rgba(60,40,80,0.35)] bg-[#120b20] overflow-hidden");
-const LABEL_DOTTED =
-  "underline decoration-dotted underline-offset-2 decoration-[#6e6682]";
 
 /** Reference card layout — row keys from buildSyntheticTemporalSummary. */
 const TEMPORAL_LAYOUT = [
@@ -122,13 +119,10 @@ function indexRows(sections) {
 }
 
 function MetricLabel({ label, tipKey }) {
-  const tip = BT_TEMPORAL_TOOLTIPS[tipKey];
-  const tipObj = typeof tip === "string" ? { text: tip } : tip;
-  if (!tipObj?.text && !tipObj?.formula) return label;
   return (
-    <BtValueTooltip text={tipObj.text} formula={tipObj.formula}>
-      <span className={LABEL_DOTTED}>{label}</span>
-    </BtValueTooltip>
+    <StrategyUiTip block="synthetic_info.temporal" field={tipKey} stage={5}>
+      {label}
+    </StrategyUiTip>
   );
 }
 

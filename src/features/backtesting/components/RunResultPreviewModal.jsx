@@ -3,6 +3,7 @@ import { cx, ui } from "@/constants/ui";
 import { AppButton } from "@/components/common/AppButton";
 import { AppDialog } from "@/components/common/AppDialog";
 import { BT_CHILD_TYPE, BT_CORE_METRICS, BT_COPY, BT_TOOLTIPS } from "@/constants/backtesting";
+import { strategyUiTooltip } from "@/constants/strategyTooltips";
 import {
   BT_MUTED,
   coreMetricTone,
@@ -15,7 +16,7 @@ import {
   signedTone,
 } from "../utils/format";
 import { simulationModeNote } from "../utils/shufflerValidity";
-import { BtValueTooltip, BtHeaderWithHelp } from "./BtInfoTooltip";
+import { BtValueTooltip, BtHeaderWithHelp, StrategyUiTip } from "./BtInfoTooltip";
 
 const TH = "px-3 py-2 text-left font-medium border-b border-[rgba(60,40,80,0.35)] whitespace-nowrap";
 const TD = "px-3 py-2 whitespace-nowrap font-mono tabular-nums";
@@ -46,7 +47,10 @@ function BacktestBody({ run }) {
             {hasMini ? <th className={TH}>Mini-backtest</th> : null}
             {hasMini ? (
               <th className={TH}>
-                <BtHeaderWithHelp label="Δ" text={BT_TOOLTIPS.delta}>
+                <BtHeaderWithHelp
+                  label="Δ"
+                  content={strategyUiTooltip("backtest_core_metrics", "delta", 5)}
+                >
                   Δ (BT vs mini)
                 </BtHeaderWithHelp>
               </th>
@@ -61,9 +65,9 @@ function BacktestBody({ run }) {
             return (
               <tr key={metric.key} className={ROW}>
                 <td className="px-3 py-2">
-                  <BtValueTooltip text={metric.description} formula={metric.formula}>
-                    <span>{metric.label}</span>
-                  </BtValueTooltip>
+                  <StrategyUiTip block="backtest_core_metrics" field={metric.key} stage={5}>
+                    {metric.label}
+                  </StrategyUiTip>
                 </td>
                 <td className={cx(TD, coreMetricTone(metric.key, value))}>
                   {fmtCoreMetric(metric.key, value)}
@@ -114,7 +118,10 @@ function ShufflerBody({ run }) {
             <th className={TH}>Mean</th>
             <th className={TH}>Median</th>
             <th className={TH}>
-              <BtHeaderWithHelp label="Percentile" text={BT_TOOLTIPS.percentile}>
+              <BtHeaderWithHelp
+                label="Percentile"
+                content={strategyUiTooltip("shuffle_info.summary", "original_percentile", 5)}
+              >
                 Percentile
               </BtHeaderWithHelp>
             </th>
@@ -185,7 +192,10 @@ function SyntheticBody({ run }) {
             <th className={TH}>Metric</th>
             <th className={TH}>Real historical</th>
             <th className={TH}>
-              <BtHeaderWithHelp label="Percentile" text={BT_TOOLTIPS.percentile}>
+              <BtHeaderWithHelp
+                label="Percentile"
+                content={strategyUiTooltip("synthetic_core_metrics", "percentile", 5)}
+              >
                 Percentile
               </BtHeaderWithHelp>
             </th>
@@ -199,7 +209,9 @@ function SyntheticBody({ run }) {
           {(run.result?.core || []).map((row) => (
             <tr key={row.metric} className={ROW}>
               <td className="px-3 py-2">
-                {BT_CORE_METRICS.find((m) => m.key === row.metric)?.label ?? row.metric}
+                <StrategyUiTip block="synthetic_core_metrics" field={row.metric} stage={5}>
+                  {BT_CORE_METRICS.find((m) => m.key === row.metric)?.label ?? row.metric}
+                </StrategyUiTip>
               </td>
               <td className={cx(TD, coreMetricTone(row.metric, row.real))}>
                 {fmtCoreMetric(row.metric, row.real)}

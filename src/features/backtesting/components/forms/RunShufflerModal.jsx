@@ -8,13 +8,9 @@ import {
   BT_SHUFFLES_PRESETS,
   BT_SHUFFLE_APPROACHES,
   BT_SIM_MODES,
-  BT_SIM_MODE_TIP,
 } from "@/constants/backtesting";
 import { computePessimismGrid, createDefaultPessimismLevels } from "../../utils/pessimism";
-import { BtValueTooltip } from "../BtInfoTooltip";
-
-const LABEL_DOTTED =
-  "underline decoration-dotted underline-offset-2 decoration-[#6e6682]";
+import { StrategyUiTip } from "../BtInfoTooltip";
 import { BT_FORM_CONTROL } from "./formControl";
 import { PessimismGrid } from "./PessimismGrid";
 
@@ -117,9 +113,14 @@ export const RunShufflerModal = memo(function RunShufflerModal({
           <div className="text-[12px] font-medium text-[#faf7fd]">1 · Shuffle settings</div>
           <div className={cx(ui.radius, ui.panelMuted, "grid gap-3 p-3 sm:grid-cols-3")}>
             <div className="space-y-1">
-              <BtValueTooltip text={BT_SIM_MODE_TIP.text}>
-                <span className={cx("text-[11px]", ui.textMuted, LABEL_DOTTED)}>Simulation Mode</span>
-              </BtValueTooltip>
+              <StrategyUiTip
+                block="shuffler"
+                field="simulation_mode"
+                stage={5}
+                className={cx("text-[11px]", ui.textMuted)}
+              >
+                Simulation Mode
+              </StrategyUiTip>
               <AppSelect
                 aria-label="Simulation Mode"
                 value={simulationMode}
@@ -140,7 +141,11 @@ export const RunShufflerModal = memo(function RunShufflerModal({
             />
 
             <AppSelect
-              label="Shuffle Approach"
+              label={
+                <StrategyUiTip block="shuffler" field="shuffle_approach" stage={5}>
+                  Shuffle Approach
+                </StrategyUiTip>
+              }
               value={approach}
               onValueChange={setApproach}
               options={approachOptions}

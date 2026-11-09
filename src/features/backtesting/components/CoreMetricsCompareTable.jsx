@@ -1,6 +1,7 @@
 import React, { memo } from "react";
 import { cx } from "@/constants/ui";
-import { BT_CORE_METRICS, BT_TOOLTIPS } from "@/constants/backtesting";
+import { BT_CORE_METRICS } from "@/constants/backtesting";
+import { strategyUiTooltip } from "@/constants/strategyTooltips";
 import {
   BT_MUTED,
   coreMetricTone,
@@ -9,7 +10,7 @@ import {
   fmtPct,
   signedTone,
 } from "../utils/format";
-import { BtHeaderWithHelp, BtValueTooltip } from "./BtInfoTooltip";
+import { BtHeaderWithHelp, StrategyUiTip } from "./BtInfoTooltip";
 
 const TH =
   "px-3 py-2 text-left text-[10px] font-medium uppercase tracking-wide border-b border-[rgba(60,40,80,0.35)] whitespace-nowrap text-[#8c8c8c]";
@@ -44,7 +45,10 @@ export const CoreMetricsCompareTable = memo(function CoreMetricsCompareTable({
             <th className={cx(TH, "text-right")}>Mini-backtest</th>
             <th className={cx(TH, "text-right")}>
               <span className="inline-flex w-full justify-end">
-                <BtHeaderWithHelp label="Δ" text={BT_TOOLTIPS.delta}>
+                <BtHeaderWithHelp
+                  label="Δ"
+                  content={strategyUiTooltip("backtest_core_metrics", "delta", 5)}
+                >
                   Δ (BT vs mini)
                 </BtHeaderWithHelp>
               </span>
@@ -59,11 +63,9 @@ export const CoreMetricsCompareTable = memo(function CoreMetricsCompareTable({
             return (
               <tr key={metric.key} className={ROW}>
                 <td className="px-3 py-2 text-left">
-                  <BtValueTooltip text={metric.description} formula={metric.formula}>
-                    <span className="underline decoration-dotted underline-offset-2 decoration-[#6e6682]">
-                      {metric.label}
-                    </span>
-                  </BtValueTooltip>
+                  <StrategyUiTip block="backtest_core_metrics" field={metric.key} stage={5}>
+                    {metric.label}
+                  </StrategyUiTip>
                 </td>
                 <td className={cx(TD, coreMetricTone(metric.key, value))}>
                   {fmtCoreMetric(metric.key, value)}

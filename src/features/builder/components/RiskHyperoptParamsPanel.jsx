@@ -2,6 +2,7 @@ import React, { memo } from "react";
 import { cx, ui } from "../../../constants/ui";
 import { RISK_HYPEROPT_PARAM_DEFS } from "../../../constants/risk";
 import { AppInput } from "../../../components/common/AppInput";
+import { StrategyUiTip } from "../../backtesting/components/BtInfoTooltip";
 
 const CONTROL = "h-8 text-[12px] w-full font-mono";
 
@@ -44,7 +45,11 @@ export const RiskHyperoptParamsPanel = memo(function RiskHyperoptParamsPanel({ p
             const invalid = min < def.minFloor || max < min || step <= 0;
             return (
               <div key={def.paramKey} className={cx(ui.radius, ui.panelMuted, "p-3 min-w-0")}>
-                <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">{def.label}</div>
+                <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">
+                  <StrategyUiTip block="cooldown" field={def.paramKey} stage={4}>
+                    {def.label}
+                  </StrategyUiTip>
+                </div>
                 <div className="flex items-end gap-2">
                   <div className="space-y-1 flex-1 min-w-0">
                     <label className={cx("block text-[10px]", ui.textMuted)}>Min</label>

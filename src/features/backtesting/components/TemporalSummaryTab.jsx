@@ -1,6 +1,5 @@
 import { memo, useMemo } from "react";
 import { cx, ui } from "@/constants/ui";
-import { BT_TEMPORAL_TOOLTIPS } from "@/constants/backtesting";
 import {
   BT_DRAWDOWN,
   BT_MUTED,
@@ -9,7 +8,7 @@ import {
   BT_POSITIVE,
 } from "../utils/format";
 import { buildTemporalSummary } from "../utils/temporalSummary";
-import { BtValueTooltip } from "./BtInfoTooltip";
+import { StrategyUiTip } from "./BtInfoTooltip";
 
 const TH_GROUP =
   "px-2.5 py-2 text-center text-[10px] font-semibold uppercase tracking-wide text-[#9b8ec4] border-b border-[rgba(60,40,80,0.35)] bg-[#161022]";
@@ -25,15 +24,11 @@ const TD_PERIOD =
   "sticky left-0 z-10 bg-[#120b20] px-2.5 py-2 text-left align-middle text-[11px] font-semibold uppercase tracking-wide text-violet-200 whitespace-nowrap border-r border-[rgba(60,40,80,0.35)]";
 const GROUP_SEP = "border-l border-[rgba(60,40,80,0.35)]";
 const ROW = "border-b border-[rgba(60,40,80,0.18)] last:border-b-0 hover:bg-[#161022]/60";
-const LABEL_DOTTED =
-  "underline decoration-dotted underline-offset-2 decoration-[#6e6682]";
-
-function MetricHeader({ label, tip }) {
-  if (!tip?.text && !tip?.formula) return label;
+function MetricHeader({ label, field }) {
   return (
-    <BtValueTooltip text={tip.text} formula={tip.formula}>
-      <span className={LABEL_DOTTED}>{label}</span>
-    </BtValueTooltip>
+    <StrategyUiTip block="backtesting_info.temporal" field={field} stage={5}>
+      {label}
+    </StrategyUiTip>
   );
 }
 
@@ -107,7 +102,6 @@ export const TemporalSummaryTab = memo(function TemporalSummaryTab({ run }) {
                     key={section.key}
                     colSpan={Math.max(1, section.rows.length)}
                     className={cx(TH_GROUP, index > 0 && GROUP_SEP)}
-                    title={section.hint || undefined}
                   >
                     {section.title}
                   </th>
@@ -120,7 +114,7 @@ export const TemporalSummaryTab = memo(function TemporalSummaryTab({ run }) {
                       key={`${section.key}-${row.key}`}
                       className={cx(TH_METRIC, index > 0 && rowIndex === 0 && GROUP_SEP)}
                     >
-                      <MetricHeader label={row.label} tip={BT_TEMPORAL_TOOLTIPS[row.key]} />
+                      <MetricHeader label={row.label} field={row.key} />
                     </th>
                   )),
                 )}

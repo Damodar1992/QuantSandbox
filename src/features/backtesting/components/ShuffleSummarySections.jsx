@@ -6,6 +6,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { BT_MUTED, BT_NEUTRAL, BT_POSITIVE, BT_DRAWDOWN, BT_NEGATIVE, fmtInt, fmtMoney, fmtNum, fmtPct, signedTone } from "../utils/format";
 import { DistributionMetricRow, formatRailValue } from "./DistributionMetricRow";
 import { PercentileCell } from "./SyntheticCoreResultsPanel";
+import { StrategyUiTip } from "./BtInfoTooltip";
+
+function shuffleMetricBlock(sectionKey) {
+  if (sectionKey === "general") return "shuffle_info.summary.general";
+  return "shuffle_info.summary.recovery";
+}
 
 const CARD = cx(ui.radius, "border border-[rgba(60,40,80,0.35)] bg-[#120b20] overflow-hidden");
 const STATS_BOX = "rounded-md border border-[rgba(60,40,80,0.28)] bg-[#161022] px-2 py-1.5";
@@ -163,12 +169,16 @@ function MetricsVisibilityControl({ rows, enabledKeys, onChange }) {
   );
 }
 
-function ShuffleDistributionRow({ row }) {
+function ShuffleDistributionRow({ row, sectionKey }) {
   const tone = valueTone(row);
   const signedRail = row.pctTone !== "bad";
   return (
     <DistributionMetricRow
-      label={row.label}
+      label={
+        <StrategyUiTip block={shuffleMetricBlock(sectionKey)} field={row.key} stage={5}>
+          {row.label}
+        </StrategyUiTip>
+      }
       value={formatDisplayValue(row)}
       valueClassName={tone}
       percentile={row.originalPct}
@@ -182,7 +192,7 @@ function ShuffleDistributionRow({ row }) {
   );
 }
 
-function SummaryMetricBlock({ row, nRuns, paired = false }) {
+function SummaryMetricBlock({ row, nRuns, paired = false, sectionKey }) {
   const hasOriginal = row.original != null && row.original !== "";
 
   return (
@@ -193,7 +203,11 @@ function SummaryMetricBlock({ row, nRuns, paired = false }) {
       )}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 text-[11px] font-medium text-[#faf7fd]">{row.label}</div>
+        <div className="min-w-0 text-[11px] font-medium text-[#faf7fd]">
+          <StrategyUiTip block={shuffleMetricBlock(sectionKey)} field={row.key} stage={5}>
+            {row.label}
+          </StrategyUiTip>
+        </div>
         <div className="shrink-0 text-right font-mono text-[13px] font-semibold tabular-nums leading-tight text-sky-100">
           {hasOriginal ? formatValue(row.original, row.format) : <span className={BT_MUTED}>N/A</span>}
         </div>
@@ -201,7 +215,9 @@ function SummaryMetricBlock({ row, nRuns, paired = false }) {
 
       <div className="mt-2 flex items-center justify-between gap-3">
         <span className={cx("text-[9px] font-medium uppercase tracking-wide", ui.textSubtle)}>
-          Original vs {fmtInt(nRuns)} runs
+          <StrategyUiTip block="shuffle_info.summary" field="original_percentile" stage={5}>
+            Original vs {fmtInt(nRuns)} runs
+          </StrategyUiTip>
         </span>
         {row.originalPct != null ? (
           <div className="min-w-[120px] shrink-0">
@@ -295,9 +311,16 @@ export function SummarySectionCard({ section, open, onToggle, nRuns, className }
                 : cx("text-[9px] uppercase tracking-wide", ui.textSubtle),
             )}
           >
-            {isDistribution
-              ? `original vs ${fmtInt(nRuns)} runs · ${enabledKeys.size}/${section.rows.length}`
-              : `${enabledKeys.size}/${section.rows.length}`}
+            {isDistribution ? (
+              <>
+                <StrategyUiTip block="shuffle_info.summary" field="original_percentile" stage={5}>
+                  {`original vs ${fmtInt(nRuns)} runs`}
+                </StrategyUiTip>
+                {` · ${enabledKeys.size}/${section.rows.length}`}
+              </>
+            ) : (
+              `${enabledKeys.size}/${section.rows.length}`
+            )}
           </span>
           <MetricsVisibilityControl
             rows={section.rows}
@@ -320,7 +343,7 @@ export function SummarySectionCard({ section, open, onToggle, nRuns, className }
                 )}
               >
                 {rowGroup.map((row) => (
-                  <ShuffleDistributionRow key={row.key} row={row} />
+                  <ShuffleDistributionRow key={row.key} row={row} sectionKey={section.key} />
                 ))}
               </div>
             ))
@@ -341,6 +364,7 @@ export function SummarySectionCard({ section, open, onToggle, nRuns, className }
                   key={row.key}
                   row={row}
                   nRuns={nRuns}
+                  sectionKey={section.key}
                   paired={isPaired && rowGroup.length > 1}
                 />
               ))}

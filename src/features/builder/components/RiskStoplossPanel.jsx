@@ -2,6 +2,7 @@ import React, { memo } from "react";
 import { cx, ui } from "../../../constants/ui";
 import { RISK_STOPLOSS_KEYS, RISK_STOPLOSS_LABELS } from "../../../constants/risk";
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/components/ui/input-group";
+import { StrategyUiTip } from "../../backtesting/components/BtInfoTooltip";
 
 function fracToPctInput(frac) {
   const n = Number(frac);
@@ -33,7 +34,11 @@ export const RiskStoplossPanel = memo(function RiskStoplossPanel({ ranges, onCha
         const invalid = row.min > row.max || row.step <= 0;
         return (
           <div key={key} className={cx(ui.radius, ui.panelMuted, "p-3 min-w-0")}>
-            <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">{RISK_STOPLOSS_LABELS[key]}</div>
+            <div className="text-[12px] font-medium text-[#d9d9d9] mb-3">
+              <StrategyUiTip block="stoplosses" field={key} stage={4}>
+                {RISK_STOPLOSS_LABELS[key]}
+              </StrategyUiTip>
+            </div>
             <div className="flex items-end gap-2">
               {[
                 { field: "min", label: "Min" },

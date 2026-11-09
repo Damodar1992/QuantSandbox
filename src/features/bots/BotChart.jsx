@@ -53,6 +53,7 @@ export function BotChart({ bot, strategy, focusTrade }) {
   const [fullScreen, setFullScreen] = useState(false);
   const [highlight, setHighlight] = useState(null);
   const [view, setView] = useState("Market");
+  const [chartOpen, setChartOpen] = useState(false);
   const [tradesOpen, setTradesOpen] = useState(false);
   const chartFrame = useRef(null);
 
@@ -72,15 +73,20 @@ export function BotChart({ bot, strategy, focusTrade }) {
     setHighlight(trade);
     setRange("trade");
     setView("Market");
+    setChartOpen(true);
     setTradesOpen(true);
-    requestAnimationFrame(() => chartFrame.current?.scrollIntoView({ block: "start", behavior: "smooth" }));
   }, [candles]);
   useEffect(() => { if (focusTrade) focus(focusTrade); }, [focusTrade, focus]);
+  useEffect(() => {
+    if (!chartOpen || !highlight || fullScreen) return;
+    const frame = requestAnimationFrame(() => chartFrame.current?.scrollIntoView({ block: "start", behavior: "smooth" }));
+    return () => cancelAnimationFrame(frame);
+  }, [chartOpen, highlight, fullScreen]);
   const select = (trade) => {
     setHighlight(trade);
     setExecutions(true);
+    setChartOpen(true);
     setTradesOpen(true);
-    requestAnimationFrame(() => chartFrame.current?.scrollIntoView({ block: "start", behavior: "smooth" }));
   };
   const clearSelection = () => { setHighlight(null); if (range === "trade") setRange("custom"); };
 
@@ -154,5 +160,9 @@ export function BotChart({ bot, strategy, focusTrade }) {
       </div>
     </>}
   </div>;
-  return !fullScreen ? <section className={cx(ui.radius, ui.panel, "p-4")}>{content}</section> : <AppDialog open onOpenChange={setFullScreen} title={view === "Market" ? "Market chart" : "Equity history"} description={view === "Market" ? `${strategy.params.pair} · ${strategy.params.timeframe} · UTC` : "Bot capital · USDT · UTC"} className="w-[calc(100vw-2rem)] max-w-none max-h-[calc(100dvh-2rem)]">{content}</AppDialog>;
+  const section = <Collapsible open={chartOpen} onOpenChange={setChartOpen} className={cx(ui.radius, ui.panel, "overflow-hidden")}>
+    <CollapsibleTrigger asChild><AppButton variant="ghost" className="group h-auto w-full justify-between rounded-none px-4 py-3 text-[12px] font-medium"><span>Chart · {strategy.params.pair} · {strategy.params.timeframe}</span><ChevronDown className="size-3.5 transition-transform group-data-[state=open]:rotate-180" /></AppButton></CollapsibleTrigger>
+    <CollapsibleContent className="border-t border-border p-4">{content}</CollapsibleContent>
+  </Collapsible>;
+  return !fullScreen ? section : <AppDialog open onOpenChange={setFullScreen} title={view === "Market" ? "Market chart" : "Equity history"} description={view === "Market" ? `${strategy.params.pair} · ${strategy.params.timeframe} · UTC` : "Bot capital · USDT · UTC"} className="w-[calc(100vw-2rem)] max-w-none max-h-[calc(100dvh-2rem)]">{content}</AppDialog>;
 }

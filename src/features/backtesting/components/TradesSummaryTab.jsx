@@ -3,7 +3,6 @@ import { Download } from "lucide-react";
 import { cx, ui } from "@/constants/ui";
 import { AppButton } from "@/components/common/AppButton";
 import { AppInput } from "@/components/common/AppInput";
-import { BT_TRADES_TOOLTIPS } from "@/constants/backtesting";
 import {
   BT_MUTED,
   BT_NEGATIVE,
@@ -11,21 +10,16 @@ import {
   BT_POSITIVE,
 } from "../utils/format";
 import { buildTradesSummary, tradesToCsv } from "../utils/tradesSummary";
-import { BtValueTooltip } from "./BtInfoTooltip";
+import { StrategyUiTip } from "./BtInfoTooltip";
 
 const TH =
   "px-3 py-2 text-left text-[10px] font-medium uppercase tracking-wide border-b border-[rgba(60,40,80,0.35)] text-[#8c8c8c] whitespace-nowrap";
 const TD = "px-3 py-2 align-middle text-[11px] font-mono tabular-nums whitespace-nowrap";
-const LABEL_DOTTED =
-  "underline decoration-dotted underline-offset-2 decoration-[#6e6682]";
-
-function TipHeader({ tipKey, children }) {
-  const tip = BT_TRADES_TOOLTIPS[tipKey];
-  if (!tip) return children;
+function TipHeader({ field, children }) {
   return (
-    <BtValueTooltip text={tip.text} formula={tip.formula}>
-      <span className={LABEL_DOTTED}>{children}</span>
-    </BtValueTooltip>
+    <StrategyUiTip block="backtesting_info.trades" field={field} stage={5}>
+      {children}
+    </StrategyUiTip>
   );
 }
 
@@ -130,24 +124,24 @@ export const TradesSummaryTab = memo(function TradesSummaryTab({ run }) {
               <th className={TH}>Pair</th>
               <th className={TH}>Amount</th>
               <th className={TH}>
-                <TipHeader tipKey="stakeAmount">Stake amount</TipHeader>
+                <TipHeader field="stakeAmount">Stake amount</TipHeader>
               </th>
               <th className={TH}>Open rate</th>
               <th className={TH}>Close rate</th>
               <th className={TH}>
-                <TipHeader tipKey="stopLoss">Stop loss</TipHeader>
+                Stop loss
               </th>
               <th className={TH}>
-                <TipHeader tipKey="liqPrice">Liq. price</TipHeader>
+                <TipHeader field="liqPrice">Liq. price</TipHeader>
               </th>
               <th className={TH}>
-                <TipHeader tipKey="netPlPct">Net P/L, %</TipHeader>
+                <TipHeader field="netPlPct">Net P/L, %</TipHeader>
               </th>
               <th className={TH}>
-                <TipHeader tipKey="netPlUsdt">Net P/L, USDT</TipHeader>
+                <TipHeader field="netPlUsdt">Net P/L, USDT</TipHeader>
               </th>
               <th className={TH}>
-                <TipHeader tipKey="reserved">Reserved</TipHeader>
+                <TipHeader field="reserved">Reserved</TipHeader>
               </th>
               <th className={TH}>Open date</th>
               <th className={TH}>Close date</th>

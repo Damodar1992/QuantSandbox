@@ -1,6 +1,5 @@
 import { memo, useMemo } from "react";
 import { cx, ui } from "@/constants/ui";
-import { BT_PERFORMANCE_TOOLTIPS } from "@/constants/backtesting";
 import {
   BT_DRAWDOWN,
   BT_MUTED,
@@ -12,11 +11,11 @@ import {
   isMissing,
 } from "../utils/format";
 import { buildPerformanceSummary } from "../utils/mockResults";
-import { BtValueTooltip } from "./BtInfoTooltip";
+import { StrategyUiTip } from "./BtInfoTooltip";
+
+const PERFORMANCE_BLOCK = "backtesting_info.performance";
 
 const CARD_SHELL = cx(ui.radius, "border border-[rgba(60,40,80,0.35)] bg-[#120b20] p-3");
-const LABEL_DOTTED =
-  "underline decoration-dotted underline-offset-2 decoration-[#6e6682]";
 
 function toneClass(tone, value) {
   switch (tone) {
@@ -63,15 +62,11 @@ function heroValueClass(item) {
   return toneClass(item.tone, item.value);
 }
 
-function MetricLabel({ label, tip, className }) {
-  const tipObj = typeof tip === "string" ? { text: tip } : tip;
-  if (!tipObj?.text && !tipObj?.formula) {
-    return <span className={className}>{label}</span>;
-  }
+function MetricLabel({ label, field, className }) {
   return (
-    <BtValueTooltip text={tipObj.text} formula={tipObj.formula}>
-      <span className={cx(LABEL_DOTTED, className)}>{label}</span>
-    </BtValueTooltip>
+    <StrategyUiTip block={PERFORMANCE_BLOCK} field={field} stage={5} className={className}>
+      {label}
+    </StrategyUiTip>
   );
 }
 
@@ -80,7 +75,7 @@ function HeroCard({ item }) {
     <div className={cx(CARD_SHELL, "space-y-1.5")}>
       <MetricLabel
         label={item.label}
-        tip={BT_PERFORMANCE_TOOLTIPS[item.key]}
+        field={item.key}
         className={cx("text-[10px] leading-snug", BT_MUTED)}
       />
       <div className={cx("text-[22px] font-semibold leading-none font-mono tabular-nums", heroValueClass(item))}>
@@ -97,15 +92,7 @@ function SectionCard({ section }) {
   return (
     <div className={cx(CARD_SHELL, "space-y-2")}>
       <div className="text-[10px] font-semibold uppercase tracking-wide text-[#9b8ec4]">
-        {section.hint ? (
-          <MetricLabel
-            label={section.title}
-            tip={section.hint}
-            className="text-[10px] font-semibold uppercase tracking-wide text-[#9b8ec4]"
-          />
-        ) : (
-          section.title
-        )}
+        {section.title}
       </div>
       <ul className="space-y-2">
         {(section.rows || []).map((row) => (
@@ -114,7 +101,7 @@ function SectionCard({ section }) {
             className="flex items-start justify-between gap-3 text-[11px]"
           >
             <span className={cx(BT_MUTED, "min-w-0 pt-0.5 leading-snug")}>
-              <MetricLabel label={row.label} tip={BT_PERFORMANCE_TOOLTIPS[row.key]} />
+              <MetricLabel label={row.label} field={row.key} />
             </span>
             <span className="shrink-0 text-right">
               <span

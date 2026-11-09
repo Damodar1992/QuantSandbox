@@ -4,10 +4,7 @@ import { AppInput } from "@/components/common/AppInput";
 import { Checkbox } from "@/components/ui/checkbox";
 import { BT_PESSIMISM_DEFAULT_SHARES, BT_STREAK_METRICS } from "@/constants/backtesting";
 import { computePessimismGrid } from "../../utils/pessimism";
-import { BtValueTooltip } from "../BtInfoTooltip";
-
-const LABEL_DOTTED =
-  "underline decoration-dotted underline-offset-2 decoration-[#6e6682]";
+import { BtValueTooltip, StrategyUiTip } from "../BtInfoTooltip";
 
 const TH = "px-2 py-1.5 text-left font-medium border-b border-[rgba(60,40,80,0.3)] whitespace-nowrap";
 const TD = "px-2 py-1.5 align-middle whitespace-nowrap";
@@ -103,18 +100,12 @@ export const PessimismGrid = memo(function PessimismGrid({
               <th className={cx(TH, "w-8")} aria-label="Enabled" />
               <th className={TH}>Level</th>
               <th className={TH}>Share</th>
-              <th className={TH}>
-                <BtValueTooltip text="Runs = floor(share × shuffles).">
-                  <span className={LABEL_DOTTED}>Runs</span>
-                </BtValueTooltip>
-              </th>
+              <th className={TH}>Runs</th>
               {BT_STREAK_METRICS.map((m) => (
                 <th key={m.key} className={TH}>
-                  <BtValueTooltip
-                    text={`${m.title}${m.enforced ? "" : " — never forced"}`}
-                  >
-                    <span className={LABEL_DOTTED}>{m.label}</span>
-                  </BtValueTooltip>
+                  <StrategyUiTip block="shuffler_run_parameters" field={m.key} stage={5}>
+                    {m.label}
+                  </StrategyUiTip>
                 </th>
               ))}
             </tr>

@@ -5,9 +5,8 @@ import { ChevronDown } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cx, ui } from "@/constants/ui";
 import { amount, money, percent, pnlTone } from "./botsDisplay";
-import { periodBreakdown, performanceSummary, utcDate } from "./botsAnalytics";
+import { periodBreakdown } from "./botsAnalytics";
 
-const PANEL = cx(ui.radius, ui.panel, "p-4");
 const GREEN = "#34d399";
 const RED = "#f87171";
 const PURPLE = "#a78bfa";
@@ -20,11 +19,12 @@ function PeriodTooltip({ active, payload }) {
 
 export function BotPerformance({ bot }) {
   const [period, setPeriod] = useState("days");
-  const stats = useMemo(() => performanceSummary(bot), [bot]);
+  const [open, setOpen] = useState(false);
   const rows = useMemo(() => periodBreakdown(bot, period), [bot, period]);
-  return <div className="space-y-4">
-    <section className={PANEL}>
-      <div className="flex flex-wrap items-start justify-between gap-4"><div><h3 className="text-sm font-medium">Period breakdown</h3><p className="mt-1 max-w-2xl text-[11px] text-muted-foreground">Fully closed trades only. The entire trade result is assigned to its final closing date.</p></div><div className="flex gap-1" role="group" aria-label="Period aggregation">{["days", "weeks", "months"].map((value) => <AppButton key={value} variant={period === value ? "default" : "outline"} aria-pressed={period === value} onClick={() => setPeriod(value)}>{value[0].toUpperCase() + value.slice(1)}</AppButton>)}</div></div>
+  return <Collapsible open={open} onOpenChange={setOpen} className={cx(ui.radius, ui.panel, "overflow-hidden")}>
+      <CollapsibleTrigger asChild><AppButton variant="ghost" className="group h-auto w-full justify-between rounded-none px-4 py-3"><span className="text-sm font-medium">Period breakdown</span><ChevronDown className="size-3.5 transition-transform group-data-[state=open]:rotate-180" /></AppButton></CollapsibleTrigger>
+      <CollapsibleContent className="border-t border-border px-4 pb-4">
+      <div className="flex flex-wrap items-start justify-between gap-4 pt-4"><p className="max-w-2xl text-[11px] text-muted-foreground">Fully closed trades only. The entire trade result is assigned to its final closing date.</p><div className="flex gap-1" role="group" aria-label="Period aggregation">{["days", "weeks", "months"].map((value) => <AppButton key={value} variant={period === value ? "default" : "outline"} aria-pressed={period === value} onClick={() => setPeriod(value)}>{value[0].toUpperCase() + value.slice(1)}</AppButton>)}</div></div>
       <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-[11px] text-muted-foreground"><span><span className="mr-1.5 inline-block h-2 w-2 rounded-sm bg-emerald-400" />Realized P&L · USDT</span><span><span className="mr-1.5 inline-block h-0.5 w-4 align-middle bg-violet-400" />Closed trades</span><span className="ml-auto">UTC · Weeks start Monday</span></div>
       {rows.length ? <div className="mt-4 h-56" aria-label="Realized profit and closed trade count by period">
         <ResponsiveContainer width="100%" height="100%"><ComposedChart data={rows} margin={{ top: 12, right: 6, left: 4, bottom: 0 }}>
@@ -44,23 +44,6 @@ export function BotPerformance({ bot }) {
       <p className="mt-3 text-[11px] text-muted-foreground">Return = period P&L ÷ initial bot capital ({amount(bot.capital)}). Open positions and unrealized P&L are excluded.</p>
         </CollapsibleContent>
       </Collapsible>
-    </section>
-    <Collapsible className={cx(ui.radius, ui.panel, "overflow-hidden")}>
-      <CollapsibleTrigger asChild><AppButton variant="ghost" className="group h-auto w-full justify-between rounded-none px-4 py-3"><span>More statistics</span><ChevronDown className="size-3.5 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" /></AppButton></CollapsibleTrigger>
-      <CollapsibleContent className="border-t border-border p-4">
-        <dl className="grid gap-x-8 gap-y-3 md:grid-cols-2">{[
-          ["Profit factor", stats.noLosses ? "No losses" : money(stats.profitFactor)],
-          ["Average trade return", percent(stats.averageReturn, true)],
-          ["Average trade duration", stats.averageDuration],
-          ["Expectancy per trade", amount(stats.expectancy, true)],
-          ["Expectancy ratio", money(stats.expectancyRatio)],
-          ["Closed-trade turnover", amount(stats.volume)],
-          ["Current drawdown", stats.drawdown ? percent(stats.drawdown.currentPct) : "No data"],
-          ["Breakeven trades", stats.draws ?? "No data"],
-        ].map(([label, value]) => <div key={label} className="flex items-start justify-between gap-4 border-b border-border pb-3 text-[12px]"><dt className="text-muted-foreground">{label}</dt><dd className="text-right tabular-nums">{value}</dd></div>)}</dl>
-        <p className="mt-3 text-[11px] text-muted-foreground">Trade return is averaged per trade. Turnover includes entry and exit notional of closed trades.</p>
-        {stats.drawdown?.from ? <p className="mt-2 text-[11px] text-muted-foreground">Max drawdown: {utcDate(stats.drawdown.from)} → {utcDate(stats.drawdown.to)} UTC · sampled equity.</p> : null}
       </CollapsibleContent>
-    </Collapsible>
-  </div>;
+  </Collapsible>;
 }

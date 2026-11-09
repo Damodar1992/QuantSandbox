@@ -74,6 +74,7 @@ import {
   DEFAULT_FAVORITE_EPOCH_IDS,
 } from './utils/defaultBbSetup';
 import { BacktestingStagePanel } from '../backtesting';
+import { StrategyUiTip } from '../backtesting/components/BtInfoTooltip';
 import { getParamValuesFromDef, getParamDefForCompositeKey, getParamLabel, getReportParamLabel, getIndicatorTemplate } from '../../utils/indicators';
 import { generatePythonCode } from '../../utils/pythonCode';
 import { generateMockResults } from '../../utils/mockResults';
@@ -1149,28 +1150,28 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
       dateRange,
       finalEvaluation: [
         { label: "Score", value: fmtMetric(scoreValue, 6) },
-        { label: "stability_score", value: fmtMetric(stabilityValue, 6) },
+        { label: "stability_score", field: "stability_score", value: fmtMetric(stabilityValue, 6) },
         { label: "Epoch", value: fmtMaybeInt(epochValue) },
       ],
       cyclePerformanceColumns: [
         [
-          { label: "cycle_count", value: fmtMaybeInt(cycleCountValue) },
-          { label: "mfe_med", value: fmtMetric(mfeValue, 5) },
-          { label: "mae_med", value: fmtMetric(maeValue, 5) },
-          { label: "air_med", value: fmtMetric(airValue, 5) },
-          { label: "hr_val", value: fmtMetric(hitRateValue, 2) },
-          { label: "ret_med", value: fmtMetric(seeded("ret_med", 0.11, 0.19), 5) },
-          { label: "roi_med", value: fmtMetric(roiMedValue, 2) },
-          { label: "dur_med", value: fmtMaybeInt(seeded("dur_med", 8, 14, 0)) },
+          { label: "cycle_count", field: "cycle_count", value: fmtMaybeInt(cycleCountValue) },
+          { label: "mfe_med", field: "mfe_med", value: fmtMetric(mfeValue, 5) },
+          { label: "mae_med", field: "mae_med", value: fmtMetric(maeValue, 5) },
+          { label: "air_med", field: "air_med", value: fmtMetric(airValue, 5) },
+          { label: "hr_val", field: "hr_val", value: fmtMetric(hitRateValue, 2) },
+          { label: "ret_med", field: "ret_med", value: fmtMetric(seeded("ret_med", 0.11, 0.19), 5) },
+          { label: "roi_med", field: "roi_med", value: fmtMetric(roiMedValue, 2) },
+          { label: "dur_med", field: "dur_med", value: fmtMaybeInt(seeded("dur_med", 8, 14, 0)) },
         ],
         [
-          { label: "tt_mfe_med", value: fmtMaybeInt(seeded("tt_mfe_med", 3, 6, 0)) },
-          { label: "tt_mae_med", value: fmtMaybeInt(seeded("tt_mae_med", 1, 3, 0)) },
+          { label: "tt_mfe_med", field: "tt_mfe_med", value: fmtMaybeInt(seeded("tt_mfe_med", 3, 6, 0)) },
+          { label: "tt_mae_med", field: "tt_mae_med", value: fmtMaybeInt(seeded("tt_mae_med", 1, 3, 0)) },
           { label: "profit_factor", value: fmtMetric(seeded("profit_factor", 2.8, 8.2), 6) },
-          { label: "profit_capture", value: fmtMetric(seeded("profit_capture", 28, 42), 2) },
-          { label: "max_drawdown", value: fmtMetric(Math.abs(maeValue) * seeded("max_drawdown", 3.8, 4.8), 4) },
-          { label: "total_pnl_gross", value: fmtMaybeInt(seeded("total_pnl_gross", 26000, 42000, 0)) },
-          { label: "total_roi", value: fmtMetric(totalRoiValue, 3) },
+          { label: "profit_capture", field: "profit_capture", value: fmtMetric(seeded("profit_capture", 28, 42), 2) },
+          { label: "max_drawdown", field: "max_drawdown", value: fmtMetric(Math.abs(maeValue) * seeded("max_drawdown", 3.8, 4.8), 4) },
+          { label: "total_pnl_gross", field: "total_pnl_gross", value: fmtMaybeInt(seeded("total_pnl_gross", 26000, 42000, 0)) },
+          { label: "total_roi", field: "total_roi", value: fmtMetric(totalRoiValue, 3) },
         ],
       ],
       finalScoreColumns: [
@@ -2535,7 +2536,11 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                   </div>
                   <div className="flex flex-wrap items-end gap-3">
                     <AppSelect
-                      label="Hyperopt type"
+                      label={
+                        <StrategyUiTip block="hyperopt_parameters" field="hyperopt_type" stage={activeStage}>
+                          Hyperopt type
+                        </StrategyUiTip>
+                      }
                       value={hyperoptType}
                       onValueChange={setHyperoptType}
                       options={[{ value: "Brute Force", label: "Brute Force" }]}
@@ -2713,7 +2718,11 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                         {isSignalStage && isSignalTimeRangeFilled && (
                           <div className={cx("space-y-1", isSignalStage && "xl:col-span-3")}>
                             <div className="space-y-1">
-                              <label className={cx("block mb-1 text-xs", ui.textMuted)}>Fold size (candles)</label>
+                              <label className={cx("block mb-1 text-xs", ui.textMuted)}>
+                                <StrategyUiTip block="hyperopt_parameters" field="fold_size" stage={activeStage}>
+                                  Fold size (candles)
+                                </StrategyUiTip>
+                              </label>
                               <AppInput
                                 type="number"
                                 min={1}
@@ -3135,7 +3144,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                     },
                                   ].map((row) => (
                                     <tr key={row.metric} className="border-b border-[#303030]">
-                                      <td className="px-3 py-2 text-[#a6a6a6] align-top">{row.metric}</td>
+                                      <td className="px-3 py-2 text-[#a6a6a6] align-top"><StrategyUiTip block="post_processing_info.stability" field={row.metric} stage={activeStage}>{row.metric}</StrategyUiTip></td>
                                       <td className="px-3 py-2 w-32 align-top">
                                         <AppSelect
                                           value={row.formula}
@@ -3391,7 +3400,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                     },
                                   ].map((row) => (
                                     <tr key={row.metric} className="border-b border-[#303030]">
-                                      <td className="px-3 py-2 text-[#a6a6a6] align-top">{row.metric}</td>
+                                      <td className="px-3 py-2 text-[#a6a6a6] align-top"><StrategyUiTip block="post_processing_info.score" field={row.metric} stage={activeStage}>{row.metric}</StrategyUiTip></td>
                                       <td className="px-3 py-2 w-32 align-top">
                                         <AppSelect
                                           value={row.formula}
@@ -4401,10 +4410,18 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                             <tr>
                               <th className="px-3 py-2 text-left font-medium border-b border-[#303030] w-6"></th>
                               <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Label</th>
-                              <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Score</th>
-                              <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">MFE</th>
-                              <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">MAE</th>
-                              <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">AIR</th>
+                              <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">
+                                <StrategyUiTip block="favorite_epochs" field="score" stage={activeStage}>Score</StrategyUiTip>
+                              </th>
+                              <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">
+                                <StrategyUiTip block="favorite_epochs" field="mfe" stage={activeStage}>MFE</StrategyUiTip>
+                              </th>
+                              <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">
+                                <StrategyUiTip block="favorite_epochs" field="mae" stage={activeStage}>MAE</StrategyUiTip>
+                              </th>
+                              <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">
+                                <StrategyUiTip block="favorite_epochs" field="air" stage={activeStage}>AIR</StrategyUiTip>
+                              </th>
                           <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">HitRate</th>
                               <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Indicators</th>
                               <th className="px-3 py-2 text-left font-medium border-b border-[#303030]">Actions</th>
@@ -4827,7 +4844,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                             { metric: "normDiffStd", formula: finStabDiffStdFormula, setFormula: setFinStabDiffStdFormula, formulaCode: finStabDiffStdFormulaCode, setFormulaCode: setFinStabDiffStdFormulaCode, weight: finStabDiffStdWeight, setWeight: setFinStabDiffStdWeight, others: finStabDiffMfeWeight + finStabDiffMaeWeight + finStabDiffAirWeight + finStabDiffHitRateWeight },
                           ].map((row) => (
                             <tr key={row.metric} className="border-b border-[#303030]">
-                              <td className="px-3 py-2 text-[#a6a6a6] align-top">{row.metric}</td>
+                              <td className="px-3 py-2 text-[#a6a6a6] align-top"><StrategyUiTip block="post_processing_info.stability" field={row.metric} stage={activeStage}>{row.metric}</StrategyUiTip></td>
                               <td className="px-3 py-2 w-32 align-top">
                                 <AppSelect
                                   value={row.formula}
@@ -4950,7 +4967,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                       </thead>
                       <tbody className="text-[#d9d9d9]">
                         <tr className="border-b border-[#303030]">
-                          <td className="px-3 py-2 text-[#a6a6a6] align-top">normStability</td>
+                          <td className="px-3 py-2 text-[#a6a6a6] align-top"><StrategyUiTip block="post_processing_info.score" field="normStability" stage={activeStage}>normStability</StrategyUiTip></td>
                           <td className="px-3 py-2 w-32 align-top">
                             <AppSelect
                               value={finStabilityFormula}
@@ -4995,7 +5012,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                           { metric: "normHitRate", formula: finHitRateFormula, setFormula: setFinHitRateFormula, formulaCode: finHitRateFormulaCode, setFormulaCode: setFinHitRateFormulaCode, weight: finHitRateWeight, setWeight: setFinHitRateWeight, others: finStabilityWeight + finMfeWeight + finMaeWeight + finAirWeight },
                         ].map((row) => (
                           <tr key={row.metric} className="border-b border-[#303030]">
-                            <td className="px-3 py-2 text-[#a6a6a6] align-top">{row.metric}</td>
+                            <td className="px-3 py-2 text-[#a6a6a6] align-top"><StrategyUiTip block="post_processing_info.score" field={row.metric} stage={activeStage}>{row.metric}</StrategyUiTip></td>
                             <td className="px-3 py-2 w-32 align-top">
                               <AppSelect
                                 value={row.formula}
@@ -5566,7 +5583,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                       </thead>
                       <tbody className="text-[#d9d9d9]">
                         <tr className="border-b border-[#303030]">
-                          <td className="px-3 py-2 text-[#a6a6a6] align-top">Stability</td>
+                          <td className="px-3 py-2 text-[#a6a6a6] align-top"><StrategyUiTip block="post_processing_info.score" field="Stability" stage={activeStage}>Stability</StrategyUiTip></td>
                           <td className="px-3 py-2 align-top">{finStabilityFormula}</td>
                           <td className="px-3 py-2 align-top min-w-[200px]">
                             <div className="rounded border border-[#303030] bg-[#0f0f0f] px-2 py-1.5 text-[11px] font-mono">
@@ -5582,7 +5599,7 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                           { metric: "normHitRate", formula: finHitRateFormula, formulaCode: finHitRateFormulaCode, weight: finHitRateWeight },
                         ].map((row) => (
                           <tr key={row.metric} className="border-b border-[#303030]">
-                            <td className="px-3 py-2 text-[#a6a6a6] align-top">{row.metric}</td>
+                            <td className="px-3 py-2 text-[#a6a6a6] align-top"><StrategyUiTip block="post_processing_info.score" field={row.metric} stage={activeStage}>{row.metric}</StrategyUiTip></td>
                             <td className="px-3 py-2 align-top">{row.formula}</td>
                             <td className="px-3 py-2 align-top min-w-[200px]">
                               <div className="rounded border border-[#303030] bg-[#0f0f0f] px-2 py-1.5 text-[11px] font-mono">
@@ -5777,7 +5794,9 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                           className="rounded-md border border-[rgba(60,40,80,0.35)] bg-[#1c1830] px-3 py-2"
                         >
                           <div className="text-[9px] font-medium uppercase tracking-[0.12em] text-[#6e6682]">
-                            {entry.label}
+                            {entry.field ? (
+  <StrategyUiTip block="source_epoch_info" field={entry.field} stage={activeStage}>{entry.label}</StrategyUiTip>
+) : entry.label}
                           </div>
                           <div className="mt-1 font-mono text-[20px] font-semibold tabular-nums leading-none text-[#faf7fd]">
                             {entry.value}
@@ -5819,7 +5838,9 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
                                   key={entry.label}
                                   className="flex items-start justify-between gap-3 border-b border-[rgba(60,40,80,0.22)] px-3 py-2 text-[11px] last:border-b-0"
                                 >
-                                  <span className="text-[#b8aecc]">{entry.label}</span>
+                                  <span className="text-[#b8aecc]">{entry.field ? (
+  <StrategyUiTip block="source_epoch_info" field={entry.field} stage={activeStage}>{entry.label}</StrategyUiTip>
+) : entry.label}</span>
                                   <span className="font-mono tabular-nums text-[#faf7fd] text-right">{entry.value}</span>
                                 </div>
                               ))}

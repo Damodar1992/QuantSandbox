@@ -8,19 +8,15 @@ import {
   BT_EXCHANGES,
   BT_LEVERAGE_RANGE,
   BT_PAIR_OPTIONS,
-  BT_RUN_BACKTEST_TOOLTIPS,
   BT_STAKE_MODES,
   BT_TIMEFRAMES,
   BT_TRADING_MODES,
   resolveBtFees,
 } from "@/constants/backtesting";
 import { diffAgainstMini } from "../../utils/miniSource";
-import { BtValueTooltip } from "../BtInfoTooltip";
+import { StrategyUiTip } from "../BtInfoTooltip";
 import { InheritanceBar } from "./InheritanceBar";
 import { BT_FORM_CONTROL } from "./formControl";
-
-const LABEL_DOTTED =
-  "underline decoration-dotted underline-offset-2 decoration-[#6e6682]";
 
 const NO_MINI = "__no_mini__";
 const CONTROL = BT_FORM_CONTROL;
@@ -231,7 +227,11 @@ export const RunBacktestForm = memo(function RunBacktestForm({
           ) : null}
         </div>
         <AppSelect
-          label="Mini-backtest · optional"
+          label={
+            <StrategyUiTip block="backtest" field="mini_backtest" stage={5}>
+              Mini-backtest · optional
+            </StrategyUiTip>
+          }
           value={miniId}
           onValueChange={applyMini}
           options={[
@@ -359,7 +359,13 @@ export const RunBacktestForm = memo(function RunBacktestForm({
                 />
               </Field>
 
-              <Field label="Leverage">
+              <Field
+                label={
+                  <StrategyUiTip block="backtest" field="leverage" stage={5}>
+                    Leverage
+                  </StrategyUiTip>
+                }
+              >
                 <AppInput
                   type="number"
                   min={BT_LEVERAGE_RANGE.min}
@@ -392,7 +398,13 @@ export const RunBacktestForm = memo(function RunBacktestForm({
                 />
               </Field>
 
-              <Field label="Stake Mode">
+              <Field
+                label={
+                  <StrategyUiTip block="backtest" field="stake_mode" stage={5}>
+                    Stake Mode
+                  </StrategyUiTip>
+                }
+              >
                 <AppSelect
                   value={params.stakeMode}
                   onValueChange={(v) => patch("stakeMode", v)}
@@ -402,7 +414,13 @@ export const RunBacktestForm = memo(function RunBacktestForm({
                 />
               </Field>
 
-              <Field label="Stake Value">
+              <Field
+                label={
+                  <StrategyUiTip block="backtest" field="stake_value" stage={5}>
+                    Stake Value
+                  </StrategyUiTip>
+                }
+              >
                 <AppInput
                   type="number"
                   min={0}
@@ -418,9 +436,9 @@ export const RunBacktestForm = memo(function RunBacktestForm({
 
               <Field
                 label={
-                  <BtValueTooltip text={BT_RUN_BACKTEST_TOOLTIPS.profitReserving.text}>
-                    <span className={LABEL_DOTTED}>Profit Reserving</span>
-                  </BtValueTooltip>
+                  <StrategyUiTip block="backtest" field="profit_reserving" stage={5}>
+                    Profit Reserving
+                  </StrategyUiTip>
                 }
               >
                 <AppInput
@@ -440,9 +458,7 @@ export const RunBacktestForm = memo(function RunBacktestForm({
           {/* FEES */}
           <div className={cx(ui.radius, ui.panelMuted, "space-y-2 p-3")}>
             <div className="text-[10px] font-semibold uppercase tracking-wide text-[#9b8ec4]">
-              <BtValueTooltip text={BT_RUN_BACKTEST_TOOLTIPS.fees.text}>
-                <span className={LABEL_DOTTED}>Fees</span>
-              </BtValueTooltip>
+              Fees
             </div>
             {derivedFees ? (
               <>

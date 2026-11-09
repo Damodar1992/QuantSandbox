@@ -1,19 +1,15 @@
 import React, { useState } from "react";
-import { ChevronDown } from "lucide-react";
 import { AppBadge } from "@/components/common/AppBadge";
 import { AppButton } from "@/components/common/AppButton";
 import { EyeIcon } from "@/components/common/Icons";
-import { AppDialog } from "@/components/common/AppDialog";
 import { AppInput } from "@/components/common/AppInput";
 import { AppSelect } from "@/components/common/AppSelect";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cx, ui } from "@/constants/ui";
 import { closedTrades, duration, performanceSummary } from "./botsAnalytics";
 import { BotChart } from "./BotChart";
 import { BotPerformance } from "./BotPerformance";
 import { BotTradeDetails } from "./BotTradeDetails";
 import {
-  ORDER_KIND_LABELS,
   amount,
   date,
   formatOpenAge,
@@ -21,11 +17,9 @@ import {
   getBotMetrics,
   hasNumber,
   money,
-  ordersForPosition,
   percent,
   pnlTone,
   stopLossDistancePct,
-  summarizeOrderKinds,
 } from "./botsDisplay";
 
 const PANEL = cx(ui.radius, ui.panel, "p-4");
@@ -64,7 +58,6 @@ const POSITION_COLUMNS = [
   { key: "liquidation", label: "Liquidation price", align: "right" },
   { key: "pnl", label: "Unrealized P&L", align: "right" },
   { key: "opened", label: "Opened / Age", align: "left" },
-  { key: "orders", label: "Open orders", align: "left" },
 ];
 
 function PositionStack({ primary, secondary, align = "left", className, muteSecondary = true }) {
@@ -85,7 +78,6 @@ function PositionStack({ primary, secondary, align = "left", className, muteSeco
 }
 
 export function BotPositions({ bot, strategy, onViewChart }) {
-  const [orderDetails, setOrderDetails] = useState(null);
   const [selectedTrade, setSelectedTrade] = useState(null);
   const isFutures = strategy?.params?.mode === "futures";
   const columns = POSITION_COLUMNS.filter((col) => col.key !== "liquidation" || isFutures);
@@ -100,14 +92,14 @@ export function BotPositions({ bot, strategy, onViewChart }) {
         <table className="w-full min-w-[1200px] border-collapse text-[12px]">
           <thead className="bg-secondary text-muted-foreground">
             <tr>
-              {columns.map((col) => (
+              {columns.map((col, index) => (
                 <th
                   key={col.key}
                   className={cx(
                     "px-3 py-3 font-medium whitespace-nowrap align-bottom",
                     col.align === "right" ? "text-right" : "text-left",
-                    col.key === "instrument" && "pl-4",
-                    col.key === "orders" && "pr-4",
+                    index === 0 && "pl-4",
+                    index === columns.length - 1 && "pr-4",
                   )}
                 >
                   {col.label}
@@ -121,7 +113,6 @@ export function BotPositions({ bot, strategy, onViewChart }) {
               const leverage = hasNumber(recordedLeverage) ? Number(recordedLeverage) : null;
               const showLeverage = leverage != null && (isFutures || leverage > 1);
               const slDistance = stopLossDistancePct(position);
-              const relatedOrders = ordersForPosition(bot.orders, position.id);
               const exitLine = hasNumber(position.takeProfit)
                 ? `TP: ${money(position.takeProfit)}`
                 : position.exitRule || null;
@@ -129,7 +120,7 @@ export function BotPositions({ bot, strategy, onViewChart }) {
                 cx(
                   "px-3 py-3 align-top whitespace-nowrap",
                   key === "instrument" && "pl-4",
-                  key === "orders" && "pr-4",
+                  key === "opened" && "pr-4",
                   extra,
                 );
 
@@ -186,24 +177,6 @@ export function BotPositions({ bot, strategy, onViewChart }) {
                     />
                   </td>
                   <td className={cell("opened")}><PositionStack primary={date(position.openedAt)} secondary={formatOpenAge(position.openedAt, asOf)} /></td>
-                  <td className={cell("orders")}>
-                    {!Array.isArray(bot.orders) ? (
-                      <PositionStack primary={<span className="text-muted-foreground">Unavailable</span>} secondary={null} />
-                    ) : relatedOrders.length === 0 ? (
-                      <PositionStack primary={<span className="text-muted-foreground">None</span>} secondary={null} />
-                    ) : (
-                      <AppButton
-                        variant="link"
-                        className="h-auto items-start p-0 text-left text-violet-200"
-                        onClick={() => setOrderDetails({ position, orders: relatedOrders })}
-                      >
-                        <PositionStack
-                          primary={`${relatedOrders.length} open`}
-                          secondary={summarizeOrderKinds(relatedOrders)}
-                        />
-                      </AppButton>
-                    )}
-                  </td>
                 </tr>
               );
             })}
@@ -218,46 +191,6 @@ export function BotPositions({ bot, strategy, onViewChart }) {
         </table>
       </div>
 
-      <AppDialog
-        open={Boolean(orderDetails)}
-        onOpenChange={(open) => {
-          if (!open) setOrderDetails(null);
-        }}
-        title="Open orders"
-        description={
-          orderDetails
-            ? `${orderDetails.position.pair} · ${orderDetails.position.direction}`
-            : undefined
-        }
-      >
-        {orderDetails ? (
-          <div className="space-y-3 text-[12px]">
-            {orderDetails.orders.map((order) => (
-              <div
-                key={order.id}
-                className={cx(ui.radius, "border border-[rgba(60,40,80,0.35)] bg-[#120b20] p-3")}
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-medium text-[#faf7fd]">
-                    {ORDER_KIND_LABELS[order.kind] || order.kind || "Order"} · {order.side || "—"}
-                  </span>
-                  <span className="text-muted-foreground">{order.status || "Open"}</span>
-                </div>
-                <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
-                  <dt className="text-muted-foreground">Price</dt>
-                  <dd className="text-right tabular-nums">{hasNumber(order.price) ? money(order.price) : "No data"}</dd>
-                  <dt className="text-muted-foreground">Quantity</dt>
-                  <dd className="text-right tabular-nums">{hasNumber(order.quantity) ? order.quantity : "No data"}</dd>
-                  <dt className="text-muted-foreground">Created</dt>
-                  <dd className="text-right">{date(order.createdAt)}</dd>
-                  <dt className="text-muted-foreground">Order ID</dt>
-                  <dd className="text-right font-mono text-[10px]">{order.id}</dd>
-                </dl>
-              </div>
-            ))}
-          </div>
-        ) : null}
-      </AppDialog>
       <BotTradeDetails trade={selectedTrade} strategy={strategy} onClose={() => setSelectedTrade(null)} onViewChart={onViewChart} />
     </section>
   );
@@ -326,9 +259,9 @@ export function BotTrades({ bot, strategy, onViewChart }) {
 
 function MetricCard({ label, value, note, tone, children }) {
   return (
-    <div className={PANEL}>
+    <div className={cx(ui.radius, ui.panel, "p-3")}>
       <div className="text-[11px] text-muted-foreground">{label}</div>
-      <div className={cx("mt-2 text-[18px] font-semibold tabular-nums", tone)}>{value}</div>
+      <div className={cx("mt-1 text-[16px] font-semibold tabular-nums", tone)}>{value}</div>
       {note ? <div className="mt-1 text-[11px] text-muted-foreground">{note}</div> : null}
       {children}
     </div>
@@ -341,26 +274,56 @@ export function BotOverview({ bot, strategy, onViewChart, focusTrade }) {
   const reserveEnabled = bot.profitReserving === true || strategy?.params?.profitReserving === true;
   const reserve = hasNumber(bot.profitReserve) ? Number(bot.profitReserve) : reserveEnabled ? null : 0;
   const openCount = Array.isArray(bot.positions) ? bot.positions.length : null;
-  return <Collapsible className="space-y-4">
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      <MetricCard label="Equity" value={amount(metrics.equity)}>
-        <div className="mt-2 space-y-1 text-[11px]"><div className="flex justify-between gap-2"><span className="text-muted-foreground">Balance</span><span>{amount(metrics.balance)}</span></div><div className="flex justify-between gap-2"><span className="text-muted-foreground">Available</span><span>{amount(metrics.available)}</span></div></div>
-        <CollapsibleTrigger asChild><AppButton variant="link" className="group mt-2 h-auto gap-1 p-0 text-[11px] text-violet-200"><span>Balance details</span><ChevronDown className="size-3 transition-transform group-data-[state=open]:rotate-180" /></AppButton></CollapsibleTrigger>
-      </MetricCard>
-      <MetricCard label="Total P&L" value={amount(metrics.totalPnl, true)} note={`${percent(metrics.returnPct, true)} on initial capital`} tone={pnlTone(metrics.totalPnl)}>
-        <div className="mt-2 flex flex-wrap justify-between gap-2 text-[11px]"><span><span className="text-muted-foreground">Open </span><span className={pnlTone(metrics.unrealized)}>{money(metrics.unrealized, true)}</span></span><span><span className="text-muted-foreground">Closed </span><span className={pnlTone(metrics.realized)}>{money(metrics.realized, true)}</span></span></div>
-      </MetricCard>
-      <MetricCard label="Trades" value={`${openCount ?? "—"} open · ${bot.closedTradeCount ?? "—"} closed`} note={`Win rate ${percent(stats.winRate)}`}>
-        <div className="mt-2 text-[11px] text-muted-foreground">{stats.realized != null ? `${stats.wins} W / ${stats.losses} L` : "W/L · No data"}</div>
-      </MetricCard>
-      <MetricCard label="Max drawdown" value={stats.drawdown ? percent(stats.drawdown.maxPct) : "No data"} note={stats.drawdown ? `${amount(stats.drawdown.maxAmount)} · sampled equity` : "Equity history unavailable"} />
+  return <div className="space-y-4">
+    <div className="space-y-3">
+      <div className={cx(ui.radius, ui.panel, "p-3")}>
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-5">
+          {[
+            ["Initial capital", amount(bot.capital)],
+            ["Balance", amount(metrics.balance)],
+            ["Available", amount(metrics.available)],
+            ["Committed", amount(metrics.committed)],
+            ["Profit reserve", amount(reserve), "Included in capital and withheld from new entries"],
+          ].map(([label, value, hint]) => (
+            <div key={label} className="min-w-0" title={hint}>
+              <dt className="text-[11px] text-muted-foreground">{label}</dt>
+              <dd className="mt-0.5 truncate text-[13px] font-semibold tabular-nums">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <MetricCard label="Total P&L" value={amount(metrics.totalPnl, true)} note={`${percent(metrics.returnPct, true)} on initial capital`} tone={pnlTone(metrics.totalPnl)}>
+          <div className="mt-1 flex w-fit gap-3 text-[11px]"><span><span className="text-muted-foreground">Open </span><span className={pnlTone(metrics.unrealized)}>{money(metrics.unrealized, true)}</span></span><span><span className="text-muted-foreground">Closed </span><span className={pnlTone(metrics.realized)}>{money(metrics.realized, true)}</span></span></div>
+        </MetricCard>
+        <MetricCard label="Trades" value={`${openCount ?? "—"} open · ${bot.closedTradeCount ?? "—"} closed`} note={`Win rate ${percent(stats.winRate)}`}>
+          <div className="mt-1 text-[11px] text-muted-foreground">{stats.realized != null ? `${stats.wins} W / ${stats.losses} L` : "W/L · No data"}</div>
+        </MetricCard>
+        <MetricCard label="Max drawdown" value={stats.drawdown ? percent(stats.drawdown.maxPct) : "No data"} note={stats.drawdown ? `${amount(stats.drawdown.maxAmount)} · sampled equity` : "Equity history unavailable"} />
+      </div>
+      <div className={cx(ui.radius, ui.panel, "p-3")}>
+        <div className="text-[11px] text-muted-foreground">Trade performance</div>
+        <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
+          {[
+            ["Profit factor", stats.noLosses ? "No losses" : money(stats.profitFactor)],
+            ["Average trade return", percent(stats.averageReturn, true), pnlTone(stats.averageReturn)],
+            ["Average trade duration", stats.averageDuration],
+            ["Expectancy per trade", amount(stats.expectancy, true), pnlTone(stats.expectancy)],
+            ["Expectancy ratio", money(stats.expectancyRatio)],
+            ["Closed-trade turnover", amount(stats.volume)],
+            ["Current drawdown", stats.drawdown ? percent(stats.drawdown.currentPct) : "No data"],
+            ["Breakeven trades", stats.draws ?? "No data"],
+          ].map(([label, value, tone]) => (
+            <div key={label} className="min-w-0">
+              <dt className="text-[11px] text-muted-foreground">{label}</dt>
+              <dd className={cx("mt-0.5 truncate text-[13px] font-semibold tabular-nums", tone)}>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
     </div>
-      <CollapsibleContent className={cx(ui.radius, ui.panel, "overflow-hidden")}>
-        <div className="overflow-auto"><table className="w-full min-w-[660px] text-[12px]"><thead className="bg-secondary text-right text-muted-foreground"><tr>{["Currency", "Initial capital", "Balance", "Available", "Committed", "Profit reserve"].map((label, i) => <th key={label} className={cx("px-4 py-2.5 font-medium", !i && "text-left")}>{label}</th>)}</tr></thead><tbody><tr className="border-t border-border text-right tabular-nums"><td className="px-4 py-3 text-left">USDT</td><td className="px-4 py-3">{money(bot.capital)}</td><td className="px-4 py-3">{money(metrics.balance)}</td><td className="px-4 py-3">{money(metrics.available)}</td><td className="px-4 py-3">{money(metrics.committed)}</td><td className="px-4 py-3">{money(reserve)}</td></tr></tbody></table></div>
-        <p className="px-4 pb-3 text-[11px] text-muted-foreground">Bot allocation · Profit reserve is included in capital and withheld from new entries.</p>
-      </CollapsibleContent>
-    <BotChart bot={bot} strategy={strategy} focusTrade={focusTrade} />
     <BotPositions bot={bot} strategy={strategy} onViewChart={onViewChart} />
+    <BotChart bot={bot} strategy={strategy} focusTrade={focusTrade} />
     <BotPerformance bot={bot} />
-  </Collapsible>;
+  </div>;
 }

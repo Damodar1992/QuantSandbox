@@ -1,6 +1,7 @@
 import React, { memo } from "react";
 import { cx } from "@/constants/ui";
 import { BT_CORE_METRICS, BT_TOOLTIPS } from "@/constants/backtesting";
+import { strategyUiTooltip } from "@/constants/strategyTooltips";
 import {
   BT_MUTED,
   coreMetricTone,
@@ -28,7 +29,7 @@ export const BtCoreMetricsCell = memo(function BtCoreMetricsCell({ core, miniCor
           <div key={metric.key} className="min-w-[62px]">
             <div className="text-[9px] uppercase tracking-wide text-[#8c8c8c]">{metric.label}</div>
             <div>
-              <BtValueTooltip text={metric.description} formula={metric.formula}>
+              <BtValueTooltip content={strategyUiTooltip("backtest_core_metrics", metric.key, 5)}>
                 <span
                   className={cx("font-mono tabular-nums text-[11px]", coreMetricTone(metric.key, value))}
                 >
@@ -38,7 +39,12 @@ export const BtCoreMetricsCell = memo(function BtCoreMetricsCell({ core, miniCor
             </div>
             {hasMini ? (
               <div>
-                <BtValueTooltip text={delta === null ? BT_TOOLTIPS.naDivZero : BT_TOOLTIPS.delta}>
+                <BtValueTooltip
+                  content={
+                    delta === null ? null : strategyUiTooltip("backtest_core_metrics", "delta", 5)
+                  }
+                  text={delta === null ? BT_TOOLTIPS.naDivZero : undefined}
+                >
                   <span
                     className={cx(
                       "font-mono tabular-nums text-[9px]",
