@@ -10,7 +10,9 @@ export const percent = (value, signed = false) => hasNumber(value)
   : "No data";
 export const amount = (value, signed = false) => hasNumber(value) ? `${money(value, signed)} USDT` : "No data";
 export const pnlTone = (value) => !hasNumber(value) || Number(value) === 0 ? "text-muted-foreground" : Number(value) < 0 ? "text-red-400" : "text-green-400";
-export const accountName = (bot, accounts) => bot.mode === "Dryrun" ? "Virtual wallet" : accounts.find((account) => account.id === bot.accountId)?.name || "Account unavailable";
+export const accountName = (bot, accounts) => bot.mode === "Dryrun"
+  ? bot.accountId ? `Virtual wallet · fees: ${accounts.find((account) => account.id === bot.accountId)?.name || "account unavailable"}` : "Virtual wallet · exchange fees"
+  : accounts.find((account) => account.id === bot.accountId)?.name || "Account unavailable";
 
 export const ORDER_KIND_LABELS = { entry: "Entry", add: "Add", exit: "Exit" };
 
@@ -24,7 +26,7 @@ export function formatTradeQuantity(trade, market) {
   return `${quantity.toLocaleString("en-US", { maximumFractionDigits: 8 })}${asset ? ` ${asset}` : ""}`;
 }
 
-/** Open duration relative to snapshot time (bot.updatedAt) for stable preview ages. */
+/** Open duration relative to the recorded market snapshot for stable preview ages. */
 export function formatOpenAge(openedAt, asOf) {
   const start = Date.parse(openedAt);
   const end = Date.parse(asOf);

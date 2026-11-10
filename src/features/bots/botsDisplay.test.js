@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { INITIAL_BOTS, INITIAL_COMPILED_STRATEGIES, INITIAL_EXCHANGE_ACCOUNTS, prepareBotRestart } from "./botsModel";
+import { INITIAL_BOTS, INITIAL_COMPILED_STRATEGIES, INITIAL_EXCHANGE_ACCOUNTS } from "./botsModel";
 import {
+  accountName,
   filterAndSortBots,
   formatOpenAge,
   formatTradeQuantity,
@@ -66,26 +67,10 @@ describe("open position helpers", () => {
   });
 });
 
-describe("preview restart identity", () => {
-  const strategy = INITIAL_COMPILED_STRATEGIES[0];
-  it("preserves ID, mode, account, original start, capital and history", () => {
-    const source = INITIAL_BOTS[1];
-    const { bot } = prepareBotRestart(source, strategy, INITIAL_EXCHANGE_ACCOUNTS, "2026-10-19T12:00:00Z");
-    expect(bot.id).toBe(source.id);
-    expect(bot.trades).toBe(source.trades);
-    expect(bot.startedAt).toBe(source.startedAt);
-    expect(bot.capital).toBe(source.capital);
-    expect(bot.realizedPnl).toBe(source.realizedPnl);
-    expect(bot.accountId).toBe(source.accountId);
-    expect(bot.mode).toBe(source.mode);
-    expect(bot.status).toBe("Starting");
-    expect(source.status).toBe("Stopped");
-  });
-  it("blocks restart when positions, orders or unavailable connection require reconciliation", () => {
-    const source = INITIAL_BOTS[1];
-    expect(prepareBotRestart({ ...source, positions: INITIAL_BOTS[0].positions }, strategy, INITIAL_EXCHANGE_ACCOUNTS, "now").error).toContain("reconciliation");
-    expect(prepareBotRestart({ ...source, orders: null }, strategy, INITIAL_EXCHANGE_ACCOUNTS, "now").error).toContain("reconciliation");
-    expect(prepareBotRestart(source, strategy, [], "now").error).toContain("compatible exchange account");
-    expect(prepareBotRestart(INITIAL_BOTS[0], strategy, INITIAL_EXCHANGE_ACCOUNTS, "now").error).toContain("inactive");
+describe("Dryrun fee source", () => {
+  it("distinguishes an optional account fee source from exchange fees", () => {
+    const bot = INITIAL_BOTS[0];
+    expect(accountName({ ...bot, accountId: null }, INITIAL_EXCHANGE_ACCOUNTS)).toContain("exchange fees");
+    expect(accountName({ ...bot, accountId: "acc-binance" }, INITIAL_EXCHANGE_ACCOUNTS)).toContain("Binance Main");
   });
 });

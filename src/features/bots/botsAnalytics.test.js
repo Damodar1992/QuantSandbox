@@ -58,6 +58,7 @@ describe("coherent demo analytics", () => {
     const candles = demoCandles(INITIAL_BOTS[0], INITIAL_COMPILED_STRATEGIES[0]);
     expect(candles.length).toBeGreaterThan(100);
     expect(candles.every((c) => c.executions.every((e) => e.price >= c.low && e.price <= c.high))).toBe(true);
+    expect(demoCandles({ ...INITIAL_BOTS[0], updatedAt: "2026-11-10T12:00:00.000Z" }, INITIAL_COMPILED_STRATEGIES[0])).toEqual(candles);
     expect(demoCandles({ trades: [], positions: [], updatedAt: "2026-11-01" }, INITIAL_COMPILED_STRATEGIES[0])).toEqual([]);
     expect(performanceSummary({ trades: [] }).winRate).toBeNull();
     expect(performanceSummary({ trades: [] }).realized).toBe(0);

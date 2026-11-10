@@ -1,4 +1,5 @@
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { AppButton } from "@/components/common/AppButton";
 import { cx, ui } from "@/constants/ui";
 import { BuilderSectionShell } from "@/features/builder/layout/BuilderSectionShell";
 import { useCollapsedSections } from "@/features/builder/hooks/useBuilderStageState";
@@ -114,7 +115,7 @@ export const BacktestingStagePanel = memo(function BacktestingStagePanel({
   );
   const savedStrategyByRunId = useMemo(() => Object.fromEntries(
     compiledStrategies
-      .filter((item) => item.sourceStrategyId === strategyId && item.owner === currentUser)
+      .filter((item) => item.sourceStrategyId === strategyId && item.owner === currentUser && item.sourceBacktestId)
       .map((item) => [item.sourceBacktestId, item.id]),
   ), [compiledStrategies, strategyId, currentUser]);
   const savedCombos = useMemo(
@@ -289,6 +290,7 @@ export const BacktestingStagePanel = memo(function BacktestingStagePanel({
             stageStatusByEpoch={stageStatusByEpoch}
             stageConfig={stageConfig}
           />
+          {epoch ? <div className="flex justify-end"><AppButton variant="default" onClick={() => setModal({ kind: "compileEpoch" })}>Compile strategy from selected epoch</AppButton></div> : null}
           {epoch ? (
             <div className={cx(ui.radius, "border border-[rgba(60,40,80,0.35)] bg-[#120a20] p-3")}>
               <RunBacktestForm
@@ -354,26 +356,30 @@ export const BacktestingStagePanel = memo(function BacktestingStagePanel({
 
       {/* Modals */}
       <SaveStrategyModal
-        open={modal.kind === "saveStrategy"}
-        run={liveParent}
+        open={modal.kind === "saveStrategy" || modal.kind === "compileEpoch"}
+        run={modal.kind === "saveStrategy" ? liveParent : null}
+        epoch={epoch}
         blueprintName={strategyName}
+        versionLineage={validationVersionLineage}
         onClose={closeModal}
-        onSave={({ name, description }) => {
-          if (!liveParent || !onSaveStrategy) return;
+        onSave={({ name, description, params }) => {
+          if (!onSaveStrategy || modal.kind === "saveStrategy" && !liveParent || modal.kind === "compileEpoch" && !epoch) return;
+          const fromRun = modal.kind === "saveStrategy";
           onSaveStrategy({
             name,
             description,
             owner: currentUser,
             sourceStrategyId: strategyId,
             blueprintName: strategyName,
-            sourceBacktestId: liveParent.id,
-            backtestCreatedAt: liveParent.createdAt,
-            epochId: liveParent.epochId,
-            epochLabel: liveParent.epochLabel,
+            sourceType: fromRun ? "backtest" : "epoch",
+            sourceBacktestId: fromRun ? liveParent.id : null,
+            backtestCreatedAt: fromRun ? liveParent.createdAt : null,
+            epochId: fromRun ? liveParent.epochId : epoch.id,
+            epochLabel: fromRun ? liveParent.epochLabel : epoch.label,
             versionLineage: validationVersionLineage || "—",
             stageConfig: stageConfig ? structuredClone(stageConfig) : null,
-            params: structuredClone(liveParent.params),
-            result: getBacktestSummary(liveParent),
+            params: fromRun ? structuredClone(liveParent.params) : params,
+            result: fromRun ? getBacktestSummary(liveParent) : null,
           });
           closeModal();
         }}

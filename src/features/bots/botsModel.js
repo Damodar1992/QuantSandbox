@@ -183,9 +183,10 @@ export const INITIAL_BOTS = [
   {
     id: "bot-demo-1", name: "BTC Momentum", strategyId: "cs-demo-1",
     owner: "bogdan", mode: "Dryrun", accountId: null, status: "Running",
-    capital: 1000, maxOpenTrades: 2, realizedPnl: 32.8, startedAt: "2026-10-05T08:00:00.000Z",
+    capital: 1000, maxOpenTrades: 2, stakeMode: "fixed", stakeValue: 200, realizedPnl: 32.8, startedAt: "2026-10-05T08:00:00.000Z",
+    reportedMetrics: { totalBalance: 1032.8, tradableBalance: 1032.8, reservedBalance: 0, totalChangePct: 3.28, tradableChangePct: 3.28, reservedChangePct: null, calmar: null, cagrTotal: null, cagrTradable: null, openTradeFees: 0.42, closedTradeFees: 1.87, totalFunding: null, feesAndFunding: null },
     engineVersion: "hotfix.3.2.9", forceEntry: false, profitReserve: 0,
-    updatedAt: "2026-10-13T12:42:00.000Z", stoppedAt: null, stopIntent: null,
+    updatedAt: "2026-10-13T12:42:00.000Z", marketSnapshotAt: "2026-10-13T12:42:00.000Z", lastHeartbeatAt: "2026-10-13T12:42:00.000Z", stoppedAt: null, stopIntent: null,
     orders: [
       {
         id: "ord-1", positionId: "pos-1", kind: "exit", side: "Sell",
@@ -204,6 +205,9 @@ export const INITIAL_BOTS = [
         unrealizedPnl: 12.3, openedAt: "2026-10-13T11:15:00.000Z", quantity: 0.00333333,
         entryPrice: 60000, currentPrice: 63690, priceUpdatedAt: "2026-10-13T12:42:00.000Z",
         returnPct: 6.15, stopLoss: 58800, takeProfit: 65000, exitRule: null,
+        stopOnExchange: true, stopDistancePct: 7.68, entrySignalPrice: 59980,
+        entrySignalAt: "2026-10-13T11:14:30.000Z", entryDelaySec: 30,
+        entryPriceDifferencePct: 0.03, entryFee: 0.12,
       },
       {
         id: "pos-2", pair: "BTC/USDT", direction: "Long", stake: 200, leverage: 1,
@@ -214,7 +218,7 @@ export const INITIAL_BOTS = [
     ],
     trades: [
       ...DEMO_EARLY_TRADES,
-      { id: "trade-1", pair: "BTC/USDT", direction: "Long", openedAt: "2026-10-13T09:42:00.000Z", closedAt: "2026-10-13T10:35:00.000Z", pnl: 12.4, stake: 200, entryPrice: 60000, exitPrice: 63720, returnPct: 6.2, exitReason: "Exit signal" },
+      { id: "trade-1", pair: "BTC/USDT", direction: "Long", openedAt: "2026-10-13T09:42:00.000Z", closedAt: "2026-10-13T10:35:00.000Z", pnl: 12.4, stake: 200, entryPrice: 60000, exitPrice: 63720, returnPct: 6.2, exitReason: "Exit signal", entrySignalAt: "2026-10-13T09:41:25.000Z", entrySignalPrice: 59940, entryDelaySec: 35, entryPriceDifferencePct: 0.1, exitSignalAt: "2026-10-13T10:34:40.000Z", exitSignalPrice: 63680, exitDelaySec: 20, exitPriceDifferencePct: 0.06, entryFee: 0.08, exitFee: 0.09, durationCandles: 1, notionalAmount: 200, reservedAmount: 0 },
       { id: "trade-2", pair: "BTC/USDT", direction: "Long", openedAt: "2026-10-12T18:10:00.000Z", closedAt: "2026-10-12T21:05:00.000Z", pnl: 20.4, stake: 200, entryPrice: 60000, exitPrice: 66120, returnPct: 10.2, exitReason: "Trailing stop" },
     ],
     closedTradeCount: 8, winRate: 62.5,
@@ -238,8 +242,8 @@ export const INITIAL_BOTS = [
   {
     id: "bot-demo-2", name: "BTC Momentum", strategyId: "cs-demo-1",
     owner: "bogdan", mode: "Live", accountId: "acc-binance", status: "Stopped",
-    capital: 2000, maxOpenTrades: 2, realizedPnl: 22.3, startedAt: "2026-10-10T08:00:00.000Z",
-    updatedAt: "2026-10-12T19:00:00.000Z", stoppedAt: "2026-10-12T19:00:00.000Z", stopIntent: null,
+    capital: 2000, maxOpenTrades: 1, stakeMode: "fixed", stakeValue: 200, realizedPnl: 22.3, startedAt: "2026-10-10T08:00:00.000Z",
+    updatedAt: "2026-10-12T19:00:00.000Z", marketSnapshotAt: "2026-10-12T19:00:00.000Z", lastHeartbeatAt: "2026-10-12T19:00:00.000Z", stoppedAt: "2026-10-12T19:00:00.000Z", stopIntent: null,
     orders: [],
     positions: [], trades: [
       { id: "trade-3", pair: "BTC/USDT", direction: "Long", openedAt: "2026-10-11T08:10:00.000Z", closedAt: "2026-10-11T12:30:00.000Z", pnl: 22.3, stake: 200, entryPrice: 60000, exitPrice: 66690, returnPct: 11.15, exitReason: "Exit signal" },
@@ -255,8 +259,8 @@ export const INITIAL_BOTS = [
   {
     id: "bot-demo-3", name: "ETH Pullback", strategyId: "cs-demo-2",
     owner: "anna", mode: "Dryrun", accountId: null, status: "Stopped",
-    capital: 1500, maxOpenTrades: 2, realizedPnl: -11.4, startedAt: "2026-10-09T10:10:00.000Z",
-    updatedAt: "2026-10-10T13:00:00.000Z", stoppedAt: "2026-10-10T13:00:00.000Z", stopIntent: null,
+    capital: 1500, maxOpenTrades: 1, stakeMode: "fixed", stakeValue: 250, realizedPnl: -11.4, startedAt: "2026-10-09T10:10:00.000Z",
+    updatedAt: "2026-10-10T13:00:00.000Z", marketSnapshotAt: "2026-10-10T13:00:00.000Z", lastHeartbeatAt: "2026-10-10T13:00:00.000Z", stoppedAt: "2026-10-10T13:00:00.000Z", stopIntent: null,
     orders: [],
     positions: [], trades: [
       { id: "trade-4", pair: "ETH/USDT:USDT", direction: "Long", openedAt: "2026-10-09T11:30:00.000Z", closedAt: "2026-10-09T16:00:00.000Z", pnl: -11.4, stake: 250, entryPrice: 3000, exitPrice: 2863.2, returnPct: -4.56, exitReason: "Stop loss" },
@@ -269,12 +273,32 @@ export const INITIAL_BOTS = [
     ]),
     events: [{ id: "ev-3", at: "2026-10-10T13:00:00.000Z", text: "Bot stopped. History preserved." }],
   },
+  {
+    id: "bot-demo-4", name: "BTC Ready", strategyId: "cs-demo-1",
+    owner: "bogdan", mode: "Dryrun", accountId: null, feeSource: "exchange", status: "Ready for start",
+    capital: 1000, maxOpenTrades: 1, stakeMode: "fixed", stakeValue: 200, realizedPnl: 0, profitReserve: 0,
+    forceEntry: false, engineVersion: "hotfix.3.2.9",
+    createdAt: "2026-11-09T09:00:00.000Z", startedAt: null,
+    updatedAt: "2026-11-09T09:00:00.000Z", marketSnapshotAt: null, lastHeartbeatAt: null, stoppedAt: null, stopIntent: null,
+    orders: [], positions: [], trades: [], closedTradeCount: 0, winRate: null, equityHistory: [],
+    events: [{ id: "ev-4", at: "2026-11-09T09:00:00.000Z", text: "Bot created in Dryrun mode. Awaiting manual start." }],
+  },
 ];
 
-export const ACTIVE_BOT_STATUSES = new Set(["Starting", "Running", "Stopping", "Needs attention"]);
+export const ACTIVE_BOT_STATUSES = new Set(["Ready for start", "Starting", "Running", "Paused", "Needs attention"]);
+
+// Prototype-only freshness window; production heartbeat source and timeout are open in D9.
+export const PREVIEW_RUNTIME_TIMEOUT_MS = 60_000;
+
+export function getBotRuntimeAvailability(bot, asOf = Date.now()) {
+  if (!["Starting", "Running", "Paused", "Needs attention"].includes(bot.status)) return "Offline";
+  const lastSeen = Date.parse(bot.lastHeartbeatAt);
+  return Number.isFinite(lastSeen) && lastSeen <= asOf && asOf - lastSeen < PREVIEW_RUNTIME_TIMEOUT_MS
+    ? "Online" : "Offline";
+}
 
 export function isBotActive(bot) {
-  return ACTIVE_BOT_STATUSES.has(bot.status);
+  return ACTIVE_BOT_STATUSES.has(bot.status) || (bot.status === "Stopped" && Boolean(bot.positions?.length || bot.orders?.length));
 }
 
 export function countStrategyBots(strategyId, bots) {
@@ -292,24 +316,28 @@ export function getCompatibleAccounts(strategy, accounts, owner) {
   );
 }
 
-export function validateBotLaunch({ strategy, mode, name, capital, maxOpenTrades = 2, accountId, accounts, owner }) {
+export function validateBotLaunch({ strategy, mode, name, capital, maxOpenTrades = 1, stakeMode, stakeValue, accountId, accounts, owner }) {
   if (!strategy || strategy.status !== "Active") return "Restore the strategy before launching.";
   if (!name?.trim()) return "Enter a bot name.";
-  const stake = Number(strategy.params.stakeValue || 0);
+  const stake = Number(stakeValue ?? strategy.params.stakeValue ?? 0);
+  const selectedStakeMode = stakeMode || strategy.params.stakeMode;
   const amount = Number(capital);
   if (!Number.isFinite(amount) || amount <= 0) return "Enter a positive capital amount.";
-  if (strategy.params.stakeMode === "relative") {
+  if (selectedStakeMode === "relative") {
     if (!(stake > 0 && stake <= 100)) return "Stake percentage must be between 0 and 100%.";
   } else if (!(stake > 0) || amount < stake) {
     return `Capital must be at least the stake amount: ${stake} USDT.`;
   }
-  if (!Number.isInteger(Number(maxOpenTrades)) || Number(maxOpenTrades) < 1) return "Enter at least one open position.";
+  if (Number(maxOpenTrades) !== 1) return "Maximum open positions is fixed at 1.";
   if (mode !== "Dryrun" && mode !== "Live") return "Select a trading mode.";
   if (mode === "Live") {
     if (!accountId) return "Select an exchange account.";
     const account = getCompatibleAccounts(strategy, accounts, owner).find((item) => item.id === accountId);
     if (!account) return "Select a compatible exchange account.";
     if (amount > account.balance) return `Available account balance: ${account.balance.toLocaleString("en-US")} USDT.`;
+  }
+  if (mode === "Dryrun" && accountId && !getCompatibleAccounts(strategy, accounts, owner).some((item) => item.id === accountId)) {
+    return "Select a compatible fee account or use exchange fees.";
   }
   return null;
 }
@@ -321,15 +349,4 @@ export function getBacktestSummary(run) {
     maxdd: core.maxdd ?? null,
     trades: core.trades ?? null,
   };
-}
-
-// Preview-only restart: preserve identity, configuration and lifetime results.
-export function prepareBotRestart(bot, strategy, accounts, timestamp) {
-  if (!bot || !["Stopped", "Launch failed"].includes(bot.status)) return { error: "Only an inactive bot can be restarted." };
-  if (!Array.isArray(bot.positions) || bot.positions.length || !Array.isArray(bot.orders) || bot.orders.length) {
-    return { error: "Open positions or orders require reconciliation before restart. This preview cannot reconcile exchange state." };
-  }
-  const error = validateBotLaunch({ strategy, mode: bot.mode, name: bot.name, capital: bot.capital, maxOpenTrades: bot.maxOpenTrades, accountId: bot.accountId, accounts, owner: bot.owner });
-  if (error) return { error };
-  return { bot: { ...bot, status: "Starting", lastRestartedAt: timestamp, stoppedAt: null, stopIntent: null } };
 }

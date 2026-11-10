@@ -129,11 +129,12 @@ export function demoCandles(bot, strategy) {
   const stepMatch = String(strategy?.params?.timeframe || "1h").match(/^(\d+)([mhd])$/);
   const step = stepMatch ? Number(stepMatch[1]) * ({ m: 60000, h: 3600000, d: DAY }[stepMatch[2]]) : 3600000;
   const executions = tradeExecutions(bot);
-  const end = Math.floor(Date.parse(bot.stoppedAt || bot.updatedAt) / step) * step;
+  const snapshotAt = bot.marketSnapshotAt || bot.stoppedAt || bot.updatedAt;
+  const end = Math.floor(Date.parse(snapshotAt) / step) * step;
   if (!Number.isFinite(end) || !executions.length) return [];
   const start = Math.max(Math.floor((executions[0].at - step * 8) / step) * step, end - 239 * step);
   const anchors = [...executions.map((e) => ({ at: e.at, price: e.price })),
-    ...(bot.positions || []).filter((p) => Number(p.currentPrice) > 0).map((p) => ({ at: Date.parse(bot.updatedAt), price: Number(p.currentPrice) }))].sort((a, b) => a.at - b.at);
+    ...(bot.positions || []).filter((p) => Number(p.currentPrice) > 0).map((p) => ({ at: Date.parse(snapshotAt), price: Number(p.currentPrice) }))].sort((a, b) => a.at - b.at);
   const baseAt = (at) => {
     const rightIndex = anchors.findIndex((a) => a.at > at);
     if (rightIndex === 0) return anchors[0].price;

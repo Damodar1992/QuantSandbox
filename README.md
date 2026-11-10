@@ -13,7 +13,7 @@
 - **Редактор кода**: Monaco-подобное отображение Python-кода стратегий
 - **Пользователи и настройки**: секции в навигации (mock UI)
 - **Stage 5 «Backtesting»**: валидация favorite-эпохи — иерархия Backtest → Shuffler / Synthetic / Validation analytics, формы запуска, архив эпохи (моки, фича-флаг `backtesting`)
-- **Bots**: Compiled Strategies и запуски Dryrun/Live; единый Overview (сводка, Market / Equity, Open trades, Period breakdown), Closed trades, Events, Configuration и Notifications. Дополнительные сведения свёрнуты. Одна пара на бота; Period breakdown по дате окончательного закрытия сделки, UTC. Свечи/сигналы демонстрационные, API не используется.
+- **Bots**: стратегия создаётся из успешного Stage 5 Backtest либо выбранной эпохи; создание бота и его первый Start разделены. Форма Dryrun/Live содержит Stake, источник комиссий и демонстрационный Check min balance. Рабочий статус Ready for start / Running / Paused / Stopped показан отдельно от доступности процесса Online / Offline. Управление ботом, ручные действия с открытыми сделками, единый Overview, Closed trades, Events, Configuration и Notifications. Одна пара на бота; Period breakdown по дате окончательного закрытия сделки, UTC. Свечи/сигналы и доступность демонстрационные, API не используется.
 - **Тёмная тема**: Tailwind CSS
 
 ## Технологии
@@ -57,6 +57,7 @@ QuantSandbox/
 │   ├── hooks/                   # Общие хуки (например useOutsideClose)
 │   ├── features/builder/        # Фича Builder: components/, utils/
 │   ├── features/backtesting/    # Stage 5 «Backtesting»: экран стейджа, таблица веток, формы запуска
+│   ├── features/bots/           # Compiled Strategies, создание/управление ботом, сделки и аналитика
 │   └── components/              # Переиспользуемые блоки по домену
 │       ├── auth/
 │       ├── common/
@@ -94,6 +95,7 @@ ESLint: скрипт `npm run lint` в [`package.json`](package.json); при н
 | Генерация мок-результатов HeatMap | `src/utils/mockResults.js` |
 | Подробности состояния и таблиц Hyperopt | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Stage 5 «Backtesting» (иерархия, формы, моки) | `src/features/backtesting/`, `src/constants/backtesting.js`, раздел «Stage 5 — Backtesting» в [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| Bots (стратегии, жизненный цикл, сделки) | `src/features/bots/`, `src/features/backtesting/components/SaveStrategyModal.jsx` |
 
 ## Mock-данные
 

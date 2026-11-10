@@ -7,7 +7,6 @@ import {
   INITIAL_NOTIFICATION_LEVELS,
   countStrategyBots,
   validateBotLaunch,
-  prepareBotRestart,
 } from "./botsModel";
 
 const makeId = (prefix) => `${prefix}-${globalThis.crypto?.randomUUID?.() ?? Date.now().toString(36)}`;
@@ -53,7 +52,7 @@ export function useBotsMockState() {
   }, []);
 
   const saveStrategy = useCallback((snapshot) => {
-    const existing = dataRef.current.strategies.find((item) =>
+    const existing = snapshot.sourceBacktestId && dataRef.current.strategies.find((item) =>
       item.owner === snapshot.owner &&
       item.sourceBacktestId === snapshot.sourceBacktestId &&
       item.sourceStrategyId === snapshot.sourceStrategyId,
@@ -79,7 +78,7 @@ export function useBotsMockState() {
     const strategy = dataRef.current.strategies.find((item) => item.id === id);
     if (!strategy) return "Strategy not found.";
     if (archived && countStrategyBots(id, dataRef.current.bots).active > 0) {
-      return "Stop all active bots before archiving.";
+      return "Resolve unfinished bots before archiving this strategy.";
     }
     commit((prev) => ({
       ...prev,
@@ -104,67 +103,110 @@ export function useBotsMockState() {
     return { account };
   }, [commit]);
 
-  const launchBot = useCallback(({ strategyId, name, mode, capital, maxOpenTrades, accountId, owner }) => {
+  const checkMinBalance = useCallback(({ capital }) => {
+    // Illustrative service response only. The actual formula and API are a separate task.
+    const minimum = 300;
+    return { minimum, passed: Number(capital) >= minimum, checkedAt: now(), preview: true };
+  }, []);
+
+  const launchBot = useCallback(({ strategyId, name, mode, capital, stakeMode, stakeValue, accountId, owner, minBalanceCheck }) => {
     const strategy = dataRef.current.strategies.find((item) => item.id === strategyId);
     const error = validateBotLaunch({
-      strategy, name, mode, capital, maxOpenTrades, accountId, accounts: dataRef.current.accounts, owner,
+      strategy, name, mode, capital, maxOpenTrades: 1, stakeMode, stakeValue, accountId, accounts: dataRef.current.accounts, owner,
     });
     if (error) return { error };
-    const startedAt = now();
+    if (!minBalanceCheck || !minBalanceCheck.passed || Number(capital) < Number(minBalanceCheck.minimum)) {
+      return { error: "Run Check min balance and enter at least the returned minimum." };
+    }
+    const createdAt = now();
     const bot = {
       id: makeId("bot"), name: name.trim(), strategyId, owner, mode,
-      accountId: mode === "Live" ? accountId : null,
-      capital: Number(capital), maxOpenTrades: Number(maxOpenTrades), status: "Starting", realizedPnl: 0,
-      startedAt, updatedAt: startedAt, stoppedAt: null, stopIntent: null,
+      accountId: accountId || null, feeSource: accountId ? "account" : "exchange",
+      capital: Number(capital), stakeMode: stakeMode || strategy.params.stakeMode,
+      stakeValue: Number(stakeValue ?? strategy.params.stakeValue), maxOpenTrades: 1,
+      status: "Ready for start", realizedPnl: 0,
+      createdAt, startedAt: null, updatedAt: createdAt, lastHeartbeatAt: null, stoppedAt: null, stopIntent: null,
       orders: [], positions: [], trades: [], closedTradeCount: 0, winRate: null,
-      events: [{ id: makeId("event"), at: startedAt, text: `Bot launch requested in ${mode} mode.` }],
+      events: [{ id: makeId("event"), at: createdAt, text: `Bot created in ${mode} mode. Awaiting manual start.` }],
     };
     commit((prev) => ({ ...prev, bots: [bot, ...prev.bots] }));
-    schedule(() => commit((prev) => ({
-      ...prev,
-      bots: prev.bots.map((item) => item.id === bot.id && item.status === "Starting"
-        ? addEvent({ ...item, status: "Running" }, "Preparation complete. Bot is running.")
-        : item),
-    })), 1400);
     return { bot };
-  }, [commit, schedule]);
+  }, [commit]);
 
-  const stopBot = useCallback((id) => {
+  const startBot = useCallback((id) => {
     const bot = dataRef.current.bots.find((item) => item.id === id);
-    if (!bot || ["Stopped", "Launch failed"].includes(bot.status)) return "Bot is already inactive.";
-    const hasPositions = bot.positions.length > 0;
-    const intent = hasPositions ? "wait" : "close";
-    const message = hasPositions
-      ? "Stop requested. New entries disabled; waiting for strategy exits."
-      : "Stop requested. Checking active orders.";
-    commit((prev) => ({
-      ...prev,
-      bots: prev.bots.map((item) => item.id === id
-        ? addEvent({ ...item, status: "Stopping", stopIntent: intent }, message)
-        : item),
-    }));
-    schedule(() => commit((prev) => ({
-      ...prev,
-      bots: prev.bots.map((item) => item.id === id && item.status === "Stopping" && item.stopIntent === intent
-        ? addEvent({ ...item, status: "Stopped", stopIntent: null, positions: [], stoppedAt: now() }, "No open positions or orders remain. Bot stopped.")
-        : item),
-    })), hasPositions && intent === "wait" ? 5500 : 1800);
-    return null;
-  }, [commit, schedule]);
-
-  const restartBot = useCallback((id) => {
-    const bot = dataRef.current.bots.find((item) => item.id === id);
-    const strategy = dataRef.current.strategies.find((item) => item.id === bot?.strategyId);
-    const result = prepareBotRestart(bot, strategy, dataRef.current.accounts, now());
-    if (result.error) return result.error;
-    commit((prev) => ({ ...prev, bots: prev.bots.map((item) => item.id === id ? addEvent(result.bot, "Restart requested. Identity, configuration and trade history preserved.") : item) }));
+    if (!bot || bot.status !== "Ready for start") return "Only a never-started bot can be started.";
+    commit((prev) => ({ ...prev, bots: prev.bots.map((item) => item.id === id
+      ? addEvent({ ...item, status: "Starting" }, "Manual start requested. Preparing bot.") : item) }));
     schedule(() => commit((prev) => ({
       ...prev,
       bots: prev.bots.map((item) => item.id === id && item.status === "Starting"
-        ? addEvent({ ...item, status: "Running" }, "Preview restart complete. No exchange orders are performed.") : item),
+        ? addEvent({ ...item, status: "Running", startedAt: item.startedAt || now(), lastHeartbeatAt: now() }, "Preparation complete. Bot is running. Runtime contact is simulated in this preview.")
+        : item),
     })), 1400);
     return null;
   }, [commit, schedule]);
+
+  const pauseBot = useCallback((id) => {
+    const bot = dataRef.current.bots.find((item) => item.id === id);
+    if (!bot || bot.status !== "Running") return "Only a running bot can be paused.";
+    commit((prev) => ({
+      ...prev,
+      bots: prev.bots.map((item) => item.id === id
+        ? addEvent({ ...item, status: "Paused" }, "New entries paused. Existing trades remain strategy-managed.")
+        : item),
+    }));
+    return null;
+  }, [commit]);
+
+  const stopBot = useCallback((id) => {
+    const bot = dataRef.current.bots.find((item) => item.id === id);
+    if (!bot || !["Running", "Paused"].includes(bot.status)) return "Only a running or paused bot can be stopped.";
+    commit((prev) => ({
+      ...prev,
+      bots: prev.bots.map((item) => item.id === id
+        ? addEvent({ ...item, status: "Stopped", stoppedAt: now() }, "Bot automation stopped. Remaining trades require manual attention.")
+        : item),
+    }));
+    return null;
+  }, [commit]);
+
+  const resumeBot = useCallback((id) => {
+    const bot = dataRef.current.bots.find((item) => item.id === id);
+    if (!bot || !["Paused", "Stopped"].includes(bot.status)) return "Only a paused or stopped bot can be resumed.";
+    const strategy = dataRef.current.strategies.find((item) => item.id === bot.strategyId);
+    if (strategy?.status !== "Active") return "Restore the strategy before resuming.";
+    commit((prev) => ({ ...prev, bots: prev.bots.map((item) => item.id === id
+      ? addEvent({ ...item, status: "Starting", stoppedAt: null }, "Resume requested. Reviewing current positions and orders.") : item) }));
+    schedule(() => commit((prev) => ({
+      ...prev,
+      bots: prev.bots.map((item) => item.id === id && item.status === "Starting"
+        ? addEvent({ ...item, status: "Running", lastHeartbeatAt: now() }, "Preview resume complete. Runtime contact is simulated; no exchange orders are performed.") : item),
+    })), 1400);
+    return null;
+  }, [commit, schedule]);
+
+  const deleteBot = useCallback((id) => {
+    const bot = dataRef.current.bots.find((item) => item.id === id);
+    if (!bot || bot.status !== "Ready for start" || bot.startedAt) return "Only a never-started bot can be deleted.";
+    commit((prev) => ({ ...prev, bots: prev.bots.filter((item) => item.id !== id) }));
+    return null;
+  }, [commit]);
+
+  const recordManualExit = useCallback(({ botId, positionId, action, limitPrice, partialPct }) => {
+    const bot = dataRef.current.bots.find((item) => item.id === botId);
+    if (!bot || !["Running", "Paused", "Stopped"].includes(bot.status)) return "Manual action is unavailable in this state.";
+    if (!bot.positions?.some((item) => item.id === positionId)) return "Open trade not found.";
+    if (!["market", "limit", "partial"].includes(action)) return "Select an exit action.";
+    if (action === "limit" && !(Number(limitPrice) > 0)) return "Enter a positive limit price.";
+    if (action === "partial" && !(Number(partialPct) > 0 && Number(partialPct) < 100)) return "Enter a percentage between 0 and 100.";
+    const label = action === "market" ? "Force exit market" : action === "limit" ? `Force exit limit at ${limitPrice}` : `Force exit partial ${partialPct}%`;
+    commit((prev) => ({ ...prev, bots: prev.bots.map((item) => item.id === botId
+      ? addEvent({ ...item, positions: item.positions.map((position) => position.id === positionId
+        ? { ...position, manualExitPreview: label } : position) }, `${label} preview recorded for ${positionId}. No order was sent.`)
+      : item) }));
+    return null;
+  }, [commit]);
 
   const connectTelegramDestination = useCallback(({ botId, owner, name, token, chatType, chatId }) => {
     const bot = dataRef.current.bots.find((item) => item.id === botId);
@@ -242,5 +284,5 @@ export function useBotsMockState() {
     return null;
   }, [commit]);
 
-  return { ...data, saveStrategy, editStrategy, setStrategyArchived, connectAccount, launchBot, stopBot, restartBot, connectTelegramDestination, setBotNotificationLevel, sendTestNotification, removeNotificationDestination };
+  return { ...data, saveStrategy, editStrategy, setStrategyArchived, connectAccount, checkMinBalance, launchBot, startBot, pauseBot, stopBot, resumeBot, deleteBot, recordManualExit, connectTelegramDestination, setBotNotificationLevel, sendTestNotification, removeNotificationDestination };
 }
