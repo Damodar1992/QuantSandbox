@@ -3,6 +3,8 @@ import { cx, ui } from "@/constants/ui";
 import { AppButton } from "@/components/common/AppButton";
 import { AppInput } from "@/components/common/AppInput";
 import { AppSelect } from "@/components/common/AppSelect";
+import { MinimumBalancePreview } from "@/components/common/MinBalancePreview";
+import { previewMinimumBalance } from "@/components/common/minimumBalancePreview";
 import { DateRangePicker } from "@/components/common/DateRangePicker";
 import {
   BT_EXCHANGES,
@@ -176,9 +178,38 @@ export const RunBacktestForm = memo(function RunBacktestForm({
   }, [params]);
 
   const canRun = missing.length === 0;
+  const balancePreview = useMemo(() => {
+    const capital = Number(params.startingCapital);
+    const stake = Number(params.stakeValue);
+    const leverage = Number(params.leverage);
+    const confirmed = Boolean(
+      params.periodFrom &&
+      params.periodTo &&
+      params.pair &&
+      params.exchange &&
+      params.mode &&
+      derivedFees &&
+      Number.isFinite(capital) &&
+      capital >= 0 &&
+      Number.isFinite(stake) &&
+      stake > 0 &&
+      (params.mode !== "futures" || (Number.isFinite(leverage) && leverage >= 1)),
+    );
+    return previewMinimumBalance({
+      confirmed,
+      market: params.mode,
+      exchange: params.exchange,
+      leverage,
+      freeBalance: capital,
+      stakeMode: params.stakeMode,
+      stakeValue: stake,
+      entryFeePct: derivedFees?.taker,
+    });
+  }, [params, derivedFees]);
+  const canSubmit = canRun && balancePreview.ready;
 
   const handleSubmit = () => {
-    if (!canRun) return;
+    if (!canSubmit) return;
     const payload = {
       periodFrom: params.periodFrom,
       periodTo: params.periodTo,
@@ -393,7 +424,7 @@ export const RunBacktestForm = memo(function RunBacktestForm({
                   value={params.startingCapital}
                   disabled={readOnly}
                   onChange={(e) => patch("startingCapital", e.target.value)}
-                  className={CONTROL}
+                  className={cx(CONTROL, balancePreview.highlight === "balance" && "border-red-500")}
                   wrapperClassName="space-y-0"
                 />
               </Field>
@@ -428,7 +459,7 @@ export const RunBacktestForm = memo(function RunBacktestForm({
                   disabled={readOnly}
                   onChange={(e) => patch("stakeValue", e.target.value)}
                   placeholder={params.stakeMode === "relative" ? "%" : "USDT"}
-                  className={CONTROL}
+                  className={cx(CONTROL, balancePreview.highlight === "stake" && "border-red-500")}
                   wrapperClassName="space-y-0"
                   aria-label={params.stakeMode === "relative" ? "% of balance" : "USDT per trade"}
                 />
@@ -479,10 +510,14 @@ export const RunBacktestForm = memo(function RunBacktestForm({
         </div>
       </section>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+      <div className="space-y-2 pt-1">
+        <MinimumBalancePreview preview={balancePreview} />
+        <div className="flex flex-wrap items-center justify-between gap-2">
         <div className={cx("text-[10px]", canRun ? ui.textSubtle : "text-amber-300")}>
           {canRun
-            ? `Runs on ${params.periodFrom} → ${params.periodTo} with the parameters above.`
+            ? balancePreview.ready
+              ? `Runs on ${params.periodFrom} → ${params.periodTo} with the parameters above.`
+              : null
             : `Fill in: ${missing.join(", ")}`}
         </div>
         <div className="flex gap-2">
@@ -491,9 +526,10 @@ export const RunBacktestForm = memo(function RunBacktestForm({
               Cancel
             </AppButton>
           ) : null}
-          <AppButton type="button" variant="default" size="sm" disabled={!canRun} onClick={handleSubmit}>
+          <AppButton type="button" variant="default" size="sm" disabled={!canSubmit} onClick={handleSubmit}>
             {submitLabel}
           </AppButton>
+        </div>
         </div>
       </div>
     </div>

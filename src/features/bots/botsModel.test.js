@@ -24,10 +24,10 @@ describe("bot launch rules", () => {
     expect(validateBotLaunch(base)).toBeNull();
   });
 
-  it("requires a compatible account and sufficient balance for Live", () => {
+  it("requires a compatible Live account and does not read its balance", () => {
     expect(validateBotLaunch({ ...base, mode: "Live" })).toBe("Select an exchange account.");
     expect(validateBotLaunch({ ...base, mode: "Live", accountId: "acc-bybit" })).toBe("Select a compatible exchange account.");
-    expect(validateBotLaunch({ ...base, mode: "Live", accountId: "acc-binance", capital: 4000 })).toContain("Available account balance");
+    expect(validateBotLaunch({ ...base, mode: "Live", accountId: "acc-binance", capital: 4000 })).toBeNull();
     expect(validateBotLaunch({ ...base, mode: "Live", accountId: "acc-binance" })).toBeNull();
   });
 

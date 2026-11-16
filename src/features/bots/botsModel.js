@@ -334,7 +334,6 @@ export function validateBotLaunch({ strategy, mode, name, capital, maxOpenTrades
     if (!accountId) return "Select an exchange account.";
     const account = getCompatibleAccounts(strategy, accounts, owner).find((item) => item.id === accountId);
     if (!account) return "Select a compatible exchange account.";
-    if (amount > account.balance) return `Available account balance: ${account.balance.toLocaleString("en-US")} USDT.`;
   }
   if (mode === "Dryrun" && accountId && !getCompatibleAccounts(strategy, accounts, owner).some((item) => item.id === accountId)) {
     return "Select a compatible fee account or use exchange fees.";

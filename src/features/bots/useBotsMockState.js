@@ -8,6 +8,7 @@ import {
   countStrategyBots,
   validateBotLaunch,
 } from "./botsModel";
+import { previewBotStart } from "@/components/common/minimumBalancePreview";
 
 const makeId = (prefix) => `${prefix}-${globalThis.crypto?.randomUUID?.() ?? Date.now().toString(36)}`;
 const now = () => new Date().toISOString();
@@ -103,21 +104,21 @@ export function useBotsMockState() {
     return { account };
   }, [commit]);
 
-  const checkMinBalance = useCallback(({ capital }) => {
-    // Illustrative service response only. The actual formula and API are a separate task.
-    const minimum = 300;
-    return { minimum, passed: Number(capital) >= minimum, checkedAt: now(), preview: true };
-  }, []);
-
-  const launchBot = useCallback(({ strategyId, name, mode, capital, stakeMode, stakeValue, accountId, owner, minBalanceCheck }) => {
+  const launchBot = useCallback(({ strategyId, name, mode, capital, stakeMode, stakeValue, accountId, owner }) => {
     const strategy = dataRef.current.strategies.find((item) => item.id === strategyId);
     const error = validateBotLaunch({
       strategy, name, mode, capital, maxOpenTrades: 1, stakeMode, stakeValue, accountId, accounts: dataRef.current.accounts, owner,
     });
     if (error) return { error };
-    if (!minBalanceCheck || !minBalanceCheck.passed || Number(capital) < Number(minBalanceCheck.minimum)) {
-      return { error: "Run Check min balance and enter at least the returned minimum." };
-    }
+    const account = mode === "Live"
+      ? dataRef.current.accounts.find((item) => item.id === accountId) || null
+      : null;
+    const preview = previewBotStart({
+      bot: { mode, capital: Number(capital), stakeMode, stakeValue: Number(stakeValue) },
+      strategy,
+      account,
+    });
+    if (!preview.ready) return { error: preview.hint };
     const createdAt = now();
     const bot = {
       id: makeId("bot"), name: name.trim(), strategyId, owner, mode,
@@ -134,8 +135,13 @@ export function useBotsMockState() {
   }, [commit]);
 
   const startBot = useCallback((id) => {
-    const bot = dataRef.current.bots.find((item) => item.id === id);
+    const current = dataRef.current;
+    const bot = current.bots.find((item) => item.id === id);
     if (!bot || bot.status !== "Ready for start") return "Only a never-started bot can be started.";
+    const strategy = current.strategies.find((item) => item.id === bot.strategyId);
+    const account = current.accounts.find((item) => item.id === bot.accountId) || null;
+    const preview = previewBotStart({ bot, strategy, account });
+    if (!preview.ready) return preview.hint;
     commit((prev) => ({ ...prev, bots: prev.bots.map((item) => item.id === id
       ? addEvent({ ...item, status: "Starting" }, "Manual start requested. Preparing bot.") : item) }));
     schedule(() => commit((prev) => ({
@@ -284,5 +290,5 @@ export function useBotsMockState() {
     return null;
   }, [commit]);
 
-  return { ...data, saveStrategy, editStrategy, setStrategyArchived, connectAccount, checkMinBalance, launchBot, startBot, pauseBot, stopBot, resumeBot, deleteBot, recordManualExit, connectTelegramDestination, setBotNotificationLevel, sendTestNotification, removeNotificationDestination };
+  return { ...data, saveStrategy, editStrategy, setStrategyArchived, connectAccount, launchBot, startBot, pauseBot, stopBot, resumeBot, deleteBot, recordManualExit, connectTelegramDestination, setBotNotificationLevel, sendTestNotification, removeNotificationDestination };
 }

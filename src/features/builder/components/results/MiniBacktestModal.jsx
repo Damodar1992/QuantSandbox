@@ -15,6 +15,8 @@ import { buildMiniBacktestLaunchContext } from "../../utils/miniBacktestDisplay"
 import { AppButton } from "../../../../components/common/AppButton";
 import { AppDialog } from "../../../../components/common/AppDialog";
 import { AppInput } from "../../../../components/common/AppInput";
+import { MinimumBalancePreview } from "../../../../components/common/MinBalancePreview";
+import { previewMinimumBalance } from "../../../../components/common/minimumBalancePreview";
 
 const INPUT_CLS = "h-9 w-full min-w-0 text-[12px]";
 const LABEL_CLS = "text-[11px] text-[#8c8c8c] leading-snug mb-1 block";
@@ -91,7 +93,7 @@ function Field({ label, unit, hint, inputAlign, children }) {
   );
 }
 
-function NumberInput({ value, onChange, min, step, placeholder }) {
+function NumberInput({ value, onChange, min, step, placeholder, className }) {
   const safeValue = Number.isFinite(value) ? value : "";
   return (
     <AppInput
@@ -107,7 +109,7 @@ function NumberInput({ value, onChange, min, step, placeholder }) {
         const next = Number(raw);
         onChange(Number.isFinite(next) ? next : 0);
       }}
-      className={INPUT_CLS}
+      className={cx(INPUT_CLS, className)}
       wrapperClassName="space-y-0"
       min={min}
       step={step}
@@ -178,8 +180,25 @@ export const MiniBacktestModal = memo(function MiniBacktestModal({
     return Number.isFinite(n) && n > 0 ? n : MINI_BACKTEST_DEFAULTS.cycleCount;
   }, [epoch, params.cycleCount]);
 
+  const balancePreview = useMemo(() => {
+    const pairKnown = Boolean(pairLabel && pairLabel !== "—");
+    const stakeValue = params.stakeMode === "fixed" ? params.fixedStakeAmount : params.relativeStakeAmount;
+    const entryFeePct = params.orderType === "maker" ? params.feeMaker : params.feeTaker;
+    return previewMinimumBalance({
+      confirmed: pairKnown && Number.isFinite(Number(entryFeePct)),
+      market: resolvedMarketType,
+      exchange: launchContext?.exchange || epoch?.exchange || "binance",
+      leverage: params.leverage,
+      freeBalance: params.initialBalance,
+      stakeMode: params.stakeMode,
+      stakeValue,
+      entryFeePct,
+    });
+  }, [pairLabel, params, resolvedMarketType, launchContext, epoch]);
+
   const handleRun = useCallback(() => {
     if (!epoch?.id) return;
+    if (!balancePreview.ready) return;
 
     setRunning(true);
     try {
@@ -259,6 +278,7 @@ export const MiniBacktestModal = memo(function MiniBacktestModal({
     tfLabel,
     resolvedCycleCount,
     resolvedMarketType,
+    balancePreview,
   ]);
 
   return (
@@ -280,6 +300,7 @@ export const MiniBacktestModal = memo(function MiniBacktestModal({
                 onChange={(v) => updateParam("initialBalance", v)}
                 min={1}
                 placeholder="e.g. 100000"
+                className={balancePreview.highlight === "balance" ? "border-red-500" : ""}
               />
             </Field>
             <Field label={MINI_BACKTEST_LABELS.reservedPct} unit={MINI_BACKTEST_UNITS.reservedPct}>
@@ -309,6 +330,7 @@ export const MiniBacktestModal = memo(function MiniBacktestModal({
                 onChange={(v) => updateParam("fixedStakeAmount", v)}
                 min={1}
                 placeholder="e.g. 5000"
+                className={balancePreview.highlight === "stake" ? "border-red-500" : ""}
               />
             </Field>
           ) : (
@@ -319,6 +341,7 @@ export const MiniBacktestModal = memo(function MiniBacktestModal({
                 min={0.1}
                 step={0.5}
                 placeholder="e.g. 10"
+                className={balancePreview.highlight === "stake" ? "border-red-500" : ""}
               />
             </Field>
           )}
@@ -436,10 +459,13 @@ export const MiniBacktestModal = memo(function MiniBacktestModal({
         ) : null}
       </div>
 
-      <div className="flex justify-end pt-2">
-        <AppButton type="button" variant="default" size="sm" onClick={handleRun} disabled={running}>
-          {running ? "Running..." : "Run Mini Backtest"}
-        </AppButton>
+      <div className="space-y-3 pt-2">
+        <MinimumBalancePreview preview={balancePreview} />
+        <div className="flex justify-end">
+          <AppButton type="button" variant="default" size="sm" onClick={handleRun} disabled={running || !balancePreview.ready}>
+            {running ? "Running..." : "Run Mini Backtest"}
+          </AppButton>
+        </div>
       </div>
     </AppDialog>
   );

@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AppBadge } from "@/components/common/AppBadge";
 import { AppButton } from "@/components/common/AppButton";
+import { MinimumBalancePreview } from "@/components/common/MinBalancePreview";
+import { previewBotStart } from "@/components/common/minimumBalancePreview";
 import { AppDialog } from "@/components/common/AppDialog";
 import { AppInput } from "@/components/common/AppInput";
 import { AppSelect } from "@/components/common/AppSelect";
@@ -255,16 +257,24 @@ function LaunchModal({ strategy, model, owner, onClose, onLaunched }) {
   const [stakeMode, setStakeMode] = useState(strategy.params.stakeMode || "fixed");
   const [stakeValue, setStakeValue] = useState(String(strategy.params.stakeValue || ""));
   const [accountId, setAccountId] = useState("");
-  const [check, setCheck] = useState(null);
   const [error, setError] = useState("");
   const accounts = getCompatibleAccounts(strategy, model.accounts, owner);
-  const change = (setter) => (value) => { setter(value); setCheck(null); setError(""); };
+  const account = mode === "Live" ? accounts.find((item) => item.id === accountId) || null : null;
+  const preview = useMemo(
+    () => previewBotStart({
+      bot: { mode, capital: Number(capital), stakeMode, stakeValue: Number(stakeValue) },
+      strategy,
+      account,
+    }),
+    [mode, capital, stakeMode, stakeValue, strategy, account],
+  );
+  const change = (setter) => (value) => { setter(value); setError(""); };
   const create = () => {
-    const result = model.launchBot({ strategyId: strategy.id, name, mode, capital, stakeMode, stakeValue, accountId, owner, minBalanceCheck: check });
+    if (!preview.ready) return;
+    const result = model.launchBot({ strategyId: strategy.id, name, mode, capital, stakeMode, stakeValue, accountId: mode === "Live" ? accountId : "", owner });
     if (result.error) setError(result.error);
     else onLaunched(result.bot.id);
   };
-  const belowMinimum = check && !check.passed;
   return <AppDialog open onOpenChange={(open) => !open && onClose()} title="Create bot" description={`${strategy.name} · ${strategy.params.pair} · ${strategy.params.timeframe}`} className="max-w-[680px]">
     <div className="max-h-[75vh] space-y-4 overflow-y-auto pr-1 text-[12px]">
       <div className={cx(ui.radius, ui.panelMuted, "p-3", MUTED)}>
@@ -273,25 +283,46 @@ function LaunchModal({ strategy, model, owner, onClose, onLaunched }) {
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <AppInput label="Bot name" value={name} onChange={(event) => setName(event.target.value)} />
-        <AppSelect label="Trading mode" value={mode} onValueChange={change(setMode)} options={[{ value: "Dryrun", label: "Dryrun" }, { value: "Live", label: "Live" }]} />
+        <AppSelect label="Trading mode" value={mode} onValueChange={(value) => { change(setMode)(value); if (value !== "Live") setAccountId(""); }} options={[{ value: "Dryrun", label: "Dryrun" }, { value: "Live", label: "Live" }]} />
       </div>
-      <AppSelect label={mode === "Dryrun" ? "Exchange account for fees · optional" : "Exchange account · required"} value={accountId} onValueChange={change(setAccountId)} options={[...(mode === "Dryrun" ? [{ value: "", label: "Use exchange fees" }] : []), ...accounts.map((account) => ({ value: account.id, label: `${account.name} · ${money(account.balance)} USDT available` }))]} />
-      {mode === "Dryrun" ? <p className={MUTED}>The account supplies fee rates only. Dryrun uses virtual funds and sends no real orders. Without an account, exchange fee rates apply.</p> : accounts.length === 0 ? <p className="text-amber-300">Connect a compatible {strategy.params.exchange} {strategy.params.mode} account before creating a Live bot.</p> : null}
+      {mode === "Live" ? <AppSelect label="Exchange account · required" value={accountId} onValueChange={change(setAccountId)} options={accounts.map((account) => ({ value: account.id, label: account.name }))} /> : null}
+      {mode === "Live" && accounts.length === 0 ? <p className="text-amber-300">Connect a compatible {strategy.params.exchange} {strategy.params.mode} account before creating a Live bot.</p> : null}
       <div className="grid gap-3 sm:grid-cols-2">
-        <AppInput type="number" min="0.01" step="0.01" label={mode === "Dryrun" ? "Virtual starting balance (USDT)" : "Allocated capital (USDT)"} value={capital} onChange={(event) => change(setCapital)(event.target.value)} className={belowMinimum ? "border-red-500" : ""} />
+        <AppInput type="number" min="0.01" step="0.01" label={mode === "Dryrun" ? "Virtual starting balance (USDT)" : "Allocated capital (USDT)"} value={capital} onChange={(event) => change(setCapital)(event.target.value)} className={preview.highlight === "balance" ? "border-red-500" : ""} />
         <AppInput type="number" label="Maximum open positions" value="1" disabled title="Fixed at one position in this scope" />
         <AppSelect label="Stake mode" value={stakeMode} onValueChange={change(setStakeMode)} options={[{ value: "fixed", label: "Fixed USDT" }, { value: "relative", label: "Relative %" }]} />
-        <AppInput type="number" min="0.01" step="0.01" label={stakeMode === "relative" ? "Stake value (%)" : "Stake value (USDT)"} value={stakeValue} onChange={(event) => change(setStakeValue)(event.target.value)} />
-      </div>
-      <div className="rounded-md border border-border bg-muted/30 p-3">
-        <div className="flex flex-wrap items-center justify-between gap-2"><span>Minimum balance check</span><AppButton onClick={() => { setCheck(model.checkMinBalance({ strategyId: strategy.id, mode, capital, stakeMode, stakeValue, accountId })); setError(""); }}>Check min balance</AppButton></div>
-        {check ? <p role="status" className={cx("mt-2", belowMinimum ? "text-red-400" : "text-green-300")}>Illustrative preview response · Minimum: {amount(check.minimum)}. {belowMinimum ? "Increase starting balance to create this bot." : "Entered balance passes the preview check."}</p> : <p className={cx("mt-2", MUTED)}>Run the check after changing capital, stake, mode or account. The calculation is defined in a separate task.</p>}
+        <AppInput type="number" min="0.01" step="0.01" label={stakeMode === "relative" ? "Stake value (%)" : "Stake value (USDT)"} value={stakeValue} onChange={(event) => change(setStakeValue)(event.target.value)} className={preview.highlight === "stake" ? "border-red-500" : ""} />
       </div>
       {strategy.sourceBacktestId ? <p className="rounded-md border-l-2 border-violet-400 bg-violet-500/10 p-3 text-[#b8aecc]">Backtest capital: {money(strategy.params.startingCapital)} USDT. Changes to capital or stake mean historical results describe different conditions.</p> : <p className="rounded-md border-l-2 border-violet-400 bg-violet-500/10 p-3 text-[#b8aecc]">This strategy was created from an epoch; no source backtest metrics are available.</p>}
+      <MinimumBalancePreview preview={preview} />
       {error ? <p role="alert" className="text-red-400">{error}</p> : null}
-      <div className="flex justify-end gap-2"><AppButton onClick={onClose}>Cancel</AppButton><AppButton variant="default" disabled={!check?.passed || mode === "Live" && !accountId} onClick={create}>Create bot · Ready for start</AppButton></div>
+      <div className="flex justify-end gap-2"><AppButton onClick={onClose}>Cancel</AppButton><AppButton variant="default" disabled={!preview.ready || (mode === "Live" && !accountId)} onClick={create}>Create bot · Ready for start</AppButton></div>
     </div>
   </AppDialog>;
+}
+
+function StartBotModal({ bot, strategy, account, onClose, onConfirm }) {
+  const preview = useMemo(() => previewBotStart({ bot, strategy, account }), [bot, strategy, account]);
+  const modeLabel = bot.mode === "Live" ? "Live" : "Dry Run";
+  return (
+    <AppDialog
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title="Start bot"
+      description={`${bot.name} · ${modeLabel}`}
+      className="max-w-[520px]"
+    >
+      <div className="space-y-4 text-[12px]">
+        <MinimumBalancePreview preview={preview} />
+        <div className="flex justify-end gap-2">
+          <AppButton onClick={onClose}>Cancel</AppButton>
+          <AppButton variant="default" disabled={!preview.ready} onClick={onConfirm}>
+            Start
+          </AppButton>
+        </div>
+      </div>
+    </AppDialog>
+  );
 }
 
 function AccountsModal({ model, owner, onClose }) {
@@ -598,6 +629,11 @@ export function BotsPage({
     detail?.kind === "strategy" ? model.strategies.find((item) => item.id === detail.id) : null;
   const bot = detail?.kind === "bot" ? model.bots.find((item) => item.id === detail.id) : null;
   const botStrategy = bot ? model.strategies.find((item) => item.id === bot.strategyId) : null;
+  const startTarget = modal?.kind === "start" ? model.bots.find((item) => item.id === modal.id) : null;
+  const startStrategy = startTarget ? model.strategies.find((item) => item.id === startTarget.strategyId) : null;
+  const startAccount = startTarget?.accountId
+    ? model.accounts.find((item) => item.id === startTarget.accountId) || null
+    : null;
   const botStats = bot ? performanceSummary(bot) : null;
   const viewTradeOnOverview = (trade) => {
     setChartFocus((prev) => ({ ...trade, focusRequest: (prev?.focusRequest || 0) + 1 }));
@@ -864,7 +900,7 @@ export function BotsPage({
                     <td className="sticky right-0 z-10 border-l border-[rgba(60,40,80,0.35)] bg-[#170f29] px-2 py-3">
                       <BotRowActions
                         bot={item}
-                        onStart={() => setError(model.startBot(item.id) || "")}
+                        onStart={() => setModal({ kind: "start", id: item.id })}
                         onPause={() => setModal({ kind: "pause", id: item.id })}
                         onResume={() => setError(model.resumeBot(item.id) || "")}
                         onStop={() => setModal({ kind: "stop", id: item.id })}
@@ -1121,7 +1157,7 @@ export function BotsPage({
               >
                 Create new bot
               </AppButton>
-              {bot.status === "Ready for start" ? <><AppButton variant="default" title="Prepare and manually start this bot" onClick={() => setError(model.startBot(bot.id) || "")}><Play aria-hidden />Start bot</AppButton><AppButton variant="destructive" title="Delete this never-started bot" onClick={() => setModal({ kind: "deleteBot", id: bot.id })}>Delete bot</AppButton></> : null}
+              {bot.status === "Ready for start" ? <><AppButton variant="default" title="Prepare and manually start this bot" onClick={() => setModal({ kind: "start", id: bot.id })}><Play aria-hidden />Start bot</AppButton><AppButton variant="destructive" title="Delete this never-started bot" onClick={() => setModal({ kind: "deleteBot", id: bot.id })}>Delete bot</AppButton></> : null}
               {bot.status === "Running" ? <AppButton title="Stop new buying; keep managing open trades" onClick={() => setModal({ kind: "pause", id: bot.id })}><Pause aria-hidden />Pause bot</AppButton> : null}
               {["Paused", "Stopped"].includes(bot.status) ? <AppButton title="Resume buying and handling open trades" onClick={() => setError(model.resumeBot(bot.id) || "")}><Play aria-hidden />Resume bot</AppButton> : null}
               {["Running", "Paused"].includes(bot.status) ? <AppButton variant="destructive" title="Stop bot automation; open trades require manual attention" onClick={() => setModal({ kind: "stop", id: bot.id })}><CircleStop aria-hidden />Stop bot</AppButton> : null}
@@ -1295,6 +1331,20 @@ export function BotsPage({
           onLaunched={(id) => {
             closeModal();
             openBot(id);
+          }}
+        />
+      ) : null}
+      {startTarget ? (
+        <StartBotModal
+          key={startTarget.id}
+          bot={startTarget}
+          strategy={startStrategy}
+          account={startAccount}
+          onClose={closeModal}
+          onConfirm={() => {
+            const nextError = model.startBot(startTarget.id);
+            if (nextError) setError(nextError);
+            else closeModal();
           }}
         />
       ) : null}
