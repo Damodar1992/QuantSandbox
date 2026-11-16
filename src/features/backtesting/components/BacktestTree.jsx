@@ -72,6 +72,9 @@ export const BacktestTree = memo(function BacktestTree({
   onOpenShufflerParams,
   onOpenSyntheticInfo,
   onOpenSyntheticParams,
+  onRunStress,
+  onOpenStressInfo,
+  onOpenStressParams,
   onSaveStrategy,
   savedStrategyByRunId = {},
 }) {
@@ -237,6 +240,13 @@ export const BacktestTree = memo(function BacktestTree({
                           >
                             Run Synthetic
                           </DropdownMenuItem>
+                          <DropdownMenuItem
+                            disabled={!isDone}
+                            title={isDone ? undefined : BT_COPY.childrenLocked}
+                            onSelect={() => onRunStress?.(run)}
+                          >
+                            Run Stake Stress-Test
+                          </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             variant="destructive"
@@ -264,6 +274,9 @@ export const BacktestTree = memo(function BacktestTree({
                         onOpenShufflerParams={onOpenShufflerParams}
                         onOpenSyntheticInfo={onOpenSyntheticInfo}
                         onOpenSyntheticParams={onOpenSyntheticParams}
+                        onRunStress={onRunStress}
+                        onOpenStressInfo={onOpenStressInfo}
+                        onOpenStressParams={onOpenStressParams}
                       />
                     </td>
                   </tr>

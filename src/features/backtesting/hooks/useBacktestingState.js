@@ -11,9 +11,10 @@ import {
   BT_RUN_STATUS,
   resolveBtFees,
 } from "@/constants/backtesting";
-import { newBacktestId, newShufflerId, newSyntheticId, nextAnalyticsId } from "../utils/ids";
+import { newBacktestId, newShufflerId, newStressId, newSyntheticId, nextAnalyticsId } from "../utils/ids";
 import { checkIntegrity } from "../utils/integrity";
 import { buildBacktestResult, buildShufflerResult, buildSyntheticResult } from "../utils/mockResults";
+import { buildParentTape, readParentStake, simulateStakeStress, TRADABLE_BALANCE_RATIO } from "../utils/stakeStress";
 import { createBacktestingSeed } from "../utils/seed";
 
 const EMPTY_EPOCH = { runs: [], archive: [] };
@@ -149,6 +150,7 @@ export function useBacktestingState({ currentUser = "quant" } = {}) {
         result: null,
         shufflerRuns: [],
         syntheticRuns: [],
+        stressRuns: [],
         analytics: [],
         createdAt: new Date().toISOString(),
         createdBy: currentUser,
@@ -347,6 +349,75 @@ export function useBacktestingState({ currentUser = "quant" } = {}) {
     [currentUser, startSyntheticProgress],
   );
 
+  /** One click runs every stake in the list. Runs share a batchId; a passed batchId appends. */
+  const runStress = useCallback(
+    (epochId, backtestId, configOrList, existingBatchId) => {
+      const parent = epochSlice(state, epochId).runs.find((run) => run.id === backtestId);
+      if (!parent || parent.status !== BT_RUN_STATUS.DONE) return null;
+      const configs = (Array.isArray(configOrList) ? configOrList : [configOrList]).filter(Boolean);
+      if (!configs.length) return null;
+      const batchId = existingBatchId || newStressId();
+      const tape = buildParentTape(parent);
+      const info = readParentStake(parent);
+      const now = Date.now();
+      const inherited = {
+        startingCapital: info.capital,
+        stakeMode: info.mode,
+        stakeValue: info.value,
+        profitReserving: info.reservePct,
+        tradableBalanceRatio: TRADABLE_BALANCE_RATIO,
+        trades: info.trades,
+        pair: info.pair,
+        timeframe: info.timeframe,
+        limits: tape.limits,
+      };
+      const created = configs.map((config, index) => {
+        const mode = config.mode === "percent" ? "percent" : "fixed";
+        const value = Number(config.value);
+        const result = simulateStakeStress(tape.trades, {
+          start: info.capital,
+          reservePct: info.reservePct,
+          tradableRatio: TRADABLE_BALANCE_RATIO,
+          stoploss: info.stoploss,
+          mode,
+          value,
+          limits: tape.limits,
+        });
+        return {
+          id: newStressId(),
+          batchId,
+          backtestId,
+          epochLabel: parent.epochLabel ?? null,
+          config: { mode, value },
+          inherited,
+          status: BT_RUN_STATUS.DONE,
+          error: null,
+          result,
+          createdAt: new Date(now + index).toISOString(),
+          createdBy: currentUser,
+        };
+      });
+      setState((prev) =>
+        withEpoch(prev, epochId, (slice) =>
+          mapRuns(slice, backtestId, (owner) => ({
+            ...owner,
+            stressRuns: [...created, ...(owner.stressRuns || [])],
+          })),
+        ),
+      );
+      return batchId;
+    },
+    [currentUser, state],
+  );
+
+  const clearStressRuns = useCallback((epochId, backtestId) => {
+    setState((prev) =>
+      withEpoch(prev, epochId, (slice) =>
+        mapRuns(slice, backtestId, (parent) => ({ ...parent, stressRuns: [] })),
+      ),
+    );
+  }, []);
+
   const cancelRun = useCallback(
     (epochId, backtestId, type, runId) => {
       if (type === "backtest") {
@@ -379,7 +450,8 @@ export function useBacktestingState({ currentUser = "quant" } = {}) {
    */
   const deleteChildRun = useCallback(
     (epochId, backtestId, type, runId) => {
-      clearTimer(`${type === "shuffler" ? "sh" : "sy"}:${epochId}:${runId}`);
+      const timerPrefix = type === "shuffler" ? "sh" : type === "synthetic" ? "sy" : null;
+      if (timerPrefix) clearTimer(`${timerPrefix}:${epochId}:${runId}`);
       setState((prev) =>
         withEpoch(prev, epochId, (slice) =>
           mapRuns(slice, backtestId, (parent) => ({
@@ -392,6 +464,10 @@ export function useBacktestingState({ currentUser = "quant" } = {}) {
               type === "synthetic"
                 ? parent.syntheticRuns.filter((r) => r.id !== runId)
                 : parent.syntheticRuns,
+            stressRuns:
+              type === "stress"
+                ? (parent.stressRuns || []).filter((r) => r.id !== runId && (r.batchId || r.id) !== runId)
+                : parent.stressRuns,
             analytics: parent.analytics.map((a) => {
               if (a.status === BT_ANALYTICS_STATUS.SAVED) return a;
               if (type === "shuffler" && a.shufflerRunId === runId) {
@@ -611,6 +687,8 @@ export function useBacktestingState({ currentUser = "quant" } = {}) {
       deleteBacktest,
       runShuffler,
       runSynthetic,
+      runStress,
+      clearStressRuns,
       cancelRun,
       deleteChildRun,
       createAnalytics,
@@ -635,6 +713,8 @@ export function useBacktestingState({ currentUser = "quant" } = {}) {
       deleteBacktest,
       runShuffler,
       runSynthetic,
+      runStress,
+      clearStressRuns,
       cancelRun,
       deleteChildRun,
       createAnalytics,

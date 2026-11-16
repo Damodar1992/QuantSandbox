@@ -25,6 +25,11 @@ export function newSyntheticId() {
   return `soc-${hex(10)}`;
 }
 
+/** `sst-xxxxxxxxxx` — Stake stress-test run. */
+export function newStressId() {
+  return `sst-${hex(10)}`;
+}
+
 /** `A-N`, sequential inside a branch. */
 export function nextAnalyticsId(existing = []) {
   const used = existing

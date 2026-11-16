@@ -22,6 +22,7 @@ import { computePessimismGrid } from "../utils/pessimism";
 import { BtFailureBlock, BtStatusCell } from "./BtStatusCell";
 import { CoreMetricsCompareTable } from "./CoreMetricsCompareTable";
 import { SyntheticCoreResultsPanel } from "./SyntheticCoreResultsPanel";
+import { StakeStressTable } from "./StakeStressTable";
 
 const CARD =
   "mx-4 mt-3 mb-3 overflow-hidden rounded-xl border border-[rgba(60,40,80,0.35)] bg-[#110b1d] " +
@@ -44,6 +45,10 @@ const TONES = {
   [BT_CHILD_TYPE.SYNTHETIC]: {
     strip: "bg-teal-500/10 text-teal-200",
     pill: "border-teal-500/25 bg-teal-500/10 text-teal-100",
+  },
+  [BT_CHILD_TYPE.STRESS]: {
+    strip: "bg-orange-500/10 text-orange-200",
+    pill: "border-orange-500/25 bg-orange-500/10 text-orange-100",
   },
   [BT_CHILD_TYPE.ANALYTICS]: {
     strip: "bg-amber-500/10 text-amber-200",
@@ -128,6 +133,9 @@ export const BranchPanel = memo(function BranchPanel({
   onOpenShufflerParams,
   onOpenSyntheticInfo,
   onOpenSyntheticParams,
+  onRunStress,
+  onOpenStressInfo,
+  onOpenStressParams,
 }) {
   const isDone = run.status === BT_RUN_STATUS.DONE;
 
@@ -138,6 +146,10 @@ export const BranchPanel = memo(function BranchPanel({
   const syntheticRuns = useMemo(
     () => (run.syntheticRuns || []).slice().sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))),
     [run.syntheticRuns],
+  );
+  const stressRuns = useMemo(
+    () => (run.stressRuns || []).slice().sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))),
+    [run.stressRuns],
   );
 
   return (
@@ -219,6 +231,35 @@ export const BranchPanel = memo(function BranchPanel({
             parent={run}
             onOpenSyntheticInfo={onOpenSyntheticInfo}
             onOpenSyntheticParams={onOpenSyntheticParams}
+            onDeleteChild={onDeleteChild}
+          />
+        )}
+      </CollapsibleLevel>
+
+      <CollapsibleLevel
+        toneKey={BT_CHILD_TYPE.STRESS}
+        title="Stake stress-tests"
+        count={`${stressRuns.length} runs`}
+      >
+        {stressRuns.length === 0 ? (
+          <EmptyLevel>
+            {isDone ? (
+              <div className="flex flex-col items-center gap-3">
+                <span>No stake stress-tests yet.</span>
+                <AppButton type="button" variant="default" size="sm" onClick={() => onRunStress?.(run)}>
+                  ▶ Run Stake Stress-Test
+                </AppButton>
+              </div>
+            ) : (
+              BT_COPY.childrenLocked
+            )}
+          </EmptyLevel>
+        ) : (
+          <StakeStressTable
+            runs={stressRuns}
+            parent={run}
+            onOpenStressInfo={onOpenStressInfo}
+            onOpenStressParams={onOpenStressParams}
             onDeleteChild={onDeleteChild}
           />
         )}

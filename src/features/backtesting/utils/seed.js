@@ -81,6 +81,7 @@ function makeBacktest({ id, miniName, miniId, createdAt, status, error, params }
     result: null,
     shufflerRuns: [],
     syntheticRuns: [],
+    stressRuns: [],
     analytics: [],
     createdAt,
     createdBy: AUTHOR,

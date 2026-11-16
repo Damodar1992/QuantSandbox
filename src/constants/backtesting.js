@@ -112,12 +112,14 @@ export const BT_ERROR_CODES = {
 export const BT_CHILD_TYPE = {
   SHUFFLER: "shuffler",
   SYNTHETIC: "synthetic",
+  STRESS: "stress",
   ANALYTICS: "analytics",
 };
 
 export const BT_CHILD_TAG = {
   [BT_CHILD_TYPE.SHUFFLER]: { glyph: "⇄", label: "Shuffler" },
   [BT_CHILD_TYPE.SYNTHETIC]: { glyph: "∿", label: "Synthetic" },
+  [BT_CHILD_TYPE.STRESS]: { glyph: "⚖", label: "Stake stress" },
   [BT_CHILD_TYPE.ANALYTICS]: { glyph: "▤", label: "Analytics" },
 };
 

@@ -27,6 +27,8 @@ import { ShuffleInfoModal } from "./components/ShuffleInfoModal";
 import { SyntheticInfoModal } from "./components/SyntheticInfoModal";
 import { RunShufflerModal } from "./components/forms/RunShufflerModal";
 import { RunSyntheticModal } from "./components/forms/RunSyntheticModal";
+import { RunStakeStressModal } from "./components/forms/RunStakeStressModal";
+import { StakeStressResultsModal } from "./components/StakeStressResultsModal";
 import {
   ValidationCompilingPanel,
   ValidationErrorPanel,
@@ -178,19 +180,28 @@ export const BacktestingStagePanel = memo(function BacktestingStagePanel({
     bt.runSynthetic(selectedEpochId, parent.id, config, buildInherited(parent), epoch?.label);
   };
 
+  const handleRunStress = (configOrList, batchId) => {
+    const parent = liveParent;
+    if (!parent) return;
+    const created = bt.runStress(selectedEpochId, parent.id, configOrList, batchId);
+    if (!created) return;
+    setModal({ kind: "stressResults", backtestId: parent.id, batchId: created });
+  };
+
   const confirmDeleteBacktest = (run) => {
     if (savedStrategyByRunId[run.id]) return;
     const saved = (run.analytics || []).filter((a) => a.status === BT_ANALYTICS_STATUS.SAVED);
     const drafts = (run.analytics || []).filter((a) => a.status === BT_ANALYTICS_STATUS.DRAFT);
     const shN = (run.shufflerRuns || []).length;
     const syN = (run.syntheticRuns || []).length;
+    const stN = (run.stressRuns || []).length;
     setConfirm({
       title: `Delete backtest ${run.id}?`,
       description: "Level 0 backtest run and its branch",
       consequences: [
-        shN || syN
-          ? `Removes ${shN} Shuffler and ${syN} Synthetic child run(s).`
-          : "No child Shuffler / Synthetic runs.",
+        shN || syN || stN
+          ? `Removes ${shN} Shuffler, ${syN} Synthetic and ${stN} stake stress-test run(s).`
+          : "No child Shuffler / Synthetic / stress-test runs.",
         drafts.length
           ? `Draft analytics ${drafts.map((a) => a.id).join(", ")} are removed.`
           : "No draft analytics.",
@@ -204,6 +215,17 @@ export const BacktestingStagePanel = memo(function BacktestingStagePanel({
   };
 
   const confirmDeleteChild = (type, child, parent) => {
+    if (type === BT_CHILD_TYPE.STRESS) {
+      const count = child.runCount || 1;
+      setConfirm({
+        title: count > 1 ? `Delete ${count} stake stress-test runs?` : `Delete run ${child.id}?`,
+        description: count > 1 ? "Stake stress-test batch" : "Stake stress-test run",
+        consequences: ["Other stake stress-tests on this backtest stay."],
+        confirmLabel: count > 1 ? "Delete runs" : "Delete run",
+        onConfirm: () => bt.deleteChildRun(selectedEpochId, parent.id, type, child.batchId || child.id),
+      });
+      return;
+    }
     const field = type === BT_CHILD_TYPE.SHUFFLER ? "shufflerRunId" : "syntheticRunId";
     const affectedDrafts = (parent.analytics || []).filter(
       (a) => a.status === BT_ANALYTICS_STATUS.DRAFT && a[field] === child.id,
@@ -310,13 +332,13 @@ export const BacktestingStagePanel = memo(function BacktestingStagePanel({
       <BuilderSectionShell
         sectionNum={2}
         title="Backtest runs"
-        subtitle="Backtest → Shuffler / Synthetic / Validation analytics"
+        subtitle="Backtest → Shuffler / Synthetic / Stake stress-test / Validation analytics"
         collapsed={collapsedSections?.has(2)}
         onToggle={() => toggleSection?.(2)}
       >
         <div className="mb-3">
           <span className={cx("text-[10px]", ui.textSubtle)}>
-            Backtest is the only root object — Shuffler, Synthetic and Analytics live inside a branch.
+            Backtest is the only root object — Shuffler, Synthetic, Stake stress-test and Analytics live inside a branch.
             Launch a run from section 1 above.
           </span>
         </div>
@@ -350,6 +372,18 @@ export const BacktestingStagePanel = memo(function BacktestingStagePanel({
           }
           onOpenSyntheticParams={(child, parent) =>
             setModal({ kind: "syntheticParams", backtestId: parent.id, run: child })
+          }
+          onRunStress={(run) => setModal({ kind: "runStress", backtestId: run.id })}
+          onOpenStressInfo={(child, parent) =>
+            setModal({
+              kind: "stressResults",
+              backtestId: parent.id,
+              run: child,
+              batchId: child.batchId || child.id,
+            })
+          }
+          onOpenStressParams={(child, parent) =>
+            setModal({ kind: "stressParams", backtestId: parent.id, run: child })
           }
         />
       </BuilderSectionShell>
@@ -438,6 +472,46 @@ export const BacktestingStagePanel = memo(function BacktestingStagePanel({
         run={modal.run}
         parentRun={liveParent}
         onClose={closeModal}
+      />
+
+      <RunStakeStressModal
+        open={modal.kind === "runStress"}
+        parentRun={liveParent}
+        onClose={closeModal}
+        onSubmit={handleRunStress}
+      />
+
+      <RunStakeStressModal
+        open={modal.kind === "stressParams"}
+        parentRun={liveParent}
+        snapshotRun={modal.run}
+        readOnly
+        onClose={closeModal}
+      />
+
+      <StakeStressResultsModal
+        open={modal.kind === "stressResults"}
+        parent={liveParent}
+        batchId={modal.batchId || modal.run?.batchId || modal.run?.id}
+        onClose={closeModal}
+        onAdd={(config) => handleRunStress(
+          [config],
+          modal.batchId || modal.run?.batchId || modal.run?.id,
+        )}
+        onClear={() => {
+          if (!liveParent) return;
+          const batchId = modal.batchId || modal.run?.batchId || modal.run?.id;
+          setConfirm({
+            title: "Clear this stake stress-test?",
+            description: "Removes every run in this comparison.",
+            consequences: ["Other stake stress-tests on this backtest stay. The backtest itself stays."],
+            confirmLabel: "Clear",
+            onConfirm: () => {
+              bt.deleteChildRun(selectedEpochId, liveParent.id, "stress", batchId);
+              closeModal();
+            },
+          });
+        }}
       />
 
       {/* CreateAnalyticsModal — from Shuffler Create column / Level 0 Actions */}
