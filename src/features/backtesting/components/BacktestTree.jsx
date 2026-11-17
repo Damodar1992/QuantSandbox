@@ -75,8 +75,8 @@ export const BacktestTree = memo(function BacktestTree({
   onRunStress,
   onOpenStressInfo,
   onOpenStressParams,
-  onSaveStrategy,
-  savedStrategyByRunId = {},
+  onCreateBot,
+  linkedBotByRunId = {},
 }) {
   if (!runs || runs.length === 0) {
     return (
@@ -179,30 +179,16 @@ export const BacktestTree = memo(function BacktestTree({
 
                   <td className={TD}>
                     <div className="inline-flex items-center gap-1">
-                      {savedStrategyByRunId[run.id] ? (
-                        <AppButton
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="border-emerald-500/40 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/15"
-                          onClick={() => onSaveStrategy?.(run)}
-                          title="Strategy already compiled from this backtest — open in Bots"
-                        >
-                          <Check className="h-3.5 w-3.5 shrink-0" />
-                          Compiled
-                        </AppButton>
-                      ) : (
-                        <AppButton
-                          type="button"
-                          variant="default"
-                          size="sm"
-                          disabled={!isDone}
-                          onClick={() => onSaveStrategy?.(run)}
-                          title={!isDone ? "Available after a successful backtest" : undefined}
-                        >
-                          Save strategy
-                        </AppButton>
-                      )}
+                      <AppButton
+                        type="button"
+                        variant="default"
+                        size="sm"
+                        disabled={!isDone}
+                        onClick={() => onCreateBot?.(run)}
+                        title={!isDone ? "Available after a successful backtest" : undefined}
+                      >
+                        Create bot
+                      </AppButton>
                       <AppButton
                         type="button"
                         variant="outline"
@@ -250,8 +236,8 @@ export const BacktestTree = memo(function BacktestTree({
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             variant="destructive"
-                            disabled={Boolean(savedStrategyByRunId[run.id])}
-                            title={savedStrategyByRunId[run.id] ? "This backtest is linked to a saved strategy" : undefined}
+                            disabled={Boolean(linkedBotByRunId[run.id])}
+                            title={linkedBotByRunId[run.id] ? "Linked bot exists. Deletion rules for unstarted bots need architecture review; started bots retain their source for history." : undefined}
                             onSelect={() => onDeleteBacktest?.(run)}
                           >
                             Delete

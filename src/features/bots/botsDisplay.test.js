@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { INITIAL_BOTS, INITIAL_COMPILED_STRATEGIES, INITIAL_EXCHANGE_ACCOUNTS } from "./botsModel";
+import { INITIAL_BOTS, INITIAL_EXCHANGE_ACCOUNTS } from "./botsModel";
 import {
   accountName,
   filterAndSortBots,
@@ -32,9 +32,9 @@ describe("bot result presentation", () => {
     expect(getBotMetrics({ capital: 0, realizedPnl: 1, positions: [] }).returnPct).toBeNull();
   });
   it("combines account filters and search and does not reorder the source list", () => {
-    const filters = { strategy: "All", mode: "All", status: "All", owner: "All", account: "acc-binance" };
+    const filters = { mode: "All", status: "All", owner: "All", account: "acc-binance" };
     const originalIds = INITIAL_BOTS.map((bot) => bot.id);
-    const rows = filterAndSortBots(INITIAL_BOTS, INITIAL_COMPILED_STRATEGIES, INITIAL_EXCHANGE_ACCOUNTS, filters, "btc", "pnl");
+    const rows = filterAndSortBots(INITIAL_BOTS, INITIAL_EXCHANGE_ACCOUNTS, filters, "btc", "pnl");
     expect(rows.map((bot) => bot.id)).toEqual(["bot-demo-2"]);
     expect(INITIAL_BOTS.map((bot) => bot.id)).toEqual(originalIds);
   });

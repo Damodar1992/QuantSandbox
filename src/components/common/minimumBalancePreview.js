@@ -235,7 +235,7 @@ export function previewBotStart({ bot, strategy, account }) {
     Number.isFinite(Number(freeBalance)) &&
     (!live || account),
   );
-  return previewMinimumBalance({
+  const preview = previewMinimumBalance({
     confirmed,
     market,
     exchange: params?.exchange,
@@ -245,4 +245,7 @@ export function previewBotStart({ bot, strategy, account }) {
     stakeValue: bot?.stakeValue ?? params?.stakeValue,
     entryFeePct,
   });
+  return live && preview.ready
+    ? { ...preview, hint: "Configured allocation meets the illustrative minimum. Exchange funds are not verified." }
+    : preview;
 }

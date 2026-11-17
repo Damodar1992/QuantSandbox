@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   INITIAL_BOTS,
-  INITIAL_COMPILED_STRATEGIES,
   INITIAL_EXCHANGE_ACCOUNTS,
   INITIAL_NOTIFICATION_DESTINATIONS,
   INITIAL_NOTIFICATION_LEVELS,
-  countStrategyBots,
+  findLivePairConflict,
   validateBotLaunch,
 } from "./botsModel";
 import { previewBotStart } from "@/components/common/minimumBalancePreview";
@@ -23,7 +22,6 @@ function addEvent(bot, text) {
 
 export function useBotsMockState() {
   const [data, setData] = useState(() => ({
-    strategies: INITIAL_COMPILED_STRATEGIES,
     bots: INITIAL_BOTS,
     accounts: INITIAL_EXCHANGE_ACCOUNTS,
     notificationDestinations: INITIAL_NOTIFICATION_DESTINATIONS.map((item) => ({ ...item })),
@@ -52,44 +50,6 @@ export function useBotsMockState() {
     timers.current.add(timer);
   }, []);
 
-  const saveStrategy = useCallback((snapshot) => {
-    const existing = snapshot.sourceBacktestId && dataRef.current.strategies.find((item) =>
-      item.owner === snapshot.owner &&
-      item.sourceBacktestId === snapshot.sourceBacktestId &&
-      item.sourceStrategyId === snapshot.sourceStrategyId,
-    );
-    if (existing) return existing;
-    const created = { ...snapshot, id: makeId("cs"), status: "Active", savedAt: now() };
-    commit((prev) => ({ ...prev, strategies: [created, ...prev.strategies] }));
-    return created;
-  }, [commit]);
-
-  const editStrategy = useCallback((id, { name, description }) => {
-    if (!name?.trim()) return "Enter a strategy name.";
-    commit((prev) => ({
-      ...prev,
-      strategies: prev.strategies.map((item) => item.id === id
-        ? { ...item, name: name.trim(), description: description || "" }
-        : item),
-    }));
-    return null;
-  }, [commit]);
-
-  const setStrategyArchived = useCallback((id, archived) => {
-    const strategy = dataRef.current.strategies.find((item) => item.id === id);
-    if (!strategy) return "Strategy not found.";
-    if (archived && countStrategyBots(id, dataRef.current.bots).active > 0) {
-      return "Resolve unfinished bots before archiving this strategy.";
-    }
-    commit((prev) => ({
-      ...prev,
-      strategies: prev.strategies.map((item) => item.id === id
-        ? { ...item, status: archived ? "Archive" : "Active" }
-        : item),
-    }));
-    return null;
-  }, [commit]);
-
   const connectAccount = useCallback(({ name, exchange, market, owner }) => {
     const trimmed = name?.trim();
     if (!trimmed) return { error: "Enter a connection name." };
@@ -98,16 +58,15 @@ export function useBotsMockState() {
     }
     const account = {
       id: makeId("account"), name: trimmed, exchange, market,
-      owner, balance: 2500, status: "Ready",
+      owner, status: "Ready",
     };
     commit((prev) => ({ ...prev, accounts: [...prev.accounts, account] }));
     return { account };
   }, [commit]);
 
-  const launchBot = useCallback(({ strategyId, name, mode, capital, stakeMode, stakeValue, accountId, owner }) => {
-    const strategy = dataRef.current.strategies.find((item) => item.id === strategyId);
+  const launchBot = useCallback(({ source, name, description, mode, capital, stakeMode, stakeValue, accountId, owner }) => {
     const error = validateBotLaunch({
-      strategy, name, mode, capital, maxOpenTrades: 1, stakeMode, stakeValue, accountId, accounts: dataRef.current.accounts, owner,
+      source, name, mode, capital, maxOpenTrades: 1, stakeMode, stakeValue, accountId, accounts: dataRef.current.accounts, owner,
     });
     if (error) return { error };
     const account = mode === "Live"
@@ -115,16 +74,16 @@ export function useBotsMockState() {
       : null;
     const preview = previewBotStart({
       bot: { mode, capital: Number(capital), stakeMode, stakeValue: Number(stakeValue) },
-      strategy,
+      strategy: source,
       account,
     });
     if (!preview.ready) return { error: preview.hint };
     const createdAt = now();
     const bot = {
-      id: makeId("bot"), name: name.trim(), strategyId, owner, mode,
+      id: makeId("bot"), name: name.trim(), description: description?.trim() || "", source: structuredClone(source), owner, mode,
       accountId: accountId || null, feeSource: accountId ? "account" : "exchange",
-      capital: Number(capital), stakeMode: stakeMode || strategy.params.stakeMode,
-      stakeValue: Number(stakeValue ?? strategy.params.stakeValue), maxOpenTrades: 1,
+      capital: Number(capital), stakeMode: stakeMode || source.params.stakeMode,
+      stakeValue: Number(stakeValue ?? source.params.stakeValue), maxOpenTrades: 1,
       status: "Ready for start", realizedPnl: 0,
       createdAt, startedAt: null, updatedAt: createdAt, lastHeartbeatAt: null, stoppedAt: null, stopIntent: null,
       orders: [], positions: [], trades: [], closedTradeCount: 0, winRate: null,
@@ -138,10 +97,11 @@ export function useBotsMockState() {
     const current = dataRef.current;
     const bot = current.bots.find((item) => item.id === id);
     if (!bot || bot.status !== "Ready for start") return "Only a never-started bot can be started.";
-    const strategy = current.strategies.find((item) => item.id === bot.strategyId);
     const account = current.accounts.find((item) => item.id === bot.accountId) || null;
-    const preview = previewBotStart({ bot, strategy, account });
+    const preview = previewBotStart({ bot, strategy: bot.source, account });
     if (!preview.ready) return preview.hint;
+    const conflict = findLivePairConflict(current.bots, bot);
+    if (conflict) return `Live pair ${bot.source.params.pair} is already occupied by ${conflict.name} on this account.`;
     commit((prev) => ({ ...prev, bots: prev.bots.map((item) => item.id === id
       ? addEvent({ ...item, status: "Starting" }, "Manual start requested. Preparing bot.") : item) }));
     schedule(() => commit((prev) => ({
@@ -180,8 +140,8 @@ export function useBotsMockState() {
   const resumeBot = useCallback((id) => {
     const bot = dataRef.current.bots.find((item) => item.id === id);
     if (!bot || !["Paused", "Stopped"].includes(bot.status)) return "Only a paused or stopped bot can be resumed.";
-    const strategy = dataRef.current.strategies.find((item) => item.id === bot.strategyId);
-    if (strategy?.status !== "Active") return "Restore the strategy before resuming.";
+    const conflict = findLivePairConflict(dataRef.current.bots, bot);
+    if (conflict) return `Live pair ${bot.source.params.pair} is already occupied by ${conflict.name} on this account.`;
     commit((prev) => ({ ...prev, bots: prev.bots.map((item) => item.id === id
       ? addEvent({ ...item, status: "Starting", stoppedAt: null }, "Resume requested. Reviewing current positions and orders.") : item) }));
     schedule(() => commit((prev) => ({
@@ -206,7 +166,7 @@ export function useBotsMockState() {
     if (!["market", "limit", "partial"].includes(action)) return "Select an exit action.";
     if (action === "limit" && !(Number(limitPrice) > 0)) return "Enter a positive limit price.";
     if (action === "partial" && !(Number(partialPct) > 0 && Number(partialPct) < 100)) return "Enter a percentage between 0 and 100.";
-    const label = action === "market" ? "Force exit market" : action === "limit" ? `Force exit limit at ${limitPrice}` : `Force exit partial ${partialPct}%`;
+    const label = action === "market" ? "Force exit market" : action === "limit" ? `Exit limit at ${limitPrice}` : `Exit partial ${partialPct}%`;
     commit((prev) => ({ ...prev, bots: prev.bots.map((item) => item.id === botId
       ? addEvent({ ...item, positions: item.positions.map((position) => position.id === positionId
         ? { ...position, manualExitPreview: label } : position) }, `${label} preview recorded for ${positionId}. No order was sent.`)
@@ -290,5 +250,5 @@ export function useBotsMockState() {
     return null;
   }, [commit]);
 
-  return { ...data, saveStrategy, editStrategy, setStrategyArchived, connectAccount, launchBot, startBot, pauseBot, stopBot, resumeBot, deleteBot, recordManualExit, connectTelegramDestination, setBotNotificationLevel, sendTestNotification, removeNotificationDestination };
+  return { ...data, connectAccount, launchBot, startBot, pauseBot, stopBot, resumeBot, deleteBot, recordManualExit, connectTelegramDestination, setBotNotificationLevel, sendTestNotification, removeNotificationDestination };
 }

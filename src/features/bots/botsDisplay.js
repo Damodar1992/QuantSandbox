@@ -88,13 +88,11 @@ export function getBotMetrics(bot) {
   };
 }
 
-export function filterAndSortBots(bots, strategies, accounts, filters, search, sort) {
+export function filterAndSortBots(bots, accounts, filters, search, sort) {
   const query = search.trim().toLowerCase();
   const result = bots.filter((bot) => {
-    const strategy = strategies.find((item) => item.id === bot.strategyId);
-    const text = [bot.name, bot.id, strategy?.name, strategy?.params.pair, accountName(bot, accounts)].join(" ").toLowerCase();
+    const text = [bot.name, bot.id, bot.description, bot.source?.blueprintName, bot.source?.sourceBacktestId, bot.source?.params?.pair, accountName(bot, accounts)].join(" ").toLowerCase();
     return (!query || text.includes(query)) &&
-      (filters.strategy === "All" || bot.strategyId === filters.strategy) &&
       (filters.mode === "All" || bot.mode === filters.mode) &&
       (filters.status === "All" || bot.status === filters.status) &&
       (filters.owner === "All" || bot.owner === filters.owner) &&

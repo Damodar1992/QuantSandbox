@@ -1,15 +1,23 @@
 import React, { useEffect, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { AppBadge } from "@/components/common/AppBadge";
 import { AppButton } from "@/components/common/AppButton";
 import { AppDialog } from "@/components/common/AppDialog";
 import { EyeIcon } from "@/components/common/Icons";
 import { AppInput } from "@/components/common/AppInput";
 import { AppSelect } from "@/components/common/AppSelect";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cx, ui } from "@/constants/ui";
 import { closedTrades, duration, performanceSummary } from "./botsAnalytics";
 import { BotChart } from "./BotChart";
 import { BotPerformance } from "./BotPerformance";
 import { BotTradeDetails } from "./BotTradeDetails";
+import { BotTradeTraceLogs } from "./BotTradeTraceLogs";
 import { ManualExitControls } from "./ManualExitControls";
 import { getBotRuntimeAvailability } from "./botsModel";
 import { BtInfoTooltip } from "@/features/backtesting/components/BtInfoTooltip";
@@ -103,18 +111,60 @@ function PositionStack({ primary, secondary, align = "left", className, muteSeco
 
 export function BotPositions({ bot, strategy, onViewChart, onManualExit }) {
   const [selectedTrade, setSelectedTrade] = useState(null);
-  const [manualPosition, setManualPosition] = useState(null);
+  const [traceTrade, setTraceTrade] = useState(null);
+  const [manualExit, setManualExit] = useState(null);
+  const [confirmExitAll, setConfirmExitAll] = useState(false);
+  const [exitAllNotice, setExitAllNotice] = useState("");
   const isFutures = strategy?.params?.mode === "futures";
   const columns = POSITION_COLUMNS.filter((col) => col.key !== "liquidation" || isFutures);
   const asOf = bot.marketSnapshotAt || bot.updatedAt;
+  const openCount = bot.positions?.length ?? 0;
+  const canManualExit = ["Running", "Paused", "Stopped"].includes(bot.status) && openCount > 0;
+
+  const openManualExit = (position, action) => {
+    setExitAllNotice("");
+    setManualExit({ position, action });
+  };
+
+  const recordExitAllMarket = () => {
+    if (!Array.isArray(bot.positions) || !bot.positions.length) return;
+    let failed = null;
+    bot.positions.forEach((position) => {
+      const result = onManualExit?.({ positionId: position.id, action: "market" });
+      if (result && !failed) failed = result;
+    });
+    setExitAllNotice(
+      failed || `Force exit all market preview recorded for ${bot.positions.length} trades.`,
+    );
+    setConfirmExitAll(false);
+  };
 
   return (
     <section className={cx(ui.radius, ui.panel, "overflow-hidden")}>
-      <h3 className="px-4 py-3 text-[12px] font-medium">
-        Open trades · {bot.positions?.length ?? "No data"}
-      </h3>
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+        <h3 className="text-[12px] font-medium">
+          Open trades · {bot.positions?.length ?? "No data"}
+        </h3>
+        {canManualExit ? (
+          <AppButton
+            variant="destructive"
+            size="sm"
+            onClick={() => {
+              setExitAllNotice("");
+              setConfirmExitAll(true);
+            }}
+          >
+            Force exit all market
+          </AppButton>
+        ) : null}
+      </div>
+      {exitAllNotice ? (
+        <p role="status" className="border-t border-border px-4 py-2 text-[11px] text-violet-200">
+          {exitAllNotice}
+        </p>
+      ) : null}
       <div className="overflow-auto">
-        <table className="w-full min-w-[1200px] border-collapse text-[12px]">
+        <table className="w-full min-w-[1280px] border-collapse text-[12px]">
           <thead className="bg-secondary text-muted-foreground">
             <tr>
               {columns.map((col, index) => (
@@ -205,8 +255,35 @@ export function BotPositions({ bot, strategy, onViewChart, onManualExit }) {
                   <td className={cell("protection")}><PositionStack primary={`Exchange stop: ${position.stopOnExchange == null ? "No data" : position.stopOnExchange ? "Placed" : "Not placed"}`} secondary={`Funding: ${isFutures ? amount(position.fundingAccrued, true) : "Not applicable"}`} />{isFutures ? <div className="text-[10px] text-muted-foreground">To liquidation: {percent(position.liquidationDistancePct)}</div> : null}</td>
                   <td className={cell("actions")}>
                     <div className="space-y-1">
-                      <AppButton variant="outline" onClick={() => setManualPosition(position)}>Force exit</AppButton>
-                      {position.manualExitPreview ? <div className="max-w-40 whitespace-normal text-[10px] text-amber-200">{position.manualExitPreview} · preview</div> : null}
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <AppButton variant="outline" size="sm">
+                              Exit
+                              <ChevronDown className="size-3.5 opacity-70" />
+                            </AppButton>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="min-w-[180px]">
+                            <DropdownMenuItem onSelect={() => openManualExit(position, "market")}>
+                              Force exit market
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => openManualExit(position, "limit")}>
+                              Exit limit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => openManualExit(position, "partial")}>
+                              Exit partial
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                        <AppButton variant="outline" size="sm" onClick={() => setTraceTrade(position)}>
+                          Trace logs
+                        </AppButton>
+                      </div>
+                      {position.manualExitPreview ? (
+                        <div className="max-w-44 whitespace-normal text-[10px] text-amber-200">
+                          {position.manualExitPreview} · preview
+                        </div>
+                      ) : null}
                     </div>
                   </td>
                 </tr>
@@ -224,25 +301,54 @@ export function BotPositions({ bot, strategy, onViewChart, onManualExit }) {
       </div>
 
       <AppDialog
-        open={Boolean(manualPosition)}
+        open={Boolean(manualExit)}
         onOpenChange={(open) => {
-          if (!open) setManualPosition(null);
+          if (!open) setManualExit(null);
         }}
-        title={manualPosition ? `Manual exit · ${manualPosition.id}` : "Manual exit"}
+        title={
+          manualExit
+            ? `${manualExit.action === "market" ? "Force exit market" : manualExit.action === "limit" ? "Exit limit" : "Exit partial"} · ${manualExit.position.id}`
+            : "Manual exit"
+        }
         className="max-w-[520px]"
       >
-        {manualPosition ? (
+        {manualExit ? (
           <ManualExitControls
-            key={manualPosition.id}
+            key={`${manualExit.position.id}-${manualExit.action}`}
             hideTitle
-            position={manualPosition}
+            lockedAction={manualExit.action}
+            position={manualExit.position}
             onSubmit={(request) => onManualExit?.(request)}
-            onCancel={() => setManualPosition(null)}
+            onCancel={() => setManualExit(null)}
           />
         ) : null}
       </AppDialog>
 
+      <AppDialog
+        open={confirmExitAll}
+        onOpenChange={(open) => {
+          if (!open) setConfirmExitAll(false);
+        }}
+        title="Force exit all market"
+        description={`${bot.name || "Bot"} · ${openCount} open trades`}
+        className="max-w-[480px]"
+      >
+        <div className="space-y-4 text-[12px]">
+          <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-amber-200">
+            Record a market-exit preview for all {openCount} open trades? No exchange order will be
+            sent.
+          </p>
+          <div className="flex justify-end gap-2">
+            <AppButton onClick={() => setConfirmExitAll(false)}>Cancel</AppButton>
+            <AppButton variant="destructive" onClick={recordExitAllMarket}>
+              Confirm all preview exits
+            </AppButton>
+          </div>
+        </div>
+      </AppDialog>
+
       <BotTradeDetails trade={selectedTrade} strategy={strategy} onClose={() => setSelectedTrade(null)} onViewChart={onViewChart} />
+      <BotTradeTraceLogs trade={traceTrade} strategy={strategy} onClose={() => setTraceTrade(null)} />
     </section>
   );
 }
@@ -263,6 +369,7 @@ const TRADE_COLUMNS = [
 
 export function BotTrades({ bot, strategy, onViewChart }) {
   const [selectedTrade, setSelectedTrade] = useState(null);
+  const [traceTrade, setTraceTrade] = useState(null);
   const [search, setSearch] = useState("");
   const [reason, setReason] = useState("All");
   const isFutures = strategy?.params?.mode === "futures";
@@ -289,7 +396,14 @@ export function BotTrades({ bot, strategy, onViewChart }) {
               const leverage = trade.leverage ?? strategy?.params?.leverage;
               const direction = `${trade.direction || "—"}${isFutures && hasNumber(leverage) ? ` · ${leverage}×` : ""}`;
               return <tr key={trade.id} className="border-t border-border">
-                <td className="whitespace-nowrap py-3 pl-4 pr-3 align-top"><PositionStack primary={<AppButton variant="link" className="h-auto p-0 text-violet-200" onClick={() => setSelectedTrade(trade)}>{trade.id}</AppButton>} secondary={`${trade.pair || "—"} · ${direction}`} /></td>
+                <td className="whitespace-nowrap py-3 pl-4 pr-3 align-top">
+                  <div className="flex items-start gap-2">
+                    <AppButton size="icon" className="h-8 w-8 shrink-0" aria-label={`Closed trade ${trade.id} details`} onClick={() => setSelectedTrade(trade)}>
+                      <EyeIcon />
+                    </AppButton>
+                    <PositionStack primary={<AppButton variant="link" className="h-auto p-0 text-violet-200" onClick={() => setSelectedTrade(trade)}>{trade.id}</AppButton>} secondary={`${trade.pair || "—"} · ${direction}`} />
+                  </div>
+                </td>
                 <td className="whitespace-nowrap px-3 py-3 align-top tabular-nums"><PositionStack align="right" primary={formatTradeQuantity(trade, strategy?.params?.mode)} secondary={`${isFutures ? "Margin" : "Stake"} ${amount(trade.stake)}`} /></td>
                 <td className="whitespace-nowrap px-3 py-3 align-top tabular-nums"><PositionStack align="right" primary={`Entry ${money(trade.entryPrice)}`} secondary={`Exit ${money(trade.exitPrice)}`} /></td>
                 <td className="whitespace-nowrap px-3 py-3 align-top tabular-nums"><PositionStack align="right" primary={`Entry ${hasNumber(trade.entryDelaySec) ? `${trade.entryDelaySec}s` : "No data"} · ${percent(trade.entryPriceDifferencePct, true)}`} secondary={`Exit ${hasNumber(trade.exitDelaySec) ? `${trade.exitDelaySec}s` : "No data"} · ${percent(trade.exitPriceDifferencePct, true)}`} /></td>
@@ -299,15 +413,20 @@ export function BotTrades({ bot, strategy, onViewChart }) {
                 <td className="whitespace-nowrap px-3 py-3 align-top"><PositionStack primary={date(trade.openedAt)} secondary={date(trade.closedAt)} /></td>
                 <td className="whitespace-nowrap px-3 py-3 align-top"><PositionStack primary={duration(trade.openedAt, trade.closedAt)} secondary={hasNumber(trade.durationCandles) ? `${trade.durationCandles} candles` : "Candles: No data"} /></td>
                 <td className="px-3 py-3 align-top">{trade.exitReason || "No data"}</td>
-                <td className="whitespace-nowrap py-3 pl-3 pr-4 align-top"><div className="flex flex-col items-start gap-1"><AppButton variant="link" className="h-auto p-0 text-violet-200" onClick={() => onViewChart?.(trade)}>View on chart</AppButton><AppButton variant="link" className="h-auto p-0 text-violet-200" aria-label={`Closed trade ${trade.id} details`} onClick={() => setSelectedTrade(trade)}>Details</AppButton></div></td>
+                <td className="whitespace-nowrap py-3 pl-3 pr-4 align-top">
+                  <AppButton variant="outline" size="sm" onClick={() => setTraceTrade(trade)}>
+                    Trace logs
+                  </AppButton>
+                </td>
               </tr>;
             })}
             {!trades.length ? <tr><td colSpan={TRADE_COLUMNS.length} className="p-6 text-center text-muted-foreground">{allTrades.length ? "No trades match the current filters." : Array.isArray(bot.trades) ? "No closed trades yet." : "Trade data unavailable."}</td></tr> : null}
           </tbody>
         </table>
       </div>
-      <p className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">Select a Trade ID or Details to review the trade, including its recorded risk levels at close.</p>
+      <p className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">Open the eye or Trade ID to review the trade, including its recorded risk levels at close.</p>
       <BotTradeDetails trade={selectedTrade} strategy={strategy} onClose={() => setSelectedTrade(null)} onViewChart={onViewChart} />
+      <BotTradeTraceLogs trade={traceTrade} strategy={strategy} onClose={() => setTraceTrade(null)} />
     </section>
   );
 }

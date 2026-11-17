@@ -55,42 +55,32 @@ export function createDemoStageConfig() {
   };
 }
 
-export const INITIAL_COMPILED_STRATEGIES = [
+const DEMO_BACKTEST_SOURCES = [
   {
-    id: "cs-demo-1",
-    name: "BTC Trend Following v1",
-    description: "Saved Stage 5 configuration for BTC spot trading.",
-    owner: "bogdan",
-    status: "Active",
     sourceStrategyId: 1,
-    blueprintName: "BTC Trend Following",
-    // Must match Stage 5 seed Level-0 id so BacktestTree shows “already compiled”.
+    blueprintName: "EMA Bounce",
+    // Matches the Stage 5 seed Level-0 run.
     sourceBacktestId: "oos-4f2a9c71b83d",
+    backtestStatus: "done",
     backtestCreatedAt: "2026-07-28T09:14:00.000Z",
-    savedAt: "2026-10-11T10:30:00.000Z",
     epochId: "favorite-risk-epoch-1",
-    epochLabel: "Epoch #42",
+    epochLabel: "Epoch #126 · BTC/USDT · 1h · Full data",
     versionLineage: "1.1.1.1.1",
     stageConfig: createDemoStageConfig(),
     params: {
       exchange: "binance", mode: "spot", pair: "BTC/USDT", timeframe: "1h",
-      leverage: 1, startingCapital: 1000, stakeMode: "fixed", stakeValue: 200,
+      leverage: 1, startingCapital: 10000, stakeMode: "fixed", stakeValue: 100,
       profitReserving: null,
-      periodFrom: "2026-07-01", periodTo: "2026-09-30",
+      periodFrom: "2023-01-01", periodTo: "2023-06-30",
     },
-    result: { roi: 18.4, maxdd: 7.2, trades: 48 },
+    result: null,
   },
   {
-    id: "cs-demo-2",
-    name: "ETH Pullback v2",
-    description: "Archived example with preserved bot history.",
-    owner: "anna",
-    status: "Archive",
     sourceStrategyId: 2,
     blueprintName: "ETH Pullback",
     sourceBacktestId: "BT-1990",
+    backtestStatus: "done",
     backtestCreatedAt: "2026-10-08T11:20:00.000Z",
-    savedAt: "2026-10-09T09:00:00.000Z",
     epochId: "demo-17",
     epochLabel: "Epoch #17",
     versionLineage: "1.1.1.1.2",
@@ -106,8 +96,8 @@ export const INITIAL_COMPILED_STRATEGIES = [
 ];
 
 export const INITIAL_EXCHANGE_ACCOUNTS = [
-  { id: "acc-binance", name: "Binance Main", exchange: "binance", market: "spot", balance: 3500, status: "Ready", owner: "bogdan" },
-  { id: "acc-bybit", name: "Bybit Futures", exchange: "bybit", market: "futures", balance: 2800, status: "Ready", owner: "bogdan" },
+  { id: "acc-binance", name: "Binance Main", exchange: "binance", market: "spot", status: "Ready", owner: "bogdan" },
+  { id: "acc-bybit", name: "Bybit Futures", exchange: "bybit", market: "futures", status: "Ready", owner: "bogdan" },
 ];
 
 /** Preview Telegram destinations (no tokens stored). Owned by user, reused across their bots. */
@@ -179,9 +169,9 @@ const DEMO_EARLY_TRADES = [
   pnl, returnPct: pnl / 200 * 100, exitReason, stopLoss: 57000, reservedAmount: 0,
 }));
 
-export const INITIAL_BOTS = [
+const DEMO_BOTS = [
   {
-    id: "bot-demo-1", name: "BTC Momentum", strategyId: "cs-demo-1",
+    id: "bot-demo-1", name: "BTC Momentum", sourceIndex: 0,
     owner: "bogdan", mode: "Dryrun", accountId: null, status: "Running",
     capital: 1000, maxOpenTrades: 2, stakeMode: "fixed", stakeValue: 200, realizedPnl: 32.8, startedAt: "2026-10-05T08:00:00.000Z",
     reportedMetrics: { totalBalance: 1032.8, tradableBalance: 1032.8, reservedBalance: 0, totalChangePct: 3.28, tradableChangePct: 3.28, reservedChangePct: null, calmar: null, cagrTotal: null, cagrTradable: null, openTradeFees: 0.42, closedTradeFees: 1.87, totalFunding: null, feesAndFunding: null },
@@ -240,7 +230,7 @@ export const INITIAL_BOTS = [
     events: [{ id: "ev-1", at: "2026-10-05T08:00:00.000Z", text: "Bot started in Dryrun mode." }],
   },
   {
-    id: "bot-demo-2", name: "BTC Momentum", strategyId: "cs-demo-1",
+    id: "bot-demo-2", name: "BTC Momentum", sourceIndex: 0,
     owner: "bogdan", mode: "Live", accountId: "acc-binance", status: "Stopped",
     capital: 2000, maxOpenTrades: 1, stakeMode: "fixed", stakeValue: 200, realizedPnl: 22.3, startedAt: "2026-10-10T08:00:00.000Z",
     updatedAt: "2026-10-12T19:00:00.000Z", marketSnapshotAt: "2026-10-12T19:00:00.000Z", lastHeartbeatAt: "2026-10-12T19:00:00.000Z", stoppedAt: "2026-10-12T19:00:00.000Z", stopIntent: null,
@@ -257,7 +247,7 @@ export const INITIAL_BOTS = [
     events: [{ id: "ev-2", at: "2026-10-12T19:00:00.000Z", text: "Bot stopped. History preserved." }],
   },
   {
-    id: "bot-demo-3", name: "ETH Pullback", strategyId: "cs-demo-2",
+    id: "bot-demo-3", name: "ETH Pullback", sourceIndex: 1,
     owner: "anna", mode: "Dryrun", accountId: null, status: "Stopped",
     capital: 1500, maxOpenTrades: 1, stakeMode: "fixed", stakeValue: 250, realizedPnl: -11.4, startedAt: "2026-10-09T10:10:00.000Z",
     updatedAt: "2026-10-10T13:00:00.000Z", marketSnapshotAt: "2026-10-10T13:00:00.000Z", lastHeartbeatAt: "2026-10-10T13:00:00.000Z", stoppedAt: "2026-10-10T13:00:00.000Z", stopIntent: null,
@@ -274,7 +264,7 @@ export const INITIAL_BOTS = [
     events: [{ id: "ev-3", at: "2026-10-10T13:00:00.000Z", text: "Bot stopped. History preserved." }],
   },
   {
-    id: "bot-demo-4", name: "BTC Ready", strategyId: "cs-demo-1",
+    id: "bot-demo-4", name: "BTC Ready", sourceIndex: 0,
     owner: "bogdan", mode: "Dryrun", accountId: null, feeSource: "exchange", status: "Ready for start",
     capital: 1000, maxOpenTrades: 1, stakeMode: "fixed", stakeValue: 200, realizedPnl: 0, profitReserve: 0,
     forceEntry: false, engineVersion: "hotfix.3.2.9",
@@ -284,6 +274,12 @@ export const INITIAL_BOTS = [
     events: [{ id: "ev-4", at: "2026-11-09T09:00:00.000Z", text: "Bot created in Dryrun mode. Awaiting manual start." }],
   },
 ];
+
+export const INITIAL_BOTS = DEMO_BOTS.map(({ sourceIndex, ...bot }) => ({
+  ...bot,
+  description: "",
+  source: structuredClone(DEMO_BACKTEST_SOURCES[sourceIndex]),
+}));
 
 export const ACTIVE_BOT_STATUSES = new Set(["Ready for start", "Starting", "Running", "Paused", "Needs attention"]);
 
@@ -301,26 +297,18 @@ export function isBotActive(bot) {
   return ACTIVE_BOT_STATUSES.has(bot.status) || (bot.status === "Stopped" && Boolean(bot.positions?.length || bot.orders?.length));
 }
 
-export function countStrategyBots(strategyId, bots) {
-  const related = bots.filter((bot) => bot.strategyId === strategyId);
-  return {
-    active: related.filter(isBotActive).length,
-    inactive: related.filter((bot) => !isBotActive(bot)).length,
-  };
-}
-
-export function getCompatibleAccounts(strategy, accounts, owner) {
+export function getCompatibleAccounts(source, accounts, owner) {
   return accounts.filter((account) =>
     account.owner === owner && account.status === "Ready" &&
-    account.exchange === strategy.params.exchange && account.market === strategy.params.mode,
+    account.exchange === source?.params?.exchange && account.market === source?.params?.mode,
   );
 }
 
-export function validateBotLaunch({ strategy, mode, name, capital, maxOpenTrades = 1, stakeMode, stakeValue, accountId, accounts, owner }) {
-  if (!strategy || strategy.status !== "Active") return "Restore the strategy before launching.";
+export function validateBotLaunch({ source, mode, name, capital, maxOpenTrades = 1, stakeMode, stakeValue, accountId, accounts, owner }) {
+  if (!source?.sourceBacktestId || source.backtestStatus !== "done" || !source?.params) return "Select a successful backtest.";
   if (!name?.trim()) return "Enter a bot name.";
-  const stake = Number(stakeValue ?? strategy.params.stakeValue ?? 0);
-  const selectedStakeMode = stakeMode || strategy.params.stakeMode;
+  const stake = Number(stakeValue ?? source.params.stakeValue ?? 0);
+  const selectedStakeMode = stakeMode || source.params.stakeMode;
   const amount = Number(capital);
   if (!Number.isFinite(amount) || amount <= 0) return "Enter a positive capital amount.";
   if (selectedStakeMode === "relative") {
@@ -332,13 +320,26 @@ export function validateBotLaunch({ strategy, mode, name, capital, maxOpenTrades
   if (mode !== "Dryrun" && mode !== "Live") return "Select a trading mode.";
   if (mode === "Live") {
     if (!accountId) return "Select an exchange account.";
-    const account = getCompatibleAccounts(strategy, accounts, owner).find((item) => item.id === accountId);
+    const account = getCompatibleAccounts(source, accounts, owner).find((item) => item.id === accountId);
     if (!account) return "Select a compatible exchange account.";
   }
-  if (mode === "Dryrun" && accountId && !getCompatibleAccounts(strategy, accounts, owner).some((item) => item.id === accountId)) {
+  if (mode === "Dryrun" && accountId && !getCompatibleAccounts(source, accounts, owner).some((item) => item.id === accountId)) {
     return "Select a compatible fee account or use exchange fees.";
   }
   return null;
+}
+
+export function occupiesLivePair(bot) {
+  return bot.mode === "Live" && (
+    ["Starting", "Running", "Paused", "Needs attention"].includes(bot.status) ||
+    (bot.status === "Stopped" && Boolean(bot.positions?.length || bot.orders?.length))
+  );
+}
+
+export function findLivePairConflict(bots, target) {
+  if (target.mode !== "Live") return null;
+  return bots.find((bot) => bot.id !== target.id && occupiesLivePair(bot) &&
+    bot.accountId === target.accountId && bot.source?.params?.pair === target.source?.params?.pair) || null;
 }
 
 export function getBacktestSummary(run) {

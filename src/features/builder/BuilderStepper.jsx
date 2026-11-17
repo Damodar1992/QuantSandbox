@@ -212,9 +212,10 @@ export const BuilderStepper = memo(function BuilderStepper({
   onAddIndicatorTag,
   backtestingEnabled = true,
   backtestingState,
-  compiledStrategies = [],
-  onSaveCompiledStrategy,
-  onOpenCompiledStrategy,
+  bots = [],
+  onCreateBot,
+  backtestFocus = null,
+  onClearBacktestFocus,
 }) {
   // Indicators state (separate for Signal and Entry)
   const [signalIndicators, setSignalIndicators] = useState(() => [
@@ -4569,9 +4570,10 @@ IF FinalScore < 0.3 OR Stability < 0.5 THEN TRIGGER_EXIT
             strategyId={strategyId}
             strategyName={strategyName}
             backtestingState={backtestingState}
-            compiledStrategies={compiledStrategies}
-            onSaveStrategy={onSaveCompiledStrategy}
-            onOpenSavedStrategy={onOpenCompiledStrategy}
+            bots={bots}
+            onCreateBot={onCreateBot}
+            backtestFocus={backtestFocus}
+            onClearBacktestFocus={onClearBacktestFocus}
             favoriteEpochs={riskBestResults}
             signalBestResults={signalBestResults}
             entryBestResults={entryBestResults}

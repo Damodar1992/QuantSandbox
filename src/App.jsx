@@ -131,7 +131,6 @@ export default function App() {
   const [botsOpenTarget, setBotsOpenTarget] = useState(null);
   const [botsDetailOpen, setBotsDetailOpen] = useState(false);
   const botsState = useBotsMockState();
-  const saveCompiledStrategy = botsState.saveStrategy;
   const backtestingState = useBacktestingState({ currentUser: MOCK_CURRENT_USER.login });
   const [settingsSubSection, setSettingsSubSection] = useState("indicators"); // "indicators" | "formulas"
 
@@ -1016,15 +1015,8 @@ export default function App() {
     }
   }, []);
 
-  const handleSaveCompiledStrategy = useCallback((snapshot) => {
-    const saved = saveCompiledStrategy(snapshot);
-    setBotsOpenTarget({ id: saved.id });
-    setActiveSection("Bots");
-    setSelected(null);
-  }, [saveCompiledStrategy]);
-
-  const handleOpenCompiledStrategy = useCallback((id) => {
-    setBotsOpenTarget({ id });
+  const handleCreateBotFromBacktest = useCallback((source) => {
+    setBotsOpenTarget({ source });
     setActiveSection("Bots");
     setSelected(null);
   }, []);
@@ -1134,12 +1126,28 @@ export default function App() {
     [],
   );
 
+  const [backtestFocus, setBacktestFocus] = useState(null);
+
   const handleOpenBlueprintStrategy = useCallback(
     (strategyId) => {
       const strategy = strategies.find((item) => item.id === strategyId);
       const version = strategy?.versions?.[strategy.versions.length - 1] ?? strategy?.versions?.[0];
       if (!strategy || !version) return;
       setSelected({ strategyId, versionId: version.id });
+      setActiveSection("Strategies");
+    },
+    [strategies],
+  );
+
+  const handleOpenBacktestSource = useCallback(
+    ({ strategyId, epochId, backtestId }) => {
+      const strategy = strategies.find((item) => item.id === strategyId);
+      const version = strategy?.versions?.[strategy.versions.length - 1] ?? strategy?.versions?.[0];
+      if (!strategy || !version || !backtestId) return;
+      setSelected({ strategyId, versionId: version.id });
+      setActiveStrategyTab("builder");
+      setBuilderStage(5);
+      setBacktestFocus({ epochId: epochId || null, backtestId: String(backtestId) });
       setActiveSection("Strategies");
     },
     [strategies],
@@ -1331,6 +1339,7 @@ export default function App() {
             onClearOpenTarget={setBotsOpenTarget}
             onDetailChange={setBotsDetailOpen}
             onOpenBlueprintStrategy={handleOpenBlueprintStrategy}
+            onOpenBacktestSource={handleOpenBacktestSource}
           />
         )}
 
@@ -1530,9 +1539,10 @@ export default function App() {
                 strategyId={selectedStrategy.s.id}
                 strategyName={selectedStrategy.s.name}
                 backtestingState={backtestingState}
-                compiledStrategies={botsState.strategies}
-                onSaveCompiledStrategy={handleSaveCompiledStrategy}
-                onOpenCompiledStrategy={handleOpenCompiledStrategy}
+                bots={botsState.bots}
+                onCreateBot={handleCreateBotFromBacktest}
+                backtestFocus={backtestFocus}
+                onClearBacktestFocus={() => setBacktestFocus(null)}
                 activeStage={builderStage}
                 onStageChange={setBuilderStage}
                 pairs={builderPairs}

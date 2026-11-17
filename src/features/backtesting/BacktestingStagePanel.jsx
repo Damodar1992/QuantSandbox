@@ -1,5 +1,6 @@
-import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppButton } from "@/components/common/AppButton";
+import { AppInput } from "@/components/common/AppInput";
 import { cx, ui } from "@/constants/ui";
 import { BuilderSectionShell } from "@/features/builder/layout/BuilderSectionShell";
 import { useCollapsedSections } from "@/features/builder/hooks/useBuilderStageState";
@@ -21,7 +22,6 @@ import { CreateAnalyticsModal } from "./components/forms/CreateAnalyticsModal";
 import { RunBacktestForm } from "./components/forms/RunBacktestForm";
 import { BacktestingInfoModal } from "./components/BacktestingInfoModal";
 import { BacktestingRunParamsModal } from "./components/BacktestingRunParamsModal";
-import { SaveStrategyModal } from "./components/SaveStrategyModal";
 import { getBacktestSummary } from "@/features/bots/botsModel";
 import { ShuffleInfoModal } from "./components/ShuffleInfoModal";
 import { SyntheticInfoModal } from "./components/SyntheticInfoModal";
@@ -61,9 +61,10 @@ export const BacktestingStagePanel = memo(function BacktestingStagePanel({
   onValidationRetry,
   onOpenMiniBacktest,
   backtestingState,
-  compiledStrategies = [],
-  onSaveStrategy,
-  onOpenSavedStrategy,
+  bots = [],
+  onCreateBot,
+  backtestFocus = null,
+  onClearBacktestFocus,
 }) {
   const localBt = useBacktestingState({ currentUser });
   const bt = backtestingState || localBt;
@@ -71,6 +72,7 @@ export const BacktestingStagePanel = memo(function BacktestingStagePanel({
   // Stage 5 owns its own section-collapse state: its section numbering (1-2) is
   // independent from the builder sections of stages 1-4.
   const { collapsedSections, toggleSection } = useCollapsedSections();
+  const skipFilterResetRef = useRef(false);
 
   const [selectedEpochId, setSelectedEpochId] = useState(
     () => favoriteEpochs[0]?.id ?? null,
@@ -115,11 +117,35 @@ export const BacktestingStagePanel = memo(function BacktestingStagePanel({
     () => (selectedEpochId ? bt.getRuns(selectedEpochId) : []),
     [bt, selectedEpochId],
   );
-  const savedStrategyByRunId = useMemo(() => Object.fromEntries(
-    compiledStrategies
-      .filter((item) => item.sourceStrategyId === strategyId && item.owner === currentUser && item.sourceBacktestId)
-      .map((item) => [item.sourceBacktestId, item.id]),
-  ), [compiledStrategies, strategyId, currentUser]);
+  const [backtestIdFilter, setBacktestIdFilter] = useState("");
+  useEffect(() => {
+    if (skipFilterResetRef.current) {
+      skipFilterResetRef.current = false;
+      return;
+    }
+    setBacktestIdFilter("");
+  }, [selectedEpochId]);
+  useEffect(() => {
+    if (!backtestFocus?.backtestId) return;
+    const nextEpochId = backtestFocus.epochId;
+    if (nextEpochId && String(nextEpochId) !== String(selectedEpochId)) {
+      skipFilterResetRef.current = true;
+      setSelectedEpochId(nextEpochId);
+    }
+    setBacktestIdFilter(String(backtestFocus.backtestId));
+    if (collapsedSections?.has(2)) toggleSection?.(2);
+    onClearBacktestFocus?.();
+  }, [backtestFocus, selectedEpochId, collapsedSections, toggleSection, onClearBacktestFocus]);
+  const filteredRuns = useMemo(() => {
+    const q = backtestIdFilter.trim().toLowerCase();
+    if (!q) return runs;
+    return runs.filter((run) => String(run.id || "").toLowerCase().includes(q));
+  }, [runs, backtestIdFilter]);
+  const linkedBotByRunId = useMemo(() => Object.fromEntries(
+    bots
+      .filter((item) => item.source?.sourceStrategyId === strategyId && item.source?.sourceBacktestId)
+      .map((item) => [item.source.sourceBacktestId, item.id]),
+  ), [bots, strategyId]);
   const savedCombos = useMemo(
     () => (selectedEpochId ? bt.savedCombinations(selectedEpochId) : new Set()),
     [bt, selectedEpochId],
@@ -189,7 +215,8 @@ export const BacktestingStagePanel = memo(function BacktestingStagePanel({
   };
 
   const confirmDeleteBacktest = (run) => {
-    if (savedStrategyByRunId[run.id]) return;
+    // Ready bot cascade behavior is pending product/architecture decision.
+    if (linkedBotByRunId[run.id]) return;
     const saved = (run.analytics || []).filter((a) => a.status === BT_ANALYTICS_STATUS.SAVED);
     const drafts = (run.analytics || []).filter((a) => a.status === BT_ANALYTICS_STATUS.DRAFT);
     const shN = (run.shufflerRuns || []).length;
@@ -312,7 +339,6 @@ export const BacktestingStagePanel = memo(function BacktestingStagePanel({
             stageStatusByEpoch={stageStatusByEpoch}
             stageConfig={stageConfig}
           />
-          {epoch ? <div className="flex justify-end"><AppButton variant="default" onClick={() => setModal({ kind: "compileEpoch" })}>Compile strategy from selected epoch</AppButton></div> : null}
           {epoch ? (
             <div className={cx(ui.radius, "border border-[rgba(60,40,80,0.35)] bg-[#120a20] p-3")}>
               <RunBacktestForm
@@ -336,20 +362,48 @@ export const BacktestingStagePanel = memo(function BacktestingStagePanel({
         collapsed={collapsedSections?.has(2)}
         onToggle={() => toggleSection?.(2)}
       >
-        <div className="mb-3">
-          <span className={cx("text-[10px]", ui.textSubtle)}>
+        <div className="mb-3 space-y-3">
+          <span className={cx("block text-[10px]", ui.textSubtle)}>
             Backtest is the only root object — Shuffler, Synthetic, Stake stress-test and Analytics live inside a branch.
             Launch a run from section 1 above.
           </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <AppInput
+              aria-label="Filter by Backtest ID"
+              placeholder="Backtest ID"
+              value={backtestIdFilter}
+              onChange={(e) => setBacktestIdFilter(e.target.value)}
+              className="w-48"
+            />
+            <AppButton
+              disabled={!backtestIdFilter}
+              onClick={() => setBacktestIdFilter("")}
+            >
+              Clear
+            </AppButton>
+          </div>
         </div>
+        {backtestIdFilter.trim() && filteredRuns.length === 0 && runs.length > 0 ? (
+          <div className={cx(ui.radius, ui.panelMuted, "px-4 py-8 text-center text-[12px]", ui.textSubtle)}>
+            No backtests match this Backtest ID.
+          </div>
+        ) : (
         <BacktestTree
-          runs={runs}
-          savedStrategyByRunId={savedStrategyByRunId}
-          onSaveStrategy={(run) => {
-            const savedId = savedStrategyByRunId[run.id];
-            if (savedId) onOpenSavedStrategy?.(savedId);
-            else setModal({ kind: "saveStrategy", backtestId: run.id });
-          }}
+          runs={filteredRuns}
+          linkedBotByRunId={linkedBotByRunId}
+          onCreateBot={(run) => onCreateBot?.({
+            sourceStrategyId: strategyId,
+            blueprintName: strategyName,
+            sourceBacktestId: run.id,
+            backtestStatus: run.status,
+            backtestCreatedAt: run.createdAt,
+            epochId: run.epochId,
+            epochLabel: run.epochLabel,
+            versionLineage: validationVersionLineage || "—",
+            stageConfig: stageConfig ? structuredClone(stageConfig) : null,
+            params: structuredClone(run.params),
+            result: getBacktestSummary(run),
+          })}
           expandedRuns={tree.expandedRuns}
           onToggleRun={tree.toggleRun}
           onOpenInfo={(run) => setModal({ kind: "info", backtestId: run.id })}
@@ -386,38 +440,10 @@ export const BacktestingStagePanel = memo(function BacktestingStagePanel({
             setModal({ kind: "stressParams", backtestId: parent.id, run: child })
           }
         />
+        )}
       </BuilderSectionShell>
 
       {/* Modals */}
-      <SaveStrategyModal
-        open={modal.kind === "saveStrategy" || modal.kind === "compileEpoch"}
-        run={modal.kind === "saveStrategy" ? liveParent : null}
-        epoch={epoch}
-        blueprintName={strategyName}
-        versionLineage={validationVersionLineage}
-        onClose={closeModal}
-        onSave={({ name, description, params }) => {
-          if (!onSaveStrategy || modal.kind === "saveStrategy" && !liveParent || modal.kind === "compileEpoch" && !epoch) return;
-          const fromRun = modal.kind === "saveStrategy";
-          onSaveStrategy({
-            name,
-            description,
-            owner: currentUser,
-            sourceStrategyId: strategyId,
-            blueprintName: strategyName,
-            sourceType: fromRun ? "backtest" : "epoch",
-            sourceBacktestId: fromRun ? liveParent.id : null,
-            backtestCreatedAt: fromRun ? liveParent.createdAt : null,
-            epochId: fromRun ? liveParent.epochId : epoch.id,
-            epochLabel: fromRun ? liveParent.epochLabel : epoch.label,
-            versionLineage: validationVersionLineage || "—",
-            stageConfig: stageConfig ? structuredClone(stageConfig) : null,
-            params: fromRun ? structuredClone(liveParent.params) : params,
-            result: fromRun ? getBacktestSummary(liveParent) : null,
-          });
-          closeModal();
-        }}
-      />
       <BacktestingRunParamsModal
         open={modal.kind === "runParams"}
         run={liveParent}

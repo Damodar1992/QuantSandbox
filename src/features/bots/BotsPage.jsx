@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppBadge } from "@/components/common/AppBadge";
 import { AppButton } from "@/components/common/AppButton";
 import { MinimumBalancePreview } from "@/components/common/MinBalancePreview";
@@ -9,9 +9,13 @@ import { AppSelect } from "@/components/common/AppSelect";
 import { EyeIcon } from "@/components/common/Icons";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
-import { CircleStop, Pause, Play, Trash2 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Check, ChevronDown, CircleStop, Copy, Pause, Play, Trash2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { BacktestingInfoModal } from "@/features/backtesting/components/BacktestingInfoModal";
 import { BtInfoTooltip } from "@/features/backtesting/components/BtInfoTooltip";
@@ -21,9 +25,7 @@ import { ManualExitControls } from "./ManualExitControls";
 import { date, money, percent, amount, accountName, getBotMetrics, filterAndSortBots, hasNumber, pnlTone } from "./botsDisplay";
 import { closedTrades, performanceSummary } from "./botsAnalytics";
 import { cx, ui } from "@/constants/ui";
-import { StrategyTemplatePreview } from "@/features/builder/components/StrategyTemplatePreview";
-import { StageConfigColumns } from "@/features/backtesting/components/EpochContextPanel";
-import { countStrategyBots, getCompatibleAccounts } from "./botsModel";
+import { getCompatibleAccounts } from "./botsModel";
 
 const PANEL = cx(ui.radius, ui.panel, "p-4");
 const MUTED = ui.textMuted;
@@ -34,6 +36,41 @@ const toOptions = (values, allLabel = "All") => [
   ...values.map((value) => ({ value, label: value })),
 ];
 const unique = (items) => [...new Set(items)].sort();
+
+function CopyIdButton({ id }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = useCallback(
+    async (e) => {
+      e.stopPropagation();
+      if (!id) return;
+      try {
+        await navigator.clipboard.writeText(String(id));
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1500);
+      } catch {
+        /* ignore */
+      }
+    },
+    [id],
+  );
+  return (
+    <AppButton
+      type="button"
+      variant="outline"
+      size="icon-xs"
+      className="shrink-0"
+      onClick={handleCopy}
+      title={copied ? "Copied" : `Copy ID ${id}`}
+      aria-label={copied ? "Copied" : "Copy bot ID"}
+    >
+      {copied ? (
+        <Check className="h-3.5 w-3.5 shrink-0 text-green-400" />
+      ) : (
+        <Copy className="h-3.5 w-3.5 shrink-0" />
+      )}
+    </AppButton>
+  );
+}
 
 function PillTabs({ items, value, onChange, className }) {
   return (
@@ -73,7 +110,7 @@ function PillTabs({ items, value, onChange, className }) {
 
 function Status({ value }) {
   const variant =
-    value === "Active" || value === "Ready" || value === "Running"
+    value === "Ready" || value === "Running"
       ? "completed"
       : value === "Starting" || value === "Stopping"
         ? "warning"
@@ -82,7 +119,7 @@ function Status({ value }) {
           : "muted";
   return (
     <AppBadge status={value} variant={variant}>
-      {value === "Active" ? "Ready" : value === "Archive" ? "Archived" : value}
+      {value}
     </AppBadge>
   );
 }
@@ -183,10 +220,6 @@ function OverviewSectionCard({ title, rows }) {
   );
 }
 
-function CollapsibleEngineInfo({ bot }) {
-  return <Collapsible className={cx(ui.radius, ui.panel, "overflow-hidden")}><CollapsibleTrigger asChild><AppButton variant="ghost" className="h-auto w-full justify-between rounded-none px-4 py-3"><span>Engine information</span><span className="text-muted-foreground">Show details ▾</span></AppButton></CollapsibleTrigger><CollapsibleContent className="border-t border-border p-4"><InfoGrid rows={[["Engine", "Freqtrade"], ["Version", bot.engineVersion || "Not specified"], ["Force entry", bot.forceEntry == null ? "Not specified" : bot.forceEntry ? "Enabled" : "Disabled"], ["Reporting timezone", "UTC"]]} /></CollapsibleContent></Collapsible>;
-}
-
 function formatStakeLabel(params) {
   if (params?.stakeValue == null || params?.stakeValue === "") return null;
   const modeLabel = params.stakeMode === "relative" ? "Relative" : "Fixed";
@@ -251,7 +284,8 @@ function FilterBar({ countLabel, children, action }) {
 }
 
 function LaunchModal({ strategy, model, owner, onClose, onLaunched }) {
-  const [name, setName] = useState(strategy.name);
+  const [name, setName] = useState(strategy.blueprintName || "");
+  const [description, setDescription] = useState("");
   const [mode, setMode] = useState("Dryrun");
   const [capital, setCapital] = useState(String(strategy.params.startingCapital || 1000));
   const [stakeMode, setStakeMode] = useState(strategy.params.stakeMode || "fixed");
@@ -271,20 +305,21 @@ function LaunchModal({ strategy, model, owner, onClose, onLaunched }) {
   const change = (setter) => (value) => { setter(value); setError(""); };
   const create = () => {
     if (!preview.ready) return;
-    const result = model.launchBot({ strategyId: strategy.id, name, mode, capital, stakeMode, stakeValue, accountId: mode === "Live" ? accountId : "", owner });
+    const result = model.launchBot({ source: strategy, name, description, mode, capital, stakeMode, stakeValue, accountId: mode === "Live" ? accountId : "", owner });
     if (result.error) setError(result.error);
     else onLaunched(result.bot.id);
   };
-  return <AppDialog open onOpenChange={(open) => !open && onClose()} title="Create bot" description={`${strategy.name} · ${strategy.params.pair} · ${strategy.params.timeframe}`} className="max-w-[680px]">
+  return <AppDialog open onOpenChange={(open) => !open && onClose()} title="Create bot from backtest" description={`${strategy.sourceBacktestId} · ${strategy.params.pair} · ${strategy.params.timeframe}`} className="max-w-[680px]">
     <div className="max-h-[75vh] space-y-4 overflow-y-auto pr-1 text-[12px]">
       <div className={cx(ui.radius, ui.panelMuted, "p-3", MUTED)}>
-        <strong className="text-[#faf7fd]">{strategy.sourceBacktestId ? `Source backtest ${strategy.sourceBacktestId}` : "Source: selected Stage 5 epoch"}</strong> · {strategy.epochLabel}
+        <strong className="text-[#faf7fd]">Source backtest {strategy.sourceBacktestId}</strong> · {strategy.epochLabel}
         <div className="mt-1">Frozen: {strategy.params.exchange} · {strategy.params.mode} · {strategy.params.pair} · {strategy.params.timeframe} · {strategy.params.leverage || 1}×.</div>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <AppInput label="Bot name" value={name} onChange={(event) => setName(event.target.value)} />
         <AppSelect label="Trading mode" value={mode} onValueChange={(value) => { change(setMode)(value); if (value !== "Live") setAccountId(""); }} options={[{ value: "Dryrun", label: "Dryrun" }, { value: "Live", label: "Live" }]} />
       </div>
+      <div className="space-y-1"><Label htmlFor="create-bot-description">Bot description · optional</Label><Textarea id="create-bot-description" value={description} onChange={(event) => setDescription(event.target.value)} /></div>
       {mode === "Live" ? <AppSelect label="Exchange account · required" value={accountId} onValueChange={change(setAccountId)} options={accounts.map((account) => ({ value: account.id, label: account.name }))} /> : null}
       {mode === "Live" && accounts.length === 0 ? <p className="text-amber-300">Connect a compatible {strategy.params.exchange} {strategy.params.mode} account before creating a Live bot.</p> : null}
       <div className="grid gap-3 sm:grid-cols-2">
@@ -293,7 +328,8 @@ function LaunchModal({ strategy, model, owner, onClose, onLaunched }) {
         <AppSelect label="Stake mode" value={stakeMode} onValueChange={change(setStakeMode)} options={[{ value: "fixed", label: "Fixed USDT" }, { value: "relative", label: "Relative %" }]} />
         <AppInput type="number" min="0.01" step="0.01" label={stakeMode === "relative" ? "Stake value (%)" : "Stake value (USDT)"} value={stakeValue} onChange={(event) => change(setStakeValue)(event.target.value)} className={preview.highlight === "stake" ? "border-red-500" : ""} />
       </div>
-      {strategy.sourceBacktestId ? <p className="rounded-md border-l-2 border-violet-400 bg-violet-500/10 p-3 text-[#b8aecc]">Backtest capital: {money(strategy.params.startingCapital)} USDT. Changes to capital or stake mean historical results describe different conditions.</p> : <p className="rounded-md border-l-2 border-violet-400 bg-violet-500/10 p-3 text-[#b8aecc]">This strategy was created from an epoch; no source backtest metrics are available.</p>}
+      <p className="rounded-md border-l-2 border-violet-400 bg-violet-500/10 p-3 text-[#b8aecc]">Backtest capital: {money(strategy.params.startingCapital)} USDT. Changes to capital or stake mean historical results describe different conditions.</p>
+      {mode === "Live" ? <p className="text-amber-200">Live account balance is unavailable in real time. The preview checks the configured allocation and illustrative minimum only; actual exchange funds are unverified.</p> : null}
       <MinimumBalancePreview preview={preview} />
       {error ? <p role="alert" className="text-red-400">{error}</p> : null}
       <div className="flex justify-end gap-2"><AppButton onClick={onClose}>Cancel</AppButton><AppButton variant="default" disabled={!preview.ready || (mode === "Live" && !accountId)} onClick={create}>Create bot · Ready for start</AppButton></div>
@@ -314,6 +350,7 @@ function StartBotModal({ bot, strategy, account, onClose, onConfirm }) {
     >
       <div className="space-y-4 text-[12px]">
         <MinimumBalancePreview preview={preview} />
+        {bot.mode === "Live" ? <p className="text-amber-200">This preview cannot confirm current exchange funds. Start checks whether this account and pair are already occupied; shared account capital limits need a backend contract.</p> : null}
         <div className="flex justify-end gap-2">
           <AppButton onClick={onClose}>Cancel</AppButton>
           <AppButton variant="default" disabled={!preview.ready} onClick={onConfirm}>
@@ -424,7 +461,7 @@ function AccountsModal({ model, owner, onClose }) {
       ) : (
         <div className="space-y-4">
           <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
-            <DataTable headers={["Connection", "Exchange / market", "Balance", "Status"]}>
+            <DataTable headers={["Connection", "Exchange / market", "Status"]}>
               {model.accounts
                 .filter((account) => account.owner === owner)
                 .map((account) => (
@@ -433,7 +470,6 @@ function AccountsModal({ model, owner, onClose }) {
                     <td className="px-2 py-2.5">
                       {account.exchange} · {account.market}
                     </td>
-                    <td className="px-2 py-2.5">{money(account.balance)} USDT</td>
                     <td className="px-2 py-2.5">
                       <Status value={account.status} />
                     </td>
@@ -454,14 +490,14 @@ function AccountsModal({ model, owner, onClose }) {
 }
 
 function ControlModal({ bot, action, onClose, onConfirm, onManualExit }) {
-  const [selectedPosition, setSelectedPosition] = useState(null);
+  const [selectedExit, setSelectedExit] = useState(null);
   const [confirmAll, setConfirmAll] = useState(false);
   const [notice, setNotice] = useState("");
   const exitFormRef = useRef(null);
   const stopping = action === "stop";
   useEffect(() => {
     exitFormRef.current?.scrollIntoView({ block: "nearest" });
-  }, [selectedPosition?.id]);
+  }, [selectedExit?.position?.id, selectedExit?.action]);
   return (
     <AppDialog
       open
@@ -474,11 +510,10 @@ function ControlModal({ bot, action, onClose, onConfirm, onManualExit }) {
         <p className={cx("rounded-md border p-3", stopping ? "border-amber-500/40 bg-amber-500/10 text-amber-200" : "border-violet-500/40 bg-violet-500/10 text-violet-200")}>
           {stopping ? "Bot automation will stop buying and handling open trades. Choose any trades to close manually; unselected trades remain open and require attention." : "New buying stops. The strategy continues managing open trades and their exits. Manual exit is optional."}
         </p>
-        {stopping && bot.positions.length ? <div className="space-y-2"><AppButton onClick={() => setConfirmAll(true)}>Close all at market</AppButton>{confirmAll ? <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3"><p>Record a market-exit preview for all {bot.positions.length} open trades? No exchange order will be sent.</p><div className="mt-2 flex gap-2"><AppButton onClick={() => setConfirmAll(false)}>Cancel</AppButton><AppButton variant="destructive" onClick={() => { bot.positions.forEach((position) => onManualExit({ positionId: position.id, action: "market" })); setNotice(`Preview actions recorded for ${bot.positions.length} trades.`); setConfirmAll(false); }}>Confirm all preview exits</AppButton></div></div> : null}</div> : null}
         <div className="overflow-auto rounded-md border border-border">
-          <table className="w-full min-w-[520px] text-left"><thead className="bg-secondary text-muted-foreground"><tr><th className="px-3 py-2">Open trade</th><th className="px-3 py-2">Entry / Current</th><th className="px-3 py-2">Exchange stop</th><th className="px-3 py-2">Action</th></tr></thead><tbody>
+          <table className="w-full min-w-[640px] text-left"><thead className="bg-secondary text-muted-foreground"><tr><th className="px-3 py-2">Open trade</th><th className="px-3 py-2">Entry / Current</th><th className="px-3 py-2">Exchange stop</th><th className="px-3 py-2">Actions</th></tr></thead><tbody>
             {bot.positions.map((position) => {
-              const exitOpen = selectedPosition?.id === position.id;
+              const exitOpen = selectedExit?.position?.id === position.id;
               return (
                 <React.Fragment key={position.id}>
                   <tr className={cx("border-t border-border", exitOpen && "bg-violet-500/10")}>
@@ -486,14 +521,22 @@ function ControlModal({ bot, action, onClose, onConfirm, onManualExit }) {
                     <td className="px-3 py-2">{money(position.entryPrice)} / {money(position.currentPrice)}</td>
                     <td className="px-3 py-2">{position.stopOnExchange == null ? "No data" : position.stopOnExchange ? "Placed" : "Not placed"}</td>
                     <td className="px-3 py-2">
-                      <AppButton
-                        variant="link"
-                        className="h-auto p-0 text-violet-200"
-                        aria-expanded={exitOpen}
-                        onClick={() => setSelectedPosition(exitOpen ? null : position)}
-                      >
-                        Force exit
-                      </AppButton>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <AppButton variant="outline" size="sm" aria-expanded={exitOpen}>
+                            Exit
+                            <ChevronDown className="size-3.5 opacity-70" />
+                          </AppButton>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="min-w-[180px]">
+                          <DropdownMenuItem onSelect={() => setSelectedExit({ position, action: "market" })}>
+                            Force exit market
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => setSelectedExit({ position, action: "limit" })}>
+                            Exit limit
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                       {position.manualExitPreview ? <div className="mt-1 max-w-40 whitespace-normal text-[10px] text-amber-200">{position.manualExitPreview} · preview</div> : null}
                     </td>
                   </tr>
@@ -502,15 +545,16 @@ function ControlModal({ bot, action, onClose, onConfirm, onManualExit }) {
                       <td colSpan={4} className="px-3 py-2">
                         <div ref={exitFormRef}>
                           <ManualExitControls
-                            key={position.id}
+                            key={`${position.id}-${selectedExit.action}`}
                             hideTitle
+                            lockedAction={selectedExit.action}
                             position={position}
                             onSubmit={(request) => {
                               const result = onManualExit(request);
                               if (!result) setNotice(`Preview action recorded for ${position.id}.`);
                               return result;
                             }}
-                            onCancel={() => setSelectedPosition(null)}
+                            onCancel={() => setSelectedExit(null)}
                           />
                         </div>
                       </td>
@@ -523,58 +567,40 @@ function ControlModal({ bot, action, onClose, onConfirm, onManualExit }) {
           </tbody></table>
         </div>
         {notice ? <p role="status" className="text-violet-200">{notice}</p> : null}
-        <div className="flex justify-end gap-2">
+        {confirmAll && bot.positions.length ? (
+          <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3">
+            <p>
+              Record a market-exit preview for all {bot.positions.length} open trades? No exchange
+              order will be sent.
+            </p>
+            <div className="mt-2 flex justify-end gap-2">
+              <AppButton onClick={() => setConfirmAll(false)}>Cancel</AppButton>
+              <AppButton
+                variant="destructive"
+                onClick={() => {
+                  bot.positions.forEach((position) =>
+                    onManualExit({ positionId: position.id, action: "market" }),
+                  );
+                  setNotice(
+                    `Force exit all market preview recorded for ${bot.positions.length} trades.`,
+                  );
+                  setConfirmAll(false);
+                }}
+              >
+                Confirm all preview exits
+              </AppButton>
+            </div>
+          </div>
+        ) : null}
+        <div className="flex flex-wrap justify-end gap-2">
           <AppButton onClick={onClose}>Cancel</AppButton>
+          {bot.positions.length ? (
+            <AppButton variant="destructive" onClick={() => setConfirmAll(true)}>
+              Force exit all market
+            </AppButton>
+          ) : null}
           <AppButton variant={stopping ? "destructive" : "default"} onClick={onConfirm}>
             Confirm {stopping ? "stop" : "pause"}
-          </AppButton>
-        </div>
-      </div>
-    </AppDialog>
-  );
-}
-
-function EditStrategyModal({ strategy, onClose, onSave }) {
-  const [name, setName] = useState(strategy.name);
-  const [description, setDescription] = useState(strategy.description || "");
-  const [error, setError] = useState("");
-  return (
-    <AppDialog
-      open
-      onOpenChange={(open) => !open && onClose()}
-      title="Edit details"
-      description="Trading parameters and code remain unchanged."
-    >
-      <div className="space-y-4">
-        <AppInput
-          label="Strategy name"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-        />
-        <div className="space-y-1">
-          <Label htmlFor="bots-edit-description">Description</Label>
-          <Textarea
-            id="bots-edit-description"
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-          />
-        </div>
-        {error ? (
-          <p role="alert" className="text-red-400">
-            {error}
-          </p>
-        ) : null}
-        <div className="flex justify-end gap-2">
-          <AppButton onClick={onClose}>Cancel</AppButton>
-          <AppButton
-            variant="default"
-            onClick={() => {
-              const nextError = onSave({ name, description });
-              if (nextError) setError(nextError);
-              else onClose();
-            }}
-          >
-            Save changes
           </AppButton>
         </div>
       </div>
@@ -590,214 +616,59 @@ export function BotsPage({
   onClearOpenTarget,
   onDetailChange,
   onOpenBlueprintStrategy,
+  onOpenBacktestSource,
 }) {
-  const [tab, setTab] = useState("strategies");
   const [detail, setDetail] = useState(null);
   const [detailTab, setDetailTab] = useState("Overview");
   const [chartFocus, setChartFocus] = useState(null);
   const [modal, setModal] = useState(null);
   const [error, setError] = useState("");
-  const [strategySearch, setStrategySearch] = useState("");
   const [botSearch, setBotSearch] = useState("");
   const [botSort, setBotSort] = useState("latest");
-  const [strategyFilters, setStrategyFilters] = useState({
-    owner: "All",
-    status: "All",
-    exchange: "All",
-  });
-  const [botFilters, setBotFilters] = useState({
-    strategy: "All",
-    mode: "All",
-    status: "All",
-    owner: "All",
-    account: "All",
-  });
+  const [botFilters, setBotFilters] = useState({ mode: "All", status: "All", owner: "All", account: "All" });
 
+  useEffect(() => { onDetailChange?.(Boolean(detail)); }, [detail, onDetailChange]);
   useEffect(() => {
-    onDetailChange?.(Boolean(detail));
-  }, [detail, onDetailChange]);
-
-  useEffect(() => {
-    if (!openTarget) return;
-    setTab("strategies");
-    setDetail({ kind: "strategy", id: openTarget.id });
-    setDetailTab("Overview");
+    if (!openTarget?.source) return;
+    setDetail(null);
+    setModal({ kind: "launch", source: openTarget.source });
     onClearOpenTarget?.(null);
   }, [openTarget, onClearOpenTarget]);
 
-  const strategy =
-    detail?.kind === "strategy" ? model.strategies.find((item) => item.id === detail.id) : null;
-  const bot = detail?.kind === "bot" ? model.bots.find((item) => item.id === detail.id) : null;
-  const botStrategy = bot ? model.strategies.find((item) => item.id === bot.strategyId) : null;
+  const bot = detail ? model.bots.find((item) => item.id === detail.id) : null;
+  const botStrategy = bot?.source || null;
   const startTarget = modal?.kind === "start" ? model.bots.find((item) => item.id === modal.id) : null;
-  const startStrategy = startTarget ? model.strategies.find((item) => item.id === startTarget.strategyId) : null;
-  const startAccount = startTarget?.accountId
-    ? model.accounts.find((item) => item.id === startTarget.accountId) || null
-    : null;
+  const startStrategy = startTarget?.source || null;
+  const startAccount = startTarget?.accountId ? model.accounts.find((item) => item.id === startTarget.accountId) || null : null;
   const botStats = bot ? performanceSummary(bot) : null;
   const viewTradeOnOverview = (trade) => {
     setChartFocus((prev) => ({ ...trade, focusRequest: (prev?.focusRequest || 0) + 1 }));
     setDetailTab("Overview");
   };
-  const strategyBotCounts = strategy ? countStrategyBots(strategy.id, model.bots) : null;
-
-  const strategyRows = useMemo(
-    () =>
-      model.strategies.filter(
-        (item) =>
-          (!strategySearch.trim() || [item.name, item.id, item.blueprintName, item.params.pair].join(" ").toLowerCase().includes(strategySearch.trim().toLowerCase())) &&
-          (strategyFilters.owner === "All" || item.owner === strategyFilters.owner) &&
-          (strategyFilters.status === "All" || item.status === strategyFilters.status) &&
-          (strategyFilters.exchange === "All" || item.params.exchange === strategyFilters.exchange),
-      ),
-    [model.strategies, strategyFilters, strategySearch],
-  );
-
   const botRows = useMemo(
-    () =>
-      filterAndSortBots(model.bots, model.strategies, model.accounts, botFilters, botSearch, botSort),
-    [model.bots, model.strategies, model.accounts, botFilters, botSearch, botSort],
+    () => filterAndSortBots(model.bots, model.accounts, botFilters, botSearch, botSort),
+    [model.bots, model.accounts, botFilters, botSearch, botSort],
   );
-
-  const openStrategy = (id, subtab = "Overview") => {
-    setTab("strategies");
-    setDetail({ kind: "strategy", id });
-    setDetailTab(subtab);
-    setError("");
-  };
   const openBot = (id) => {
     setChartFocus(null);
-    setTab("bots");
-    setDetail({ kind: "bot", id });
+    setDetail({ id });
     setDetailTab("Overview");
     setError("");
   };
-  const openLaunch = (id) => {
-    setModal({ kind: "launch", id });
-    setError("");
-  };
-  const closeModal = () => {
-    setModal(null);
-    setError("");
-  };
-  const applyArchive = (id, archived) => {
-    const nextError = model.setStrategyArchived(id, archived);
-    if (nextError) setError(nextError);
-    else closeModal();
-  };
-  const listTitle = tab === "strategies" ? "Compiled Strategies" : "Bots";
-  const sourceStrategy = modal?.kind === "source" ? model.strategies.find((item) => item.id === modal.id) : null;
+  const closeModal = () => { setModal(null); setError(""); };
+  const sourceStrategy = modal?.kind === "source" ? model.bots.find((item) => item.id === modal.id)?.source : null;
   const sourceRun = sourceStrategy ? backtestingState?.getRuns(sourceStrategy.epochId).find((run) => run.id === sourceStrategy.sourceBacktestId) : null;
-  const filtersClearable = Object.values(
-    tab === "strategies" ? strategyFilters : botFilters,
-  ).some((value) => value !== "All") || Boolean((tab === "strategies" ? strategySearch : botSearch).trim());
+  const filtersClearable = Object.values(botFilters).some((value) => value !== "All") || Boolean(botSearch.trim());
 
   return (
     <div className="space-y-5">
       {!detail ? (
         <>
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[rgba(60,40,80,0.35)] pb-3">
-            <PillTabs
-              className="border-b-0 pb-0"
-              value={tab}
-              onChange={(value) => {
-                setTab(value);
-                setDetail(null);
-                setError("");
-              }}
-              items={[
-                {
-                  value: "strategies",
-                  label: "Compiled Strategies",
-                  count: model.strategies.length,
-                },
-                { value: "bots", label: "Bots", count: model.bots.length },
-              ]}
-            />
+            <span className="text-[12px] text-muted-foreground">Manage bot runs and their source backtests.</span>
             <AppButton onClick={() => setModal({ kind: "accounts" })}>Exchange accounts</AppButton>
           </div>
-
-          {error ? (
-            <p role="alert" className="text-[12px] text-red-400">
-              {error}
-            </p>
-          ) : null}
-
-          {tab === "strategies" ? (
-            <section className={cx(ui.radius, ui.panel, "overflow-hidden")} aria-label="Compiled Strategies">
-              <FilterBar
-                countLabel={`${strategyRows.length} of ${model.strategies.length} strategies`}
-                action={
-                  <AppButton
-                    size="sm"
-                    disabled={!filtersClearable}
-                    onClick={() =>
-                      { setStrategyFilters({ owner: "All", status: "All", exchange: "All" }); setStrategySearch(""); }
-                    }
-                  >
-                    Clear filters
-                  </AppButton>
-                }
-              >
-                <AppInput label="Search" value={strategySearch} onChange={(event) => setStrategySearch(event.target.value)} placeholder="Search name, ID or pair" aria-label="Search compiled strategies" wrapperClassName="w-52" className="h-8 text-[12px]" />
-                <AppSelect
-                  label="Owner"
-                  value={strategyFilters.owner}
-                  onValueChange={(owner) => setStrategyFilters((prev) => ({ ...prev, owner }))}
-                  options={toOptions(unique(model.strategies.map((item) => item.owner)))}
-                  className="w-[130px]"
-                  triggerClassName="h-8 text-[12px]"
-                  aria-label="Filter by owner"
-                />
-                <AppSelect
-                  label="Status"
-                  value={strategyFilters.status}
-                  onValueChange={(status) => setStrategyFilters((prev) => ({ ...prev, status }))}
-                  options={[{ value: "All", label: "All statuses" }, { value: "Active", label: "Ready" }, { value: "Archive", label: "Archived" }]}
-                  className="w-[130px]"
-                  triggerClassName="h-8 text-[12px]"
-                  aria-label="Filter by status"
-                />
-                <AppSelect
-                  label="Exchange"
-                  value={strategyFilters.exchange}
-                  onValueChange={(exchange) =>
-                    setStrategyFilters((prev) => ({ ...prev, exchange }))
-                  }
-                  options={toOptions(unique(model.strategies.map((item) => item.params.exchange)))}
-                  className="w-[130px]"
-                  triggerClassName="h-8 text-[12px]"
-                  aria-label="Filter by exchange"
-                />
-              </FilterBar>
-
-              <DataTable headers={["Strategy", "Trading context", "Created", "Bots", "Owner", "Status", "Actions"]}>
-                {!strategyRows.length ? <EmptyCell columns={7}>No strategies match the current filters.</EmptyCell> : null}
-                {strategyRows.map((item) => {
-                  const related = model.bots.filter((bot) => bot.strategyId === item.id);
-                  const counts = countStrategyBots(item.id, model.bots);
-                  return <tr key={item.id} className="border-b border-border">
-                    <td className="px-4 py-3"><div className="flex items-center gap-2">
-                      <AppButton size="icon" className="h-8 w-8 shrink-0" aria-label={`View ${item.name}`} onClick={() => openStrategy(item.id)}><EyeIcon /></AppButton>
-                      <div><AppButton variant="link" className="h-auto p-0 text-left font-medium text-violet-200" onClick={() => openStrategy(item.id)}>{item.name}</AppButton><div className="mt-1 text-[11px] text-muted-foreground">{item.blueprintName} · {item.epochLabel}</div></div>
-                    </div></td>
-                    <td className="px-2 py-3"><div>{item.params.exchange} · {item.params.mode}{item.params.mode === "futures" ? ` · ${item.params.leverage}×` : ""}</div><div className="mt-1 text-[11px] text-muted-foreground">{item.params.pair} · {item.params.timeframe}</div></td>
-                    <td className="px-2 py-3 whitespace-nowrap">{date(item.savedAt)}</td>
-                    <td className="px-2 py-3"><AppButton variant="link" className="h-auto p-0 text-violet-200" onClick={() => openStrategy(item.id, "Bots")}>Live: {related.filter((bot) => bot.mode === "Live").length} · Dry-run: {related.filter((bot) => bot.mode === "Dryrun").length}</AppButton><div className="mt-1 text-[11px] text-muted-foreground">{counts.active} active · {counts.inactive} inactive</div></td>
-                    <td className="px-2 py-3">{item.owner}</td>
-                    <td className="px-2 py-3"><Status value={item.status} /></td>
-                    <td className="px-2 py-3"><div className="flex gap-2"><AppButton disabled={item.status !== "Active"} onClick={() => openLaunch(item.id)}>Create bot</AppButton>
-                      <DropdownMenu><DropdownMenuTrigger asChild><AppButton aria-label={`More actions for ${item.name}`}>⋯</AppButton></DropdownMenuTrigger><DropdownMenuContent align="end">
-                        <DropdownMenuItem onSelect={() => openStrategy(item.id)}>View strategy</DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => setModal({ kind: "edit", id: item.id })}>Edit details</DropdownMenuItem>
-                        <DropdownMenuItem disabled={item.status === "Active" && counts.active > 0} onSelect={() => item.status === "Archive" ? applyArchive(item.id, false) : setModal({ kind: "archive", id: item.id })}>{item.status === "Archive" ? "Restore" : counts.active > 0 ? "Archive · resolve active bots first" : "Archive"}</DropdownMenuItem>
-                      </DropdownMenuContent></DropdownMenu>
-                    </div></td>
-                  </tr>;
-                })}
-              </DataTable>
-            </section>
-          ) : (
+          {error ? <p role="alert" className="text-[12px] text-red-400">{error}</p> : null}
             <section className={cx(ui.radius, ui.panel, "overflow-hidden")} aria-label="Bots">
               <FilterBar
                 countLabel={`${botRows.length} of ${model.bots.length} bots`}
@@ -807,7 +678,6 @@ export function BotsPage({
                     disabled={!filtersClearable}
                     onClick={() =>
                       { setBotFilters({
-                        strategy: "All",
                         mode: "All",
                         status: "All",
                         owner: "All",
@@ -820,20 +690,6 @@ export function BotsPage({
                 }
               >
                 <AppInput label="Search" value={botSearch} onChange={(event) => setBotSearch(event.target.value)} placeholder="Search bots, ID or pair" aria-label="Search bots" wrapperClassName="w-48" className="h-8 text-[12px]" />
-                <AppSelect
-                  label="Strategy"
-                  value={botFilters.strategy}
-                  onValueChange={(strategyId) =>
-                    setBotFilters((prev) => ({ ...prev, strategy: strategyId }))
-                  }
-                  options={[
-                    { value: "All", label: "All strategies" },
-                    ...model.strategies.map((item) => ({ value: item.id, label: item.name })),
-                  ]}
-                  className="w-[180px]"
-                  triggerClassName="h-8 text-[12px]"
-                  aria-label="Filter by strategy"
-                />
                 <AppSelect
                   label="Mode"
                   value={botFilters.mode}
@@ -873,10 +729,10 @@ export function BotsPage({
                 <AppSelect label="Sort" value={botSort} onValueChange={setBotSort} options={[{ value: "latest", label: "Latest start" }, { value: "name", label: "Name A–Z" }, { value: "pnl", label: "P&L high to low" }, { value: "status", label: "Status A–Z" }]} className="w-40" triggerClassName="h-8 text-[12px]" aria-label="Sort bots" />
               </FilterBar>
 
-              <DataTable className="min-w-[1180px]" headers={["Bot / strategy", "Mode / account", "Status / data", "Equity / Balance", "P&L", "Trades / W–L", "Profit reserve", "Owner", "Actions"]}>
-                {!botRows.length ? <EmptyCell columns={9}>No bots match the current filters.</EmptyCell> : null}
+              <DataTable className="min-w-[1280px]" headers={["Bot", "Pair / timeframe", "Mode / account", "Status / data", "Equity / Balance", "P&L", "Trades / W–L", "Profit reserve", "Owner", "Actions"]}>
+                {!botRows.length ? <EmptyCell columns={10}>No bots match the current filters.</EmptyCell> : null}
                 {botRows.map((item) => {
-                  const source = model.strategies.find((entry) => entry.id === item.strategyId);
+                  const source = item.source;
                   const metrics = getBotMetrics(item);
                   const history = closedTrades(item);
                   const outcomesKnown = Array.isArray(item.trades) && history.every((trade) => hasNumber(trade.pnl));
@@ -885,12 +741,30 @@ export function BotsPage({
                   const reserveEnabled = item.profitReserving === true || Number(source?.params?.profitReserving) > 0;
                   const reserve = hasNumber(item.profitReserve) ? Number(item.profitReserve) : reserveEnabled ? null : 0;
                   return <tr key={item.id} className="border-b border-border">
-                    <td className="px-4 py-3"><div className="flex items-start gap-2"><AppButton size="icon" className="h-8 w-8 shrink-0" aria-label={`View ${item.name} ${item.mode}`} onClick={() => openBot(item.id)}><EyeIcon /></AppButton><div>
-                      <AppButton variant="link" className="h-auto p-0 text-left font-medium text-violet-200" onClick={() => openBot(item.id)}>{item.name}</AppButton><div className="text-[10px] text-muted-foreground" title={item.id}>{item.id.length > 20 ? item.id.slice(-12) : item.id}</div>
-                      <AppButton variant="link" className="h-auto p-0 text-[11px] text-violet-200" onClick={() => openStrategy(item.strategyId)}>{source?.name || "Source unavailable"}</AppButton>
-                      <div className="text-[11px] text-muted-foreground">{source?.params.pair} · {source?.params.timeframe}</div>
-                    </div></div></td>
-                    <td className="px-2 py-3"><ModeBadge mode={item.mode} /><div className="mt-1 text-[11px] text-muted-foreground">{accountName(item, model.accounts)}</div></td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="inline-flex items-center gap-1">
+                          <CopyIdButton id={item.id} />
+                          <AppButton size="icon" className="h-8 w-8 shrink-0" aria-label={`View ${item.name} ${item.mode}`} onClick={() => openBot(item.id)}>
+                            <EyeIcon />
+                          </AppButton>
+                        </div>
+                        <AppButton variant="link" className="h-auto p-0 text-left font-medium text-violet-200" onClick={() => openBot(item.id)}>
+                          {item.name}
+                        </AppButton>
+                      </div>
+                    </td>
+                    <td className="px-2 py-3 whitespace-nowrap">
+                      {source?.params?.pair || "No data"} · {source?.params?.timeframe || "No data"}
+                    </td>
+                    <td className="px-2 py-3 whitespace-nowrap">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <ModeBadge mode={item.mode} />
+                        {item.mode !== "Dryrun" ? (
+                          <span className="text-[11px] text-muted-foreground">{accountName(item, model.accounts)}</span>
+                        ) : null}
+                      </div>
+                    </td>
                     <td className="px-2 py-3"><BotStatusCell bot={item} /></td>
                     <td className="px-2 py-3 text-right tabular-nums whitespace-nowrap"><div className="font-medium" title="Equity = balance + open P&L; includes the profit reserve">{amount(metrics.equity)}</div><div className="mt-1 text-[11px] text-muted-foreground" title="Balance = initial bot capital + closed P&L; includes committed funds and profit reserve">Balance {money(metrics.balance)}</div><div className="text-[10px] text-muted-foreground">Initial {money(item.capital)}</div></td>
                     <td className="px-2 py-3 text-right tabular-nums whitespace-nowrap"><div className={cx("font-medium", pnlTone(metrics.totalPnl))}>{amount(metrics.totalPnl, true)}</div><div className={cx("mt-0.5 text-[11px]", pnlTone(metrics.returnPct))} title="Total P&L / initial bot capital × 100">{percent(metrics.returnPct, true)} on initial capital</div><div className="mt-1 text-[11px]"><span className="text-muted-foreground">Open </span><span className={pnlTone(metrics.unrealized)}>{money(metrics.unrealized, true)}</span><span className="text-muted-foreground"> · Closed </span><span className={pnlTone(metrics.realized)}>{money(metrics.realized, true)}</span></div><div className="text-[10px] text-muted-foreground" title={`${date(item.startedAt)} → ${date(item.stoppedAt || item.updatedAt)}`}>Lifetime · USDT</div></td>
@@ -911,213 +785,7 @@ export function BotsPage({
                 })}
               </DataTable>
             </section>
-          )}
         </>
-      ) : null}
-
-      {strategy ? (
-        <section className="space-y-4">
-          <AppButton variant="ghost" onClick={() => setDetail(null)}>
-            ← {listTitle}
-          </AppButton>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h2 className="text-[16px] font-semibold text-[#faf7fd]">{strategy.name}</h2>
-              <div className={cx("mt-2 flex flex-wrap items-center gap-2 text-[12px]", MUTED)}>
-                <Status value={strategy.status} />
-                <span>Owner: {strategy.owner}</span>
-                <span>
-                  {strategy.params.exchange} · {strategy.params.pair} · {strategy.params.timeframe}
-                </span>
-              </div>
-              <p className={cx("mt-2 max-w-3xl text-[12px]", MUTED)}>
-                Description:{" "}
-                <span className="text-[#faf7fd]">{strategy.description || "—"}</span>
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <AppButton onClick={() => setModal({ kind: "edit", id: strategy.id })}>
-                Edit details
-              </AppButton>
-              <AppButton
-                disabled={
-                  strategy.status === "Active" &&
-                  countStrategyBots(strategy.id, model.bots).active > 0
-                }
-                onClick={() =>
-                  strategy.status === "Archive"
-                    ? applyArchive(strategy.id, false)
-                    : setModal({ kind: "archive", id: strategy.id })
-                }
-              >
-                {strategy.status === "Archive" ? "Restore" : "Archive"}
-              </AppButton>
-              <AppButton
-                variant="default"
-                disabled={strategy.status !== "Active"}
-                onClick={() => openLaunch(strategy.id)}
-              >
-                Create bot
-              </AppButton>
-            </div>
-          </div>
-
-          <PillTabs
-            value={detailTab === "Bots" ? "Bots" : "Overview"}
-            onChange={setDetailTab}
-            items={["Overview", "Bots"].map((item) => ({
-              value: item,
-              label: item,
-            }))}
-          />
-
-          {error ? (
-            <p role="alert" className="text-[12px] text-red-400">
-              {error}
-            </p>
-          ) : null}
-
-          {detailTab !== "Bots" ? (
-            <div className="space-y-4">
-              <div className="grid gap-3 lg:grid-cols-2">
-                <OverviewSectionCard
-                  title="Strategy information"
-                  rows={[
-                    [
-                      "Strategy",
-                      onOpenBlueprintStrategy && strategy.sourceStrategyId != null ? (
-                        <AppButton
-                          key="strategy-name"
-                          variant="link"
-                          className="h-auto p-0 text-right text-violet-200"
-                          onClick={() => onOpenBlueprintStrategy(strategy.sourceStrategyId)}
-                        >
-                          {strategy.name} · {strategy.versionLineage || "—"}
-                        </AppButton>
-                      ) : (
-                        <span key="strategy-name">
-                          {strategy.name} · {strategy.versionLineage || "—"}
-                        </span>
-                      ),
-                    ],
-                    ["Epoch", strategy.epochLabel],
-                    ["Source type", strategy.sourceBacktestId ? "Successful backtest" : "Selected epoch"],
-                    strategy.sourceBacktestId ? [
-                      "Backtest",
-                      <span key="backtest" className="inline-flex items-center justify-end gap-2">
-                        <span>{strategy.sourceBacktestId}</span>
-                        <AppButton
-                          size="icon"
-                          className="h-7 w-7 shrink-0"
-                          aria-label={`Open backtest ${strategy.sourceBacktestId}`}
-                          onClick={() => setModal({ kind: "source", id: strategy.id })}
-                        >
-                          <EyeIcon />
-                        </AppButton>
-                      </span>,
-                    ] : null,
-                    strategy.sourceBacktestId ? [
-                      "Period",
-                      `${strategy.params.periodFrom || "No data"} → ${strategy.params.periodTo || "No data"}`,
-                    ] : null,
-                    strategy.sourceBacktestId ? [
-                      "ROI / Max DD",
-                      `${percent(strategy.result?.roi, true)} / ${percent(strategy.result?.maxdd)}`,
-                    ] : null,
-                    strategy.sourceBacktestId ? ["Starting capital", `${money(strategy.params.startingCapital)} USDT`] : null,
-                    [
-                      "Linked bots",
-                      <AppButton
-                        key="linked-bots"
-                        variant="link"
-                        className="h-auto p-0 text-violet-200"
-                        onClick={() => setDetailTab("Bots")}
-                      >
-                        {strategyBotCounts.active} active · {strategyBotCounts.inactive} inactive
-                      </AppButton>,
-                    ],
-                  ]}
-                />
-                <OverviewSectionCard
-                  title="Trading configuration"
-                  rows={[
-                    ["Exchange", strategy.params.exchange],
-                    [
-                      "Pair / timeframe",
-                      `${strategy.params.pair} · ${strategy.params.timeframe}`,
-                    ],
-                    [
-                      "Market / leverage",
-                      strategy.params.mode === "futures"
-                        ? `${strategy.params.mode} · ${strategy.params.leverage || 1}×`
-                        : `${strategy.params.mode} · Not applicable`,
-                    ],
-                    [
-                      "Stake",
-                      formatStakeLabel(strategy.params),
-                      "Default amount used for each new trade. A bot can override mode and value at creation.",
-                    ],
-                    ["Profit Reserving", Number(strategy.params.profitReserving) > 0 ? `${strategy.params.profitReserving}%` : "Off", "Share of realized profit withheld from new entries."],
-                    ["Maximum open positions", "1 · fixed", "New bots are limited to one concurrent open position in this scope."],
-                  ]}
-                />
-              </div>
-
-              <div className={cx(SECTION_CARD, "space-y-2")}>
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-[#9b8ec4]">
-                  Strategy indicators
-                </div>
-                {strategy.stageConfig ? (
-                  <StageConfigColumns stageConfig={strategy.stageConfig} />
-                ) : (
-                  <div className={cx("text-[12px]", MUTED)}>
-                    Configuration unavailable for this saved strategy.
-                  </div>
-                )}
-              </div>
-
-              <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
-                <div className={cx("border-b px-3 py-2.5 text-[12px] font-medium text-[#faf7fd]", ui.divider)}>
-                  Strategy Code
-                </div>
-                <StrategyTemplatePreview
-                  signalIndicators={strategy.stageConfig?.stage1?.indicators || []}
-                  entryFormula={strategy.stageConfig?.stage2?.formula || ""}
-                  exitFormula={strategy.stageConfig?.stage3?.formula || ""}
-                  riskRanges={strategy.stageConfig?.stage4?.riskRanges || {}}
-                  riskHyperoptParams={strategy.stageConfig?.stage4?.riskHyperoptParams || {}}
-                  timeRange={strategy.params?.timeframe || "1h"}
-                  height={320}
-                />
-              </div>
-            </div>
-          ) : null}
-
-          {detailTab === "Bots" ? (
-            <div className={cx(ui.radius, ui.panel, "overflow-hidden")}>
-              <div className={cx("px-4 py-3 text-[12px] font-medium", ui.panelMuted, "border-b", ui.divider)}>
-                Linked bots
-              </div>
-              <DataTable headers={["Bot", "Mode / account", "Status / data", "Total P&L", "Positions", "Owner"]}>
-                {model.bots
-                  .filter((item) => item.strategyId === strategy.id)
-                  .map((item) => (
-                    <tr key={item.id} className="border-b border-[rgba(60,40,80,0.25)]">
-                      <td className="px-4 py-2.5"><AppButton variant="link" className="h-auto p-0 text-violet-200" onClick={() => openBot(item.id)}>{item.name}</AppButton><div className="text-[11px] text-muted-foreground">{item.id.length > 20 ? item.id.slice(-12) : item.id}</div></td>
-                      <td className="px-2 py-2.5"><ModeBadge mode={item.mode} /><div className="mt-1 text-[11px] text-muted-foreground">{accountName(item, model.accounts)}</div></td>
-                      <td className="px-2 py-2.5"><BotStatusCell bot={item} /></td>
-                      <td className={cx("px-2 py-2.5 text-right tabular-nums", pnlTone(getBotMetrics(item).totalPnl))}>{amount(getBotMetrics(item).totalPnl, true)}<div className="text-[11px]">{percent(getBotMetrics(item).returnPct, true)} · lifetime</div></td>
-                      <td className="px-2 py-2.5">{item.positions?.length ?? "No data"} open</td>
-                      <td className="px-2 py-2.5">{item.owner}</td>
-                    </tr>
-                  ))}
-                {!model.bots.some((item) => item.strategyId === strategy.id) ? (
-                  <EmptyCell columns={6}>No bots launched from this strategy.</EmptyCell>
-                ) : null}
-              </DataTable>
-            </div>
-          ) : null}
-        </section>
       ) : null}
 
       {bot && botStrategy ? (
@@ -1128,6 +796,7 @@ export function BotsPage({
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <h2 className="text-[16px] font-semibold text-[#faf7fd]">{bot.name}</h2>
+              {bot.description ? <p className="mt-1 text-[12px] text-muted-foreground">{bot.description}</p> : null}
               <div className={cx("mt-2 flex flex-wrap items-center gap-2 text-[12px]", MUTED)}>
                 <ModeBadge mode={bot.mode} />
                 <Status value={bot.status} />
@@ -1137,23 +806,12 @@ export function BotsPage({
                   {botStrategy.params.timeframe}
                 </span>
                 <span>Account: {accountName(bot, model.accounts)}</span>
-                <span className="inline-flex items-center gap-1">
-                  Strategy:
-                  <AppButton
-                    variant="link"
-                    className="h-auto p-0 text-violet-200"
-                    onClick={() => openStrategy(botStrategy.id)}
-                  >
-                    {botStrategy.name}
-                  </AppButton>
-                </span>
               </div>
             </div>
             <div className="flex gap-2">
               <AppButton
                 variant="default"
-                disabled={botStrategy.status !== "Active"}
-                onClick={() => openLaunch(botStrategy.id)}
+                onClick={() => setModal({ kind: "launch", source: botStrategy })}
               >
                 Create new bot
               </AppButton>
@@ -1228,17 +886,20 @@ export function BotsPage({
                 );
               })()}
 
-              <div className="grid items-start gap-3 lg:grid-cols-2">
+              <div className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <OverviewSectionCard
                   title="Bot configuration"
                   rows={[
                     ["Mode", bot.mode === "Dryrun" ? "Dry-run" : bot.mode === "Live" ? "Live" : bot.mode || null],
-                    [
-                      "Funding source / Account",
-                      accountName(bot, model.accounts),
-                    ],
+                    ["Funding source / Account", accountName(bot, model.accounts)],
                     ["Bot capital", amount(bot.capital)],
-                    ["Fee source", bot.feeSource === "account" ? accountName(bot, model.accounts) : `${botStrategy.params.exchange} exchange rates`, "In Dryrun, an optional exchange account supplies fee rates only; trades use virtual funds."],
+                    [
+                      "Fee source",
+                      bot.feeSource === "account"
+                        ? accountName(bot, model.accounts)
+                        : `${botStrategy.params.exchange} exchange rates`,
+                      "In Dryrun, an optional exchange account supplies fee rates only; trades use virtual funds.",
+                    ],
                     ["Stake", formatStakeLabel(bot), "The per-trade amount or percentage selected when this bot was created."],
                     [
                       "Max open trades",
@@ -1252,47 +913,72 @@ export function BotsPage({
                   title="Trading conditions"
                   rows={[
                     ["Exchange", botStrategy.params.exchange || null],
-                    ["Market", botStrategy.params.mode || null],
+                    [
+                      "Market & Leverage",
+                      botStrategy.params.mode
+                        ? botStrategy.params.mode === "futures" && hasNumber(botStrategy.params.leverage)
+                          ? `${botStrategy.params.mode} · ${botStrategy.params.leverage}×`
+                          : botStrategy.params.mode
+                        : null,
+                    ],
                     ["Pair", botStrategy.params.pair || null],
                     ["Timeframe", botStrategy.params.timeframe || null],
-                    ["Strategy default Stake", formatStakeLabel(botStrategy.params)],
-                    botStrategy.params.mode === "futures"
-                      ? [
-                          "Leverage",
-                          botStrategy.params.leverage != null
-                            ? `${botStrategy.params.leverage}×`
-                            : null,
-                        ]
-                      : null,
                   ]}
                 />
                 <OverviewSectionCard
-                  title="Strategy source"
+                  title="Backtest source"
                   rows={[
                     [
                       "Strategy",
-                      <AppButton
-                        key="cfg-strategy"
-                        variant="link"
-                        className="h-auto p-0 text-violet-200"
-                        onClick={() => openStrategy(botStrategy.id)}
-                      >
-                        {botStrategy.name}
-                      </AppButton>,
+                      botStrategy.blueprintName || botStrategy.versionLineage ? (
+                        <span key="cfg-strategy" className="inline-flex flex-col items-end gap-0.5">
+                          {botStrategy.blueprintName ? (
+                            onOpenBlueprintStrategy && botStrategy.sourceStrategyId != null ? (
+                              <AppButton
+                                variant="link"
+                                className="h-auto p-0 text-violet-200"
+                                onClick={() => onOpenBlueprintStrategy(botStrategy.sourceStrategyId)}
+                              >
+                                {botStrategy.blueprintName}
+                              </AppButton>
+                            ) : (
+                              <span>{botStrategy.blueprintName}</span>
+                            )
+                          ) : null}
+                          {botStrategy.versionLineage ? (
+                            <span className="text-[10px] text-muted-foreground">{botStrategy.versionLineage}</span>
+                          ) : null}
+                        </span>
+                      ) : null,
                     ],
-                    ["Blueprint", botStrategy.blueprintName || null],
-                    ["Selected epoch", botStrategy.epochLabel || null],
+                    ["Epoch", botStrategy.epochLabel || null],
                     [
-                      "Source backtest",
+                      "Backtest",
                       botStrategy.sourceBacktestId ? (
-                        <AppButton
-                          key="cfg-backtest"
-                          variant="link"
-                          className="h-auto p-0 text-violet-200"
-                          onClick={() => setModal({ kind: "source", id: botStrategy.id })}
-                        >
-                          {botStrategy.sourceBacktestId}
-                        </AppButton>
+                        <span key="cfg-backtest" className="inline-flex items-center gap-1.5">
+                          <span className="tabular-nums">{botStrategy.sourceBacktestId}</span>
+                          <AppButton
+                            type="button"
+                            variant="outline"
+                            size="icon-xs"
+                            className="shrink-0"
+                            title="Open in Strategy · Stage 5"
+                            aria-label={`Open backtest ${botStrategy.sourceBacktestId} in Stage 5`}
+                            onClick={() => {
+                              if (onOpenBacktestSource) {
+                                onOpenBacktestSource({
+                                  strategyId: botStrategy.sourceStrategyId,
+                                  epochId: botStrategy.epochId,
+                                  backtestId: botStrategy.sourceBacktestId,
+                                });
+                                return;
+                              }
+                              setModal({ kind: "source", id: bot.id });
+                            }}
+                          >
+                            <EyeIcon />
+                          </AppButton>
+                        </span>
                       ) : null,
                     ],
                   ]}
@@ -1304,34 +990,28 @@ export function BotsPage({
                     ["Bot started", date(bot.startedAt)],
                     ["First trade opened", date(botStats.firstOpened)],
                     ["Latest trade opened", date(botStats.latestOpened)],
-                    bot.stoppedAt
-                      ? ["Stopped", date(bot.stoppedAt)]
-                      : null,
+                    bot.stoppedAt ? ["Stopped", date(bot.stoppedAt)] : null,
                   ]}
                 />
               </div>
-              <CollapsibleEngineInfo bot={bot} />
             </div>
           ) : null}
         </section>
       ) : null}
 
       <p className={cx("text-[11px]", SUBTLE)}>
-        UI preview · Fictional account balances, bot results and trades. No exchange connection or
+        UI preview · Illustrative bot results and trades. No exchange connection or
         orders are performed.
       </p>
 
-      {modal?.kind === "launch" && model.strategies.some((item) => item.id === modal.id) ? (
+      {modal?.kind === "launch" && modal.source ? (
         <LaunchModal
-          key={modal.id}
-          strategy={model.strategies.find((item) => item.id === modal.id)}
+          key={modal.source.sourceBacktestId}
+          strategy={modal.source}
           model={model}
           owner={currentUser}
           onClose={closeModal}
-          onLaunched={(id) => {
-            closeModal();
-            openBot(id);
-          }}
+          onLaunched={(id) => { closeModal(); openBot(id); }}
         />
       ) : null}
       {startTarget ? (
@@ -1368,39 +1048,13 @@ export function BotsPage({
       {modal?.kind === "deleteBot" ? <AppDialog open onOpenChange={(open) => !open && closeModal()} title="Delete never-started bot" description={model.bots.find((item) => item.id === modal.id)?.name}>
         <div className="space-y-4 text-[12px]"><p>This removes the unused bot record. No trade history exists.</p><div className="flex justify-end gap-2"><AppButton onClick={closeModal}>Cancel</AppButton><AppButton variant="destructive" onClick={() => { const nextError = model.deleteBot(modal.id); if (nextError) setError(nextError); else { closeModal(); setDetail(null); } }}>Delete bot</AppButton></div></div>
       </AppDialog> : null}
-      {modal?.kind === "edit" && model.strategies.some((item) => item.id === modal.id) ? (
-        <EditStrategyModal
-          key={modal.id}
-          strategy={model.strategies.find((item) => item.id === modal.id)}
-          onClose={closeModal}
-          onSave={(fields) => model.editStrategy(modal.id, fields)}
-        />
-      ) : null}
-      {modal?.kind === "archive" ? (
-        <AppDialog
-          open
-          onOpenChange={(open) => !open && closeModal()}
-          title="Archive strategy"
-          description={model.strategies.find((item) => item.id === modal.id)?.name}
-        >
-          <div className="space-y-4 text-[12px]">
-            <p>Archiving prevents new launches. Bot history and source backtest remain available.</p>
-            <div className="flex justify-end gap-2">
-              <AppButton onClick={closeModal}>Cancel</AppButton>
-              <AppButton variant="destructive" onClick={() => applyArchive(modal.id, true)}>
-                Archive strategy
-              </AppButton>
-            </div>
-          </div>
-        </AppDialog>
-      ) : null}
       {sourceRun ? <BacktestingInfoModal open run={sourceRun} onClose={closeModal} /> : null}
       {sourceStrategy && !sourceRun ? (
         <AppDialog
           open
           onOpenChange={(open) => !open && closeModal()}
           title="Source backtest · saved snapshot"
-          description={model.strategies.find((item) => item.id === modal.id)?.sourceBacktestId}
+          description={sourceStrategy.sourceBacktestId}
         >
           <div className="space-y-4 text-[12px]">
             <p className={MUTED}>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { INITIAL_BOTS, INITIAL_COMPILED_STRATEGIES } from "./botsModel";
+import { INITIAL_BOTS } from "./botsModel";
 import { closedTrades, demoCandles, equityDrawdown, performanceSummary, periodBreakdown, tradesInWindow } from "./botsAnalytics";
 import { getBotMetrics } from "./botsDisplay";
 
@@ -55,11 +55,11 @@ describe("coherent demo analytics", () => {
     expect(getBotMetrics(bot).equity).toBe(1100);
   });
   it("keeps illustrative markers inside candle ranges and returns empty history for a new bot", () => {
-    const candles = demoCandles(INITIAL_BOTS[0], INITIAL_COMPILED_STRATEGIES[0]);
+    const candles = demoCandles(INITIAL_BOTS[0], INITIAL_BOTS[0].source);
     expect(candles.length).toBeGreaterThan(100);
     expect(candles.every((c) => c.executions.every((e) => e.price >= c.low && e.price <= c.high))).toBe(true);
-    expect(demoCandles({ ...INITIAL_BOTS[0], updatedAt: "2026-11-10T12:00:00.000Z" }, INITIAL_COMPILED_STRATEGIES[0])).toEqual(candles);
-    expect(demoCandles({ trades: [], positions: [], updatedAt: "2026-11-01" }, INITIAL_COMPILED_STRATEGIES[0])).toEqual([]);
+    expect(demoCandles({ ...INITIAL_BOTS[0], updatedAt: "2026-11-10T12:00:00.000Z" }, INITIAL_BOTS[0].source)).toEqual(candles);
+    expect(demoCandles({ trades: [], positions: [], updatedAt: "2026-11-01" }, INITIAL_BOTS[0].source)).toEqual([]);
     expect(performanceSummary({ trades: [] }).winRate).toBeNull();
     expect(performanceSummary({ trades: [] }).realized).toBe(0);
     expect(performanceSummary({ trades: [] }).expectancy).toBeNull();

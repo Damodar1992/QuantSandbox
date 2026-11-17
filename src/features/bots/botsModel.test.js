@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
-  INITIAL_COMPILED_STRATEGIES,
+  INITIAL_BOTS,
   INITIAL_EXCHANGE_ACCOUNTS,
-  countStrategyBots,
+  findLivePairConflict,
   getBotRuntimeAvailability,
   getCompatibleAccounts,
   validateBotLaunch,
 } from "./botsModel";
 
-const strategy = INITIAL_COMPILED_STRATEGIES[0];
+const source = INITIAL_BOTS[0].source;
 const base = {
-  strategy,
+  source,
   mode: "Dryrun",
   name: "BTC demo",
   capital: 1000,
@@ -31,14 +31,15 @@ describe("bot launch rules", () => {
     expect(validateBotLaunch({ ...base, mode: "Live", accountId: "acc-binance" })).toBeNull();
   });
 
-  it("does not launch an archived strategy or with less than one stake", () => {
-    expect(validateBotLaunch({ ...base, strategy: { ...strategy, status: "Archive" } })).toContain("Restore");
+  it("requires a backtest source and at least one stake", () => {
+    expect(validateBotLaunch({ ...base, source: null })).toContain("successful backtest");
+    expect(validateBotLaunch({ ...base, source: { ...source, backtestStatus: "failed" } })).toContain("successful backtest");
     expect(validateBotLaunch({ ...base, capital: 100 })).toContain("stake amount");
   });
 
   it("uses percent sizing for relative stakes and fixes the launch position limit at one", () => {
-    const relative = { ...strategy, params: { ...strategy.params, stakeMode: "relative", stakeValue: 10 } };
-    expect(validateBotLaunch({ ...base, strategy: relative, capital: 50 })).toBeNull();
+    const relative = { ...source, params: { ...source.params, stakeMode: "relative", stakeValue: 10 } };
+    expect(validateBotLaunch({ ...base, source: relative, capital: 50 })).toBeNull();
     expect(validateBotLaunch({ ...base, maxOpenTrades: 0 })).toContain("fixed at 1");
     expect(validateBotLaunch({ ...base, maxOpenTrades: 2 })).toContain("fixed at 1");
     expect(validateBotLaunch({ ...base, stakeMode: "relative", stakeValue: 25, capital: 50 })).toBeNull();
@@ -51,15 +52,20 @@ describe("bot launch rules", () => {
   });
 
   it("filters accounts by owner, exchange and market", () => {
-    expect(getCompatibleAccounts(strategy, INITIAL_EXCHANGE_ACCOUNTS, "bogdan").map((account) => account.id)).toEqual(["acc-binance"]);
-    expect(getCompatibleAccounts(strategy, INITIAL_EXCHANGE_ACCOUNTS, "anna")).toEqual([]);
+    expect(getCompatibleAccounts(source, INITIAL_EXCHANGE_ACCOUNTS, "bogdan").map((account) => account.id)).toEqual(["acc-binance"]);
+    expect(getCompatibleAccounts(source, INITIAL_EXCHANGE_ACCOUNTS, "anna")).toEqual([]);
   });
 });
 
-describe("linked bot counts", () => {
-  it("counts ready and paused bots as active and retains stopped exposure", () => {
-    const bots = ["Ready for start", "Starting", "Running", "Paused", "Stopped", "Launch failed"].map((status, index) => ({ id: index, strategyId: strategy.id, status, positions: status === "Stopped" ? [{ id: "open" }] : [] }));
-    expect(countStrategyBots(strategy.id, bots)).toEqual({ active: 5, inactive: 1 });
+describe("Live pair occupancy", () => {
+  it("blocks the same account and pair while a bot is active or has exposure", () => {
+    const target = { id: "new", mode: "Live", accountId: "acc-binance", status: "Ready for start", source };
+    const running = { ...target, id: "running", status: "Running" };
+    expect(findLivePairConflict([running], target)?.id).toBe("running");
+    expect(findLivePairConflict([{ ...running, status: "Stopped", positions: [{ id: "open" }] }], target)?.id).toBe("running");
+    expect(findLivePairConflict([{ ...running, status: "Stopped", positions: [], orders: [] }], target)).toBeNull();
+    expect(findLivePairConflict([{ ...running, source: { ...source, params: { ...source.params, pair: "ETH/USDT" } } }], target)).toBeNull();
+    expect(findLivePairConflict([{ ...running, accountId: "other" }], target)).toBeNull();
   });
 });
 
